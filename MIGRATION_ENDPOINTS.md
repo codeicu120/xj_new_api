@@ -13,7 +13,69 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 - “已重构”表示 Go/Gin 中已有真实 handler/service/repository 实现，并已做单元测试或 PHP-Go 对比。
 - “占位”表示 Go 路由中注册了 `notImplemented`，但业务尚未迁移。
 - “未重构”表示 Go 侧尚未实现对应旧 PHP 行为。
+- 本文档已和 `internal/server/router.go` 对齐；新增/删除 Go 路由时必须同步更新“Go 代码实际注册路由”与下面各状态表。
 - 公共接口和登录接口的详细压缩记录分别见 `docs/public-endpoints.md`、`docs/auth-required-endpoints.md`、`docs/migration-state.md`。
+
+## Go 代码实际注册路由
+
+来源：`internal/server/router.go`。
+
+### 已接真实 handler
+
+| 接口 | Method | Go handler |
+| --- | --- | --- |
+| `/healthz` | GET | `healthHandler` |
+| `/readyz` | GET | `healthHandler` |
+| `/sysavatar` | ANY | `UserHandler.SysAvatar` |
+| `/captcha/req` | ANY | `CaptchaHandler.Req` |
+| `/iploc/:ip` | ANY | `IPLocHandler.Find` |
+| `/game/platforms` | ANY | `GameHandler.Platforms` |
+| `/game/categories` | ANY | `GameHandler.Categories` |
+| `/game/games` | ANY | `GameHandler.Games` |
+| `/game/broadcasts` | ANY | `GameHandler.Broadcasts` |
+| `/game/wali/gameList` | ANY | `GameHandler.WaliGames` |
+| `/getLikeRows` | ANY | `VODHandler.LikeRows` |
+| `/ucp/index` | ANY | `UCPHandler.Index` |
+| `/ucp/feedback` | GET | `UCPHandler.FeedbackListing` |
+| `/ucp/feedback/index` | GET | `UCPHandler.FeedbackIndex` |
+| `/ucp/feedback/listing` | GET | `UCPHandler.FeedbackNewListing` |
+| `/ucp/feedback/detail` | GET | `UCPHandler.FeedbackDetail` |
+| `/ucp/msg`、`/ucp/msg/index` | GET | `UCPHandler.MsgListing` |
+| `/ucp/myaff` | ANY | `UCPHandler.MyAff` |
+| `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
+| `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
+| `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
+| `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
+| `/ucp/account`、`/ucp/account/index` | ANY | `UCPHandler.AccountIndex` |
+| `/ucp/account/balancelog` | ANY | `UCPHandler.BalanceLog` |
+| `/ucp/coinlog`、`/ucp/coinlog/index` | ANY | `UCPHandler.CoinLogIndex` |
+| `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
+| `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
+| `/vod/show/:vodid` | ANY | `VODHandler.Show` |
+| `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
+| `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
+| `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
+| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash` | ANY | `OneGoHandler` |
+| `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | ANY | `VODHandler.Listing` |
+| `/vod/listing-:params`、`/vod/recommend-:params`、`/vod/hot-:params`、`/vod/latest-:params` | ANY | `VODHandler.Listing` |
+| `/v2/amazing/categories` | ANY | `AmazingHandler.Categories` |
+| `/v2/amazing/listing`、`/v2/amazing/recommend`、`/v2/amazing/hot`、`/v2/amazing/latest` | ANY | `AmazingHandler.Listing` |
+| `/v2/amazing/listing-:params`、`/v2/amazing/recommend-:params`、`/v2/amazing/hot-:params`、`/v2/amazing/latest-:params` | ANY | `AmazingHandler.Listing` |
+| `/v2/so/list` | ANY | `SOHandler.List` |
+| `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` | ANY | `VODHandler.Listing` |
+| `/v2/vod/listing-:params`、`/v2/vod/recommend-:params`、`/v2/vod/hot-:params`、`/v2/vod/latest-:params` | ANY | `VODHandler.Listing` |
+
+### 已注册占位
+
+| 接口 | Method | Go handler |
+| --- | --- | --- |
+| `/v2/register` | ANY | `notImplemented("c.apiv2.user.register")` |
+| `/v2/login` | ANY | `notImplemented("c.apiv2.user.login")` |
+| `/v2/forgot` | ANY | `notImplemented("c.apiv2.user.forgot")` |
+| `/v2/vod/show/:vodid` | ANY | `notImplemented("c.apiv2.vod.show")` |
+| `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `notImplemented("c.apiv2.vod.up/down")` |
+| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `notImplemented("c.apiv2.vod.reqplay/reqdown")` |
+| `/v2/vod/buy/:vodid` | ANY | `notImplemented("c.apiv2.vod.buy")` |
 
 ## 已重构接口
 
@@ -35,6 +97,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/games` | `c.api.game.index->games` | `GameHandler.Games` | 已重构，对比通过 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | `GameHandler.Broadcasts` | 已重构，随机广播按 shape 对比通过 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
+| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
+| `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
 
 ### v2 公共接口
 
@@ -87,6 +151,27 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | Go 入口 | 状态 |
 | --- | --- | --- | --- |
 | `/ucp/myaff` | `c.api.ucp.index->myaff` | `UCPHandler.MyAff` | 已重构，对比通过；支持 `x-cookie-auth` header 和 `xxx_api_auth` cookie |
+| `/ucp/index` | `c.api.ucp.index->index` | `UCPHandler.Index` | 已重构；登录/游客只读个人中心聚合，旧 PHP 本地对比超时，已按源码契约和 Go 输出验证 |
+| `/ucp/affcenter` | `c.api.ucp.index->affcenter` | `UCPHandler.AffCenter` | 已重构，对比通过；登录只读推广中心，合并用户组权限后计算播放/下载剩余额度 |
+| `GET /ucp/feedback` | `c.api.ucp.index->feedback` | `UCPHandler.FeedbackListing` | 已重构，对比通过；登录只读历史反馈列表，POST 写入未接管 |
+| `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | `UCPHandler.FeedbackIndex` | 已重构，对比通过；新版反馈初始化页，最近 30 天支付记录，POST 未接管 |
+| `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | `UCPHandler.FeedbackNewListing` | 已重构，对比通过；新版反馈列表，支持 `type=0/1/2` 过滤，POST 未接管 |
+| `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | `UCPHandler.FeedbackDetail` | 已重构，对比通过；新版反馈详情，校验反馈归属，附件图片和关联支付只读，POST 未接管 |
+| `GET /ucp/msg`、`GET /ucp/msg/index` | `c.api.ucp.msg->index` | `UCPHandler.MsgListing` | 已重构，对比通过；登录只读消息会话列表，写状态 action 未接管 |
+| `/ucp/payment`、`/ucp/payment/index` | `c.api.ucp.payment->index/listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；兼容旧动态 action 默认入口 |
+| `/ucp/payment/listing` | `c.api.ucp.payment->listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；登录只读支付记录，支持 GET/POST page |
+| `/ucp/payment/safepaylog` | `c.api.ucp.payment->safepaylog` | `UCPHandler.SafePayLog` | 已重构，对比通过；最近 7 天 safepay 记录 |
+| `/ucp/account`、`/ucp/account/index` | `c.api.ucp.account->index` | `UCPHandler.AccountIndex` | 已重构，对比通过；登录只读资产主页 |
+| `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | `UCPHandler.BalanceLog` | 已重构，对比通过；登录只读余额日志分页 |
+| `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
+| `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
+| `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
+
+### 个人中心公开只读
+
+| 接口 | PHP handler | Go 入口 | 状态 |
+| --- | --- | --- | --- |
+| `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | `UCPHandler.RollTitle` | 已重构，对比通过；公共只读，返回滚动消息 |
 
 ### Go 服务自有接口
 
@@ -199,24 +284,21 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/ucp/index` | `c.api.ucp.index->index` | 未重构；登录用户主页聚合 |
-| `/ucp/feedback` | `c.api.ucp.index->feedback` | 未重构；GET 列表/POST 提交 |
-| `/ucp/affcenter` | `c.api.ucp.index->affcenter` | 未重构 |
+| `POST /ucp/feedback` | `c.api.ucp.index->feedback` | 未重构；提交反馈写入 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
-| `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 未重构 |
 | `/ucp/user/:action?` | `c.api.ucp.user->$action` | 未重构 |
-| `/ucp/msg/:action?` | `c.api.ucp.msg->$action` | 未重构 |
+| `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`） | `c.api.ucp.msg->$action` | 未重构；show/setread/cleanread/delete/send 涉及详情、写入或已读状态 |
 | `/ucp/task/:action?` | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
-| `/ucp/account/:action?` | `c.api.ucp.account->$action` | 未重构 |
+| `/ucp/account/:action?`（除 `/ucp/account`、`/ucp/account/index`、`/ucp/account/balancelog`） | `c.api.ucp.account->$action` | 未重构；账户其他 action |
 | `/ucp/bankcard/:action?` | `c.api.ucp.bankcard->$action` | 未重构 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
-| `/ucp/coinlog/:action?` | `c.api.ucp.coinlog->$action` | 未重构 |
+| `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?` | `c.api.ucp.taskbox->$action` | 未重构 |
 | `/ucp/vippkg/:action?` | `c.api.ucp.vippkg->$action` | 未重构；会员套餐/订单 |
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |
-| `/ucp/payment/:action?` | `c.api.ucp.payment->$action` | 未重构；支付记录 |
-| `/ucp/feedback/:action?` | `c.api.ucp.feedback->$action` | 未重构；新版反馈 |
+| `/ucp/payment/:action?`（除 `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`） | `c.api.ucp.payment->$action` | 未重构；支付其他 action |
+| `/ucp/feedback/:action?`（除 `GET /ucp/feedback/index`、`GET /ucp/feedback/listing`、`GET /ucp/feedback/detail`） | `c.api.ucp.feedback->$action` | 未重构；新版反馈剩余 `create` 写入待迁 |
 | `/ucp/vodorder/:action?` | `c.api.ucp.vodorder->$action` | 未重构；视频订单 |
 
 ### 活动、邀请、发现页
@@ -251,7 +333,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/test` | `c.api.game.wali->ping` | 未重构；外部平台测试 |
 | `/game/lottery/gameList`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台 |
 | `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
-| `/onego/:action?` | `c.api.onego->$action` | 未重构；一元购，部分只读、部分投注写入 |
+| `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`） | `c.api.onego->$action` | 未重构；一元购剩余 lucky/marquee 等公共动作及 history/bet 等登录/投注写入 |
 | `/bought/:action?` | `c.api.bought->$action` | 未重构；付费影片 |
 
 ### 社区、HGame、AI
@@ -275,8 +357,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 ## 建议后续顺序
 
-1. 继续低风险只读登录接口：`/ucp/affcenter`、`/ucp/index` 中可拆分的只读部分。
-2. 继续公共只读接口：`/search`、`/special/index`、`/onego/rules`、`/onego/rooms`。
+1. 继续按风险优先级评估 `/ucp/msg/show`：旧 PHP 读取详情同时可能涉及已读状态，需要明确是否复刻写入副作用。
+2. 继续公共只读接口：`/special/listing`、`/special/detail`、`/onego/lucky`、`/onego/marquee`；`/search` 会写搜索日志，放入普通写入批次评估。
 3. 中风险接口：`/getGlobalData`、`/init`、`/vod/show/:vodid`。
 4. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
 

@@ -13,18 +13,32 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 - “登录接口”指旧 PHP 中会读取 `context->get('user')` 且要求 `uid > 0` 的接口。
 - 当前阶段优先迁移不需要验证码、不涉及支付、不涉及用户资产写入、不调用外部平台的接口。
 - Go 侧兼容旧 PHP 的 `x-cookie-auth` header 和 `xxx_api_auth` cookie；token 是 32 字节 sid 的 hex 编码。
+- 本清单已和 `internal/server/router.go` 中的登录态真实 handler 路由对齐；新增登录接口后同步更新此文件和根目录 `MIGRATION_ENDPOINTS.md`。
 
 ## 已迁移
 
 | 接口 | PHP handler | Go 状态 | 对比说明 |
 | --- | --- | --- | --- |
 | `/ucp/myaff` | `c.api.ucp.index->myaff` | 本轮完成 | 使用 `x-cookie-auth` 登录 token，读取推荐用户列表，用户行和分页结构与 PHP 一致。 |
+| `/ucp/index` | `c.api.ucp.index->index` | 本轮完成 | 登录/游客个人中心只读聚合；登录返回 `user/uinfo/signed/groups`，游客返回 `user/uinfo/signed`；旧 PHP 本地请求超时，已按源码契约和 Go 输出验证。 |
+| `/ucp/affcenter` | `c.api.ucp.index->affcenter` | 本轮完成 | 登录只读推广中心，读取金币、金豆、播放/下载当日计数和用户组权限，用户与 `uinfo` 字段和 PHP 一致。 |
+| `GET /ucp/feedback` | `c.api.ucp.index->feedback` | 本轮完成 | 登录只读历史反馈列表，读取 `feedbacks`，分页和 `procRow2` 字段映射与 PHP 一致；POST 写入未接管。 |
+| `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | 本轮完成 | 新版反馈初始化页，读取最近 30 天最多 100 条 `trade_payments`，支付行映射与 PHP 一致；POST 未接管。 |
+| `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | 本轮完成 | 新版反馈列表，读取 `feedbacks`，支持 `type=0/1/2` 过滤，分页和字段映射与 PHP 一致；POST 未接管。 |
+| `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | 本轮完成 | 新版反馈详情，读取单条 `feedbacks`、按 `aids` 顺序读取 `attachs`、按 `payid` 读取关联 `trade_payments`；POST 未接管。 |
+| `GET /ucp/msg`、`GET /ucp/msg/index` | `c.api.ucp.msg->index` | 本轮完成 | 登录只读消息会话列表，读取 `msgc/msg/users`，分页和 `procRow` 字段映射与 PHP 一致；POST 和写状态 action 未接管。 |
+| `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | `c.api.ucp.payment->index/listing` | 本轮完成 | 登录只读支付记录，读取 `trade_payments`，分页和 `procRow2` 字段映射与 PHP 一致。 |
+| `/ucp/payment/safepaylog` | `c.api.ucp.payment->safepaylog` | 本轮完成 | 登录只读最近 7 天 safepay 记录，最多 10 条，字段映射与 PHP 一致。 |
+| `/ucp/account`、`/ucp/account/index` | `c.api.ucp.account->index` | 本轮完成 | 登录只读资产主页，读取账户、金币、汇率和最近余额日志，金额与时间格式对齐 PHP。 |
+| `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | 本轮完成 | 登录只读余额日志分页，读取 `user_balancelogs`，分页和日志字段映射与 PHP 一致。 |
+| `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | 本轮完成 | 登录只读金币日志首页，读取账户、金币、汇率和最近 10 条 `user_coinlogs`，类型、时间、手机号遮罩与 PHP 一致。 |
+| `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | 本轮完成 | 登录只读收益金币日志分页，列表包含 22/32，累计收益统计按 PHP 保持不含 22/32。 |
+| `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | 本轮完成 | 登录只读邀请金币日志分页，过滤 `cointype IN (201,32,11)`，分页和日志字段映射与 PHP 一致。 |
 
 ## 暂缓
 
 | 接口 | 原因 |
 | --- | --- |
-| `/ucp/index`、`/ucp/affcenter` | 依赖权限、观看/下载计数、金币、金豆、签到、用户组，适合作为下一批中等复杂度接口。 |
-| `/ucp/feedback` POST、`/ucp/task/*` | 涉及写库、奖励或状态变更，需要单独测试和回滚策略。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易。 |
+| `POST /ucp/feedback`、`/ucp/feedback/create`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`、`/ucp/msg/send`、`/ucp/task/*` | 涉及写库、已读状态、奖励或状态变更，需要单独测试和回滚策略；`GET /ucp/feedback/detail` 只读详情已迁移。 |
+| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用。 |

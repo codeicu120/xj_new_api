@@ -7,6 +7,7 @@
 - “公共”指不需要已登录用户。
 - 旧 `c.api.__init__` 中间件仍可能创建游客、写 cookie/auth 字段、读取 Redis/缓存/系统设置。
 - Go 迁移时按一个接口一个接口推进；每个接口完成后记录状态，作为后续上下文压缩点。
+- 本清单已和 `internal/server/router.go` 中的公共真实 handler 路由对齐；Go 新增公共路由后同步更新此文件和根目录 `MIGRATION_ENDPOINTS.md`。
 
 ## 已迁移
 
@@ -30,15 +31,19 @@
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | 本轮完成 | 复用 VOD 行处理，按旧 PHP 固定返回 6 条随机猜你喜欢。 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
+| `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
+| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
+| `/onego/hash` | `c.api.onego->hash` | 本轮完成 | 一元购公共哈希计算接口，复刻 PHP `hash('sha256')` 和末尾数字期号截取规则。 |
 
 ## 优先候选
 
 | 优先级 | 接口 | PHP handler | 风险 |
 | --- | --- | --- | --- |
-| 1 | `/captcha/req` | `c.api.captcha->req` | 低；动态 secret，不做完全字符串相等。 |
-| 2 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
-| 3 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
-| - | - | - | 当前已完成清单中的低/中风险公共接口。 |
+| 1 | `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 中；专题只读，但会聚合视频行和详情浏览数。 |
+| 2 | `/onego/lucky`、`/onego/marquee` | `c.api.onego->$action` | 低到中；公共只读，一元购排行和跑马灯。 |
+| 3 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
+| 4 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
+| 5 | `/search` | `c.api.search->index` | 中；搜索结果会写入/更新搜索日志。 |
 
 ## 暂缓
 

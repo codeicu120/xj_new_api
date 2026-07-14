@@ -1,0 +1,103 @@
+package handler
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+
+	"xj_comp/internal/legacyjson"
+	onegoService "xj_comp/internal/service/onego"
+)
+
+type OneGoHandler struct {
+	service *onegoService.Service
+}
+
+func NewOneGoHandler(service *onegoService.Service) *OneGoHandler {
+	return &OneGoHandler{service: service}
+}
+
+func (h *OneGoHandler) Rules(c *gin.Context) {
+	data, err := h.service.Rules(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		if errors.Is(err, onegoService.ErrNotOpen) {
+			c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购规则失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) Rooms(c *gin.Context) {
+	data, err := h.service.Rooms(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		if errors.Is(err, onegoService.ErrNotOpen) {
+			c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购房间失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) Current(c *gin.Context) {
+	roomID, _ := strconv.Atoi(inputValue(c, "roomid"))
+	data, err := h.service.Current(c.Request.Context(), roomID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		h.writeOneGoError(c, err, "获取一元购当前期数失败")
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) Last(c *gin.Context) {
+	roomID, _ := strconv.Atoi(inputValue(c, "roomid"))
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, err := h.service.Last(c.Request.Context(), roomID, page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		h.writeOneGoError(c, err, "获取一元购上期记录失败")
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) Hash(c *gin.Context) {
+	data, err := h.service.Hash(inputValue(c, "plaintext"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		switch {
+		case errors.Is(err, onegoService.ErrMissingPlaintext):
+			c.JSON(http.StatusOK, legacyjson.Error("请传入参数"))
+		case errors.Is(err, onegoService.ErrHashNumberUnavailable):
+			c.JSON(http.StatusOK, legacyjson.Error("无法计算后六位数字"))
+		default:
+			c.JSON(http.StatusInternalServerError, legacyjson.Error("计算一元购哈希失败"))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) writeOneGoError(c *gin.Context, err error, fallback string) {
+	switch {
+	case errors.Is(err, onegoService.ErrNotOpen):
+		c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+	case errors.Is(err, onegoService.ErrSelectRoom):
+		c.JSON(http.StatusOK, legacyjson.Error("请选择场次"))
+	case errors.Is(err, onegoService.ErrActivityEnded):
+		c.JSON(http.StatusOK, legacyjson.Error("活动已结束或尚未开始"))
+	case errors.Is(err, onegoService.ErrNoData):
+		c.JSON(http.StatusOK, legacyjson.Error("暂无数据"))
+	default:
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(fallback))
+	}
+}

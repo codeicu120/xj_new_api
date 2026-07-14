@@ -254,6 +254,156 @@ func TestV2AmazingListingRoutes(t *testing.T) {
 	}
 }
 
+func TestOneGoRulesNotOpenWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/rules", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "系统尚未开放该活动" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoRoomsNotOpenWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/rooms", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "系统尚未开放该活动" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoCurrentNotOpenWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/current?roomid=1", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "系统尚未开放该活动" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoLastNoDataWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/last", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "暂无数据" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoHash(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/hash?plaintext=abc", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("expected retcode 0, got %d", body.RetCode)
+	}
+	data, ok := body.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T", body.Data)
+	}
+	payload, ok := data["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected nested data object, got %T", data["data"])
+	}
+	if payload["hash_code"] != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+		t.Fatalf("unexpected hash_code %v", payload["hash_code"])
+	}
+	if payload["hash_number"] != "120015" {
+		t.Fatalf("unexpected hash_number %v", payload["hash_number"])
+	}
+}
+
+func TestOneGoHashPostAndMissingPlaintext(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/onego/hash", strings.NewReader("plaintext=abc"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("expected retcode 0, got %d", body.RetCode)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/onego/hash", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "请传入参数" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestV2VODListingRoutes(t *testing.T) {
 	router := newTestRouter()
 
@@ -562,6 +712,564 @@ func TestUCPMyAffRequiresLoginWithoutToken(t *testing.T) {
 	}
 	if body.RetCode != -9999 {
 		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+}
+
+func TestUCPRollTitle(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/rolltitle", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("expected retcode 0, got %d", body.RetCode)
+	}
+	data, ok := body.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T", body.Data)
+	}
+	if _, ok := data["messages"].([]interface{}); !ok {
+		t.Fatalf("expected messages array, got %T", data["messages"])
+	}
+}
+
+func TestUCPPaymentListingRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/ucp/payment/listing?page=1"},
+		{method: http.MethodPost, path: "/ucp/payment/listing", body: "page=1"},
+		{method: http.MethodGet, path: "/ucp/payment"},
+		{method: http.MethodGet, path: "/ucp/payment/index"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPSafePayLogRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/payment/safepaylog", strings.NewReader(""))
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestUCPAccountIndexRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/ucp/account", "/ucp/account/index"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPBalanceLogRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/ucp/account/balancelog?page=1"},
+		{method: http.MethodPost, path: "/ucp/account/balancelog", body: "page=1"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPCoinLogIndexRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/ucp/coinlog"},
+		{method: http.MethodGet, path: "/ucp/coinlog/index"},
+		{method: http.MethodPost, path: "/ucp/coinlog/index"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPCoinLogInviteLogRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/ucp/coinlog/invitelog?page=1"},
+		{method: http.MethodPost, path: "/ucp/coinlog/invitelog", body: "page=1"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPCoinLogBonusLogRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/ucp/coinlog/bonuslog?page=1"},
+		{method: http.MethodPost, path: "/ucp/coinlog/bonuslog", body: "page=1"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPAffCenterRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/ucp/affcenter"},
+		{method: http.MethodPost, path: "/ucp/affcenter"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPIndexGuestMissingRowOmitsData(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/ucp/index"},
+		{method: http.MethodPost, path: "/ucp/index"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body map[string]interface{}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body["retcode"] != float64(-1) {
+				t.Fatalf("expected retcode -1, got %#v", body["retcode"])
+			}
+			if body["errmsg"] != "请登录后操作，客户端游客请先携带信息" {
+				t.Fatalf("unexpected errmsg %q", body["errmsg"])
+			}
+			if _, ok := body["data"]; ok {
+				t.Fatalf("expected data to be omitted, got %#v", body["data"])
+			}
+		})
+	}
+}
+
+func TestUCPFeedbackRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/feedback?page=1", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestUCPFeedbackPostNotHandledByListing(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/feedback", strings.NewReader("content=test"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err == nil && body.RetCode == 0 {
+			t.Fatalf("POST /ucp/feedback should not be handled by listing, got %#v", body)
+		}
+	}
+}
+
+func TestUCPFeedbackIndexRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/feedback/index", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestUCPFeedbackIndexPostNotHandled(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/feedback/index", strings.NewReader(""))
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err == nil && body.RetCode == 0 {
+			t.Fatalf("POST /ucp/feedback/index should not be handled, got %#v", body)
+		}
+	}
+}
+
+func TestUCPFeedbackNewListingRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/feedback/listing?type=1&page=1", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestUCPFeedbackNewListingPostNotHandled(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/feedback/listing", strings.NewReader("type=1&page=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err == nil && body.RetCode == 0 {
+			t.Fatalf("POST /ucp/feedback/listing should not be handled, got %#v", body)
+		}
+	}
+}
+
+func TestUCPFeedbackDetailRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/feedback/detail?id=1917132", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestUCPFeedbackDetailPostNotHandled(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/feedback/detail", strings.NewReader("id=1917132"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err == nil && body.RetCode == 0 {
+			t.Fatalf("POST /ucp/feedback/detail should not be handled, got %#v", body)
+		}
+	}
+}
+
+func TestUCPMsgRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/ucp/msg?page=1", "/ucp/msg/index?page=1"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 {
+				t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+			}
+			if body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+			}
+		})
+	}
+}
+
+func TestUCPMsgPostNotHandledByListing(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/msg", strings.NewReader("page=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err == nil && body.RetCode == 0 {
+			t.Fatalf("POST /ucp/msg should not be handled by listing, got %#v", body)
+		}
 	}
 }
 

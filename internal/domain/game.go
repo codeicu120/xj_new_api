@@ -15,3 +15,7 @@ type GamesData struct {
 type GameBroadcastsData struct {
 	Data []string `json:"data"`
 }
+
+type OneGoData struct {
+	Data interface{} `json:"data"`
+}

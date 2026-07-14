@@ -2,8 +2,10 @@ package ucp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +19,38 @@ type UserStore interface {
 	Groups(ctx context.Context) ([]map[string]interface{}, error)
 	CountRecommended(ctx context.Context, uid int) (int, error)
 	RecommendedUsers(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	RollTitles(ctx context.Context) ([]map[string]interface{}, error)
+	CountPayments(ctx context.Context, uid int) (int, error)
+	Payments(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	SafePayLogs(ctx context.Context, uid int, since int64, limit int) ([]map[string]interface{}, error)
+	PaymentsSince(ctx context.Context, uid int, since int64, limit int) ([]map[string]interface{}, error)
+	Account(ctx context.Context, uid int) (map[string]interface{}, error)
+	Quota(ctx context.Context, uid int) (map[string]interface{}, error)
+	Goldbean(ctx context.Context, uid int) (map[string]interface{}, error)
+	CountVODPlayLogsSince(ctx context.Context, uid int, since int64) (int, error)
+	CountVODDownLogsSince(ctx context.Context, uid int, since int64) (int, error)
+	GuestBySID(ctx context.Context, sid string) (map[string]interface{}, error)
+	CountGuestVODPlayLogsSince(ctx context.Context, sid string, since int64) (int, error)
+	CountGuestVODDownLogsSince(ctx context.Context, sid string, since int64) (int, error)
+	CountMiniVODViewLogsSince(ctx context.Context, uid int, since int64, action int) (int, error)
+	CountGuestMiniVODViewLogsSince(ctx context.Context, sid string, since int64, action int) (int, error)
+	CountCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error)
+	CountFeedbacks(ctx context.Context, uid int) (int, error)
+	Feedbacks(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	CountFeedbacksByType(ctx context.Context, uid int, feedbackType int) (int, error)
+	FeedbacksByType(ctx context.Context, uid int, feedbackType int, page int, pageSize int) ([]map[string]interface{}, error)
+	FeedbackByID(ctx context.Context, id int) (map[string]interface{}, error)
+	PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error)
+	AttachByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
+	CountMsgConversations(ctx context.Context, uid int) (int, error)
+	MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	CountBalanceLogs(ctx context.Context, uid int) (int, error)
+	BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	CountCoinLogsByTypes(ctx context.Context, uid int, coinTypes []int) (int, error)
+	CoinLogsByTypes(ctx context.Context, uid int, coinTypes []int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
+	CoinBonusStats(ctx context.Context, uid int) (map[string]interface{}, error)
+	SettingExRate(ctx context.Context) (int, error)
 }
 
 type Service struct {
@@ -59,6 +93,112 @@ func (s *Service) MyAff(ctx context.Context, token string, page int) (domain.UCP
 	}, 0, "", nil
 }
 
+func (s *Service) RollTitle(ctx context.Context) (domain.UCPRollTitleData, error) {
+	rows, err := s.store.RollTitles(ctx)
+	if err != nil {
+		return domain.UCPRollTitleData{}, fmt.Errorf("list roll titles: %w", err)
+	}
+	return domain.UCPRollTitleData{Messages: rows}, nil
+}
+
+func (s *Service) AffCenter(ctx context.Context, token string) (domain.UCPAffCenterData, int, string, error) {
+	user, groups, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return domain.UCPAffCenterData{}, -1, "获取用户失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return domain.UCPAffCenterData{}, -9999, "您还没有登录", nil
+	}
+
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return domain.UCPAffCenterData{}, -1, "获取推广中心失败", err
+	}
+	goldbean, err := s.store.Goldbean(ctx, uid)
+	if err != nil {
+		return domain.UCPAffCenterData{}, -1, "获取推广中心失败", err
+	}
+	daytime := dayStartUnix(s.now())
+	playedNum, err := s.store.CountVODPlayLogsSince(ctx, uid, daytime)
+	if err != nil {
+		return domain.UCPAffCenterData{}, -1, "获取推广中心失败", err
+	}
+	downedNum, err := s.store.CountVODDownLogsSince(ctx, uid, daytime)
+	if err != nil {
+		return domain.UCPAffCenterData{}, -1, "获取推广中心失败", err
+	}
+
+	user["goldcoin"] = quota["goldcoin"]
+	user["gold_bean"] = goldbean["gold_bean"]
+
+	uinfo := s.affCenterInfo(user, groups, playedNum, downedNum)
+	return domain.UCPAffCenterData{
+		User:  singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		UInfo: uinfo,
+	}, 0, "", nil
+}
+
+func (s *Service) Index(ctx context.Context, token string) (domain.UCPIndexData, int, string, error) {
+	user, groups, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+	}
+	uid := atoi(user["uid"])
+	daytime := dayStartUnix(s.now())
+
+	playCount, downCount, miniPlayCount, miniDownCount, err := s.indexUsageCounts(ctx, user, uid, daytime)
+	if err != nil {
+		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+	}
+	uinfo := s.indexInfo(user, groups, playCount, downCount, miniPlayCount, miniDownCount)
+
+	if uid == 0 {
+		guest, err := s.store.GuestBySID(ctx, str(user["sid"]))
+		if err != nil {
+			return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+		}
+		if len(guest) == 0 {
+			return domain.UCPIndexData{}, -1, "请登录后操作，客户端游客请先携带信息", nil
+		}
+		uinfo["goldcoin"] = guest["goldcoin"]
+		uinfo["curr_group"] = nil
+		uinfo["next_group"] = nil
+		return domain.UCPIndexData{
+			User:   singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+			UInfo:  uinfo,
+			Signed: signedByTimestamp(s.now(), atoi64(guest["signtime"])),
+		}, 0, "", nil
+	}
+
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+	}
+	goldbean, err := s.store.Goldbean(ctx, uid)
+	if err != nil {
+		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+	}
+	user["goldcoin"] = quota["goldcoin"]
+	user["gold_bean"] = goldbean["gold_bean"]
+	uinfo["goldcoin"] = quota["goldcoin"]
+	uinfo["gold_bean"] = goldbean["gold_bean"]
+
+	signedCount, err := s.store.CountCoinLogsSinceByType(ctx, uid, 1, daytime)
+	if err != nil {
+		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
+	}
+	userRow := singleUser(s.processUsers([]map[string]interface{}{user}, groups))
+	clearTildeContact(userRow, "mobi")
+	clearTildeContact(userRow, "email")
+	return domain.UCPIndexData{
+		User:   userRow,
+		UInfo:  uinfo,
+		Signed: boolInt(signedCount > 0),
+		Groups: indexGroups(groups),
+	}, 0, "", nil
+}
+
 func (s *Service) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, []map[string]interface{}, error) {
 	groups, err := s.store.Groups(ctx)
 	if err != nil {
@@ -72,7 +212,461 @@ func (s *Service) authenticatedUser(ctx context.Context, token string) (map[stri
 	if user == nil {
 		user = map[string]interface{}{"uid": "0", "sid": sid}
 	}
+	if atoi(user["uid"]) > 0 {
+		user["perms"] = initPerm(initGids(user, s.now), groups)
+	} else {
+		user["perms"] = initPerm([]int{0}, groups)
+	}
 	return user, groups, nil
+}
+
+func (s *Service) indexUsageCounts(ctx context.Context, user map[string]interface{}, uid int, daytime int64) (int, int, int, int, error) {
+	if uid > 0 {
+		played, err := s.store.CountVODPlayLogsSince(ctx, uid, daytime)
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		downed, err := s.store.CountVODDownLogsSince(ctx, uid, daytime)
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		miniPlayed, err := s.store.CountMiniVODViewLogsSince(ctx, uid, daytime, 1)
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		miniDowned, err := s.store.CountMiniVODViewLogsSince(ctx, uid, daytime, 2)
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		return played, downed, miniPlayed, miniDowned, nil
+	}
+	sid := str(user["sid"])
+	played, err := s.store.CountGuestVODPlayLogsSince(ctx, sid, daytime)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	downed, err := s.store.CountGuestVODDownLogsSince(ctx, sid, daytime)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	miniPlayed, err := s.store.CountGuestMiniVODViewLogsSince(ctx, sid, daytime, 1)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	miniDowned, err := s.store.CountGuestMiniVODViewLogsSince(ctx, sid, daytime, 2)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return played, downed, miniPlayed, miniDowned, nil
+}
+
+func initGids(user map[string]interface{}, now func() time.Time) []int {
+	mainGID := atoi(user["gid"])
+	if atoi(user["sysgid"]) > 0 {
+		mainGID = atoi(user["sysgid"])
+	}
+	gids := []int{mainGID}
+	var extra map[string]interface{}
+	switch typed := user["gids"].(type) {
+	case map[string]interface{}:
+		extra = typed
+	case string:
+		if typed != "" {
+			_ = json.Unmarshal([]byte(typed), &extra)
+		}
+	}
+	ts := now().Unix()
+	for gid, exptime := range extra {
+		if atoi(exptime) == 0 || atoi64(exptime) > ts {
+			gids = append(gids, atoi(gid))
+		}
+	}
+	return uniqueInts(gids)
+}
+
+func initPerm(gids []int, groups []map[string]interface{}) map[string]interface{} {
+	selected := make([]map[string]interface{}, 0, len(gids))
+	for _, gid := range gids {
+		for _, group := range groups {
+			if atoi(group["scope"]) > 0 || atoi(group["gid"]) != gid {
+				continue
+			}
+			selected = append(selected, group)
+			break
+		}
+	}
+	sort.SliceStable(selected, func(i, j int) bool {
+		return atoi(selected[i]["weight"]) > atoi(selected[j]["weight"])
+	})
+	multiPerms := make([]map[string]interface{}, 0, len(selected))
+	for _, group := range selected {
+		multiPerms = append(multiPerms, parsePermMap(group["perms"]))
+	}
+	return computePerm(multiPerms)
+}
+
+func parsePermMap(value interface{}) map[string]interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return typed
+	case string:
+		if typed == "" {
+			return map[string]interface{}{}
+		}
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(typed), &parsed); err != nil {
+			return map[string]interface{}{}
+		}
+		return parsed
+	default:
+		return map[string]interface{}{}
+	}
+}
+
+func computePerm(multiPerms []map[string]interface{}) map[string]interface{} {
+	keys := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, perms := range multiPerms {
+		for key := range perms {
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
+	}
+
+	result := make(map[string]interface{}, len(keys))
+	for _, key := range keys {
+		switch strings.SplitN(key, ".", 2)[0] {
+		case "allow", "deny":
+			value := 0
+			for _, perms := range multiPerms {
+				if atoi(perms[key]) == 1 {
+					value = 1
+					break
+				}
+			}
+			result[key] = value
+		case "min":
+			value := 0
+			minValue := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; ok {
+					minValue = minInt(minValue, atoi(perms[key]))
+					value = minValue
+				}
+			}
+			result[key] = value
+		case "max":
+			value := 0
+			maxValue := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; ok {
+					maxValue = maxInt(maxValue, atoi(perms[key]))
+					value = maxValue
+				}
+			}
+			result[key] = value
+		case "list":
+			value := ""
+			for _, perms := range multiPerms {
+				if str(perms[key]) == "" {
+					continue
+				}
+				if value == "" {
+					value = str(perms[key])
+				} else {
+					value += "," + str(perms[key])
+				}
+			}
+			result[key] = value
+		case "range":
+			value := "0-0"
+			minValue := 0
+			maxValue := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; !ok {
+					continue
+				}
+				parts := strings.SplitN(str(perms[key]), "-", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				minValue = minInt(minValue, atoi(parts[0]))
+				maxValue = maxInt(maxValue, atoi(parts[1]))
+				value = fmt.Sprintf("%d-%d", minValue, maxValue)
+			}
+			result[key] = value
+		case "key":
+			var value interface{}
+			for _, perms := range multiPerms {
+				if item, ok := perms[key]; ok {
+					value = item
+					break
+				}
+			}
+			result[key] = value
+		case "min0":
+			value := 0
+			minValue := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; !ok {
+					continue
+				}
+				if atoi(perms[key]) == 0 {
+					value = atoi(perms[key])
+					break
+				}
+				minValue = minInt(minValue, atoi(perms[key]))
+				value = minValue
+			}
+			result[key] = value
+		case "max0":
+			value := 0
+			maxValue := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; !ok {
+					continue
+				}
+				if atoi(perms[key]) == 0 {
+					value = atoi(perms[key])
+					break
+				}
+				maxValue = maxInt(maxValue, atoi(perms[key]))
+				value = maxValue
+			}
+			result[key] = value
+		case "key0":
+			value := interface{}("")
+			found := false
+			for _, perms := range multiPerms {
+				if item, ok := perms[key]; ok && (str(item) == "" || atoi(item) == 0) {
+					value = item
+					found = true
+					break
+				}
+			}
+			if !found {
+				for _, perms := range multiPerms {
+					if item, ok := perms[key]; ok {
+						value = item
+						break
+					}
+				}
+			}
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func (s *Service) affCenterInfo(user map[string]interface{}, groups []map[string]interface{}, playedNum int, downedNum int) map[string]interface{} {
+	playDayNum := getPermInt(user["perms"], "max.vod.play.daynum")
+	downDayNum := getPermInt(user["perms"], "max.vod.down.daynum")
+	uinfo := map[string]interface{}{
+		"goldcoin":              str(user["goldcoin"]),
+		"play_daily_remainders": maxInt(playDayNum-playedNum, 0),
+		"down_daily_remainders": maxInt(downDayNum-downedNum, 0),
+		"curr_group":            []interface{}{},
+		"next_group":            []interface{}{},
+		"next_upgrade_need":     0,
+		"gold_bean":             str(user["gold_bean"]),
+	}
+
+	sort.SliceStable(groups, func(i, j int) bool {
+		return atoi(groups[i]["minup"]) < atoi(groups[j]["minup"])
+	})
+	mygid := atoi(user["gid"])
+	if atoi(user["sysgid"]) > 0 {
+		mygid = atoi(user["sysgid"])
+	}
+	for i, group := range groups {
+		if atoi(group["gid"]) != mygid {
+			continue
+		}
+		uinfo["curr_group"] = affGroup(group)
+		if i+1 < len(groups) {
+			next := affGroup(groups[i+1])
+			uinfo["next_group"] = next
+			need := atoi(next["minup"]) - atoi(user["recommend_total"])
+			uinfo["next_upgrade_need"] = maxInt(need, 0)
+		}
+		break
+	}
+	return uinfo
+}
+
+func affGroup(group map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"gid":   str(group["gid"]),
+		"gname": str(group["gname"]),
+		"minup": str(group["minup"]),
+	}
+}
+
+func (s *Service) indexInfo(user map[string]interface{}, groups []map[string]interface{}, playedNum int, downedNum int, miniPlayedNum int, miniDownedNum int) map[string]interface{} {
+	playDayNum := getPermInt(user["perms"], "max.vod.play.daynum")
+	downDayNum := getPermInt(user["perms"], "max.vod.down.daynum")
+	miniPlayDayNum := getPermInt(user["perms"], "max.minivod.play.daynum")
+	miniDownDayNum := getPermInt(user["perms"], "max.minivod.down.daynum")
+	uinfo := map[string]interface{}{
+		"goldcoin":                      0,
+		"play_daily_remainders":         maxInt(playDayNum-playedNum, 0),
+		"down_daily_remainders":         maxInt(downDayNum-downedNum, 0),
+		"curr_group":                    []interface{}{},
+		"next_group":                    []interface{}{},
+		"next_upgrade_need":             0,
+		"minivod_play_daily_remainders": maxInt(miniPlayDayNum-miniPlayedNum, 0),
+		"minivod_down_daily_remainders": maxInt(miniDownDayNum-miniDownedNum, 0),
+	}
+
+	sort.SliceStable(groups, func(i, j int) bool {
+		return atoi(groups[i]["minup"]) < atoi(groups[j]["minup"])
+	})
+	mygid := atoi(user["gid"])
+	if atoi(user["sysgid"]) > 0 {
+		mygid = atoi(user["sysgid"])
+	}
+	for i, group := range groups {
+		if atoi(group["gid"]) != mygid {
+			continue
+		}
+		uinfo["curr_group"] = indexGroup(group)
+		if i+1 < len(groups) {
+			next := indexGroup(groups[i+1])
+			uinfo["next_group"] = next
+			need := atoi(next["minup"]) - atoi(user["recommend_total"])
+			uinfo["next_upgrade_need"] = maxInt(need, 0)
+		}
+		break
+	}
+	return uinfo
+}
+
+func indexGroup(group map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"gid":   str(group["gid"]),
+		"gname": str(group["gname"]),
+		"gicon": str(group["gicon"]),
+		"minup": str(group["minup"]),
+	}
+}
+
+func indexGroups(groups []map[string]interface{}) []map[string]interface{} {
+	sorted := append([]map[string]interface{}(nil), groups...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return atoi(sorted[i]["minup"]) < atoi(sorted[j]["minup"])
+	})
+	out := make([]map[string]interface{}, 0, len(sorted))
+	for _, group := range sorted {
+		if str(group["gicon"]) == "" {
+			continue
+		}
+		perms := parsePermMap(group["perms"])
+		out = append(out, map[string]interface{}{
+			"gname":               str(group["gname"]),
+			"gicon":               str(group["gicon"]),
+			"minup":               str(group["minup"]),
+			"play_daynum":         atoi(perms["max.vod.play.daynum"]),
+			"down_daynum":         atoi(perms["max.vod.down.daynum"]),
+			"comment_daynum":      atoi(perms["max.comment.post.daynum"]),
+			"minivod_play_daynum": atoi(perms["max.minivod.play.daynum"]),
+			"minivod_down_daynum": atoi(perms["max.minivod.down.daynum"]),
+		})
+	}
+	return out
+}
+
+func signedByTimestamp(now time.Time, timestamp int64) int {
+	if timestamp <= 0 {
+		return 0
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	nowLocal := now.In(loc)
+	signedLocal := time.Unix(timestamp, 0).In(loc)
+	if nowLocal.Year() == signedLocal.Year() && nowLocal.YearDay() == signedLocal.YearDay() {
+		return 1
+	}
+	return 0
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func clearTildeContact(row map[string]interface{}, key string) {
+	value := str(row[key])
+	if strings.HasPrefix(value, "~") {
+		row[key] = ""
+	}
+}
+
+func getPermInt(perms interface{}, key string) int {
+	var values map[string]interface{}
+	switch typed := perms.(type) {
+	case map[string]interface{}:
+		values = typed
+	case string:
+		if typed == "" {
+			return 0
+		}
+		if err := json.Unmarshal([]byte(typed), &values); err != nil {
+			return 0
+		}
+	default:
+		return 0
+	}
+	return atoi(values[key])
+}
+
+func dayStartUnix(now time.Time) int64 {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	local := now.In(loc)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc).Unix()
+}
+
+func singleUser(users []map[string]interface{}) map[string]interface{} {
+	if len(users) == 0 {
+		return map[string]interface{}{}
+	}
+	return users[0]
+}
+
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func uniqueInts(values []int) []int {
+	out := make([]int, 0, len(values))
+	seen := map[int]struct{}{}
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func (s *Service) processUsers(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
@@ -131,11 +725,14 @@ func (s *Service) avatarURL(avatar string) string {
 }
 
 func pageInfo(total int, pageSize int, page int, url string) map[string]interface{} {
-	page = normalizePage(total, pageSize, page)
-	totalPage := totalPages(total, pageSize)
+	if total < 0 {
+		total = 0
+	}
 	if pageSize < 1 {
 		pageSize = 1
 	}
+	totalPage := totalPages(total, pageSize)
+	page = normalizePage(total, pageSize, page)
 	start := 0
 	if total > 0 {
 		start = (page-1)*pageSize + 1
@@ -143,10 +740,6 @@ func pageInfo(total int, pageSize int, page int, url string) map[string]interfac
 	end := start + pageSize - 1
 	if end > total {
 		end = total
-	}
-	pages := make([]int, totalPage)
-	for i := range pages {
-		pages[i] = i + 1
 	}
 	currURL := strings.ReplaceAll(url, "[?]", strconv.Itoa(page))
 	firstURL := strings.ReplaceAll(url, "[?]", "1")
@@ -167,9 +760,7 @@ func pageInfo(total int, pageSize int, page int, url string) map[string]interfac
 		nextURLPage = nextPage
 	}
 	return map[string]interface{}{
-		"plist": []map[string]interface{}{
-			{"pos": "curr", "page": page, "text": page, "url": currURL},
-		},
+		"plist":     plist(page, totalPage, url),
 		"pagesize":  pageSize,
 		"total":     total,
 		"totalpage": totalPage,
@@ -184,8 +775,175 @@ func pageInfo(total int, pageSize int, page int, url string) map[string]interfac
 		"next_url":  strings.ReplaceAll(url, "[?]", strconv.Itoa(nextURLPage)),
 		"last_url":  strings.ReplaceAll(url, "[?]", strconv.Itoa(totalPage)),
 		"page_url":  url,
-		"pages":     pages,
+		"pages":     pageSelector(page, totalPage),
 	}
+}
+
+func plist(page int, totalPage int, pageURL string) []map[string]interface{} {
+	len0 := 5
+	len1 := 4
+	pages := []int{}
+	outnum0 := 0
+	page0 := 0
+	p := page
+	for i := 0; i < len0; i++ {
+		p--
+		if p > 0 {
+			pages = append(pages, p)
+			page0 = p
+		} else {
+			outnum0++
+		}
+	}
+	for i, j := 0, len(pages)-1; i < j; i, j = i+1, j-1 {
+		pages[i], pages[j] = pages[j], pages[i]
+	}
+	pages = append(pages, page)
+
+	outnum1 := 0
+	page1 := 0
+	p = page
+	for i := 0; i < len1; i++ {
+		p++
+		if p > totalPage {
+			outnum1++
+		} else {
+			pages = append(pages, p)
+			page1 = p
+		}
+	}
+	if outnum0 > 0 && outnum1 == 0 {
+		p = page1
+		for i := 0; i < outnum0; i++ {
+			p++
+			if p > totalPage {
+				break
+			}
+			pages = append(pages, p)
+		}
+	} else if outnum0 == 0 && outnum1 > 0 {
+		p = page0
+		for i := 0; i < outnum1; i++ {
+			p--
+			if p < 1 {
+				break
+			}
+			pages = append([]int{p}, pages...)
+		}
+	}
+
+	result := []map[string]interface{}{}
+	if page-len0 > 1 {
+		result = append(result, pageLink("first", 1, "FirstPage", pageURL))
+		if page-len0 > 2 {
+			result = append(result, pageLink("more", 0, "...", ""))
+		}
+	}
+	if page0 > 1 {
+		result = append(result, pageLink("prev", page-1, "PrevPage", pageURL))
+	}
+	for _, p := range pages {
+		pos := ""
+		if p == page {
+			pos = "curr"
+		}
+		result = append(result, pageLink(pos, p, p, pageURL))
+	}
+	if page1 > 0 && page1 < totalPage {
+		result = append(result, pageLink("next", page+1, "NextPage", pageURL))
+	}
+	if totalPage-page > len1 {
+		if totalPage-page > len1+1 {
+			result = append(result, pageLink("more", 0, "...", ""))
+		}
+		result = append(result, pageLink("last", totalPage, "LastPage", pageURL))
+	}
+	return result
+}
+
+func pageLink(pos string, page int, text interface{}, pageURL string) map[string]interface{} {
+	urlValue := ""
+	if pageURL != "" {
+		urlValue = strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(page))
+	}
+	return map[string]interface{}{"pos": pos, "page": page, "text": text, "url": urlValue}
+}
+
+func pageSelector(pageNow int, totalPage int) []int {
+	showAll := 50
+	sliceStart := 5
+	sliceEnd := 5
+	percent := 20
+	rangeSize := 10
+	if totalPage < showAll {
+		pages := make([]int, 0, totalPage)
+		for i := 1; i <= totalPage; i++ {
+			pages = append(pages, i)
+		}
+		return pages
+	}
+	pages := []int{}
+	for i := 1; i <= sliceStart; i++ {
+		pages = append(pages, i)
+	}
+	for i := totalPage - sliceEnd; i <= totalPage; i++ {
+		pages = append(pages, i)
+	}
+
+	increment := int(math.Floor(float64(totalPage) / float64(percent)))
+	if increment < 1 {
+		increment = 1
+	}
+	pageNowMinusRange := pageNow - rangeSize
+	pageNowPlusRange := pageNow + rangeSize
+	i := sliceStart
+	x := totalPage - sliceEnd
+	metBoundary := false
+	for i <= x {
+		if i >= pageNowMinusRange && i <= pageNowPlusRange {
+			i++
+			metBoundary = true
+		} else {
+			i += increment
+			if i > pageNowMinusRange && !metBoundary {
+				i = pageNowMinusRange
+			}
+		}
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	i = pageNow
+	dist := 1
+	for i < x {
+		dist *= 2
+		i = pageNow + dist
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	i = pageNow
+	dist = 1
+	for i > 0 {
+		dist *= 2
+		i = pageNow - dist
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	sort.Ints(pages)
+	unique := pages[:0]
+	var last int
+	for idx, page := range pages {
+		if idx == 0 || page != last {
+			unique = append(unique, page)
+			last = page
+		}
+	}
+	return unique
 }
 
 func normalizePage(total int, pageSize int, page int) int {

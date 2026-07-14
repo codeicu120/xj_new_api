@@ -15,7 +15,9 @@ import (
 	amazingRepo "xj_comp/internal/repository/amazing"
 	commentRepo "xj_comp/internal/repository/comment"
 	gameRepo "xj_comp/internal/repository/game"
+	onegoRepo "xj_comp/internal/repository/onego"
 	soRepo "xj_comp/internal/repository/so"
+	ucpRepo "xj_comp/internal/repository/ucp"
 	userRepo "xj_comp/internal/repository/user"
 	vodRepo "xj_comp/internal/repository/vod"
 	amazingService "xj_comp/internal/service/amazing"
@@ -23,6 +25,7 @@ import (
 	commentService "xj_comp/internal/service/comment"
 	gameService "xj_comp/internal/service/game"
 	iplocService "xj_comp/internal/service/iploc"
+	onegoService "xj_comp/internal/service/onego"
 	sendfileService "xj_comp/internal/service/sendfile"
 	soService "xj_comp/internal/service/so"
 	ucpService "xj_comp/internal/service/ucp"
@@ -75,9 +78,11 @@ func NewRouter(opts Options) *gin.Engine {
 	)
 	soHandler := handler.NewSOHandler(soService.NewConfigService(soRepo.NewConfigRepository(db)))
 	vodHandler := handler.NewVODHandler(vodService.NewListingService(vodRepo.NewListingRepository(db), cfg.ResourceBaseURL, cfg.VIPDiscount))
-	ucpHandler := handler.NewUCPHandler(ucpService.NewService(userRepo.NewRepository(db), cfg.ResourceBaseURL))
-	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepo.NewRepository(db), vodRepo.NewListingRepository(db)))
+	userRepository := userRepo.NewRepository(db)
+	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepo.NewRepository(db)}, cfg.ResourceBaseURL))
+	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepository, vodRepo.NewListingRepository(db)))
 	commentHandler := handler.NewCommentHandler(commentService.NewService(commentRepo.NewRepository(db), cfg.ResourceBaseURL))
+	onegoHandler := handler.NewOneGoHandler(onegoService.NewService(onegoRepo.NewRepository(db)))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -90,12 +95,37 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/game/broadcasts", gameHandler.Broadcasts)
 	router.Any("/game/wali/gameList", gameHandler.WaliGames)
 	router.Any("/getLikeRows", vodHandler.LikeRows)
+	router.Any("/ucp/index", ucpHandler.Index)
+	router.GET("/ucp/feedback", ucpHandler.FeedbackListing)
+	router.GET("/ucp/feedback/index", ucpHandler.FeedbackIndex)
+	router.GET("/ucp/feedback/listing", ucpHandler.FeedbackNewListing)
+	router.GET("/ucp/feedback/detail", ucpHandler.FeedbackDetail)
+	router.GET("/ucp/msg", ucpHandler.MsgListing)
+	router.GET("/ucp/msg/index", ucpHandler.MsgListing)
 	router.Any("/ucp/myaff", ucpHandler.MyAff)
+	router.Any("/ucp/rolltitle", ucpHandler.RollTitle)
+	router.Any("/ucp/affcenter", ucpHandler.AffCenter)
+	router.Any("/ucp/payment", ucpHandler.PaymentListing)
+	router.Any("/ucp/payment/index", ucpHandler.PaymentListing)
+	router.Any("/ucp/payment/listing", ucpHandler.PaymentListing)
+	router.Any("/ucp/payment/safepaylog", ucpHandler.SafePayLog)
+	router.Any("/ucp/account", ucpHandler.AccountIndex)
+	router.Any("/ucp/account/index", ucpHandler.AccountIndex)
+	router.Any("/ucp/account/balancelog", ucpHandler.BalanceLog)
+	router.Any("/ucp/coinlog", ucpHandler.CoinLogIndex)
+	router.Any("/ucp/coinlog/index", ucpHandler.CoinLogIndex)
+	router.Any("/ucp/coinlog/bonuslog", ucpHandler.CoinLogBonusLog)
+	router.Any("/ucp/coinlog/invitelog", ucpHandler.CoinLogInviteLog)
 	router.Any("/vod/show/:vodid", vodHandler.Show)
 	router.Any("/vod/preView/:vodid/index.m3u8", vodHandler.Preview)
 	router.Any("/sendfile/play/:file", sendfileHandler.Play)
 	router.Any("/sendfile/down/:file", sendfileHandler.Down)
 	router.Any("/comment/listing-:params", commentHandler.Listing)
+	router.Any("/onego/rules", onegoHandler.Rules)
+	router.Any("/onego/rooms", onegoHandler.Rooms)
+	router.Any("/onego/current", onegoHandler.Current)
+	router.Any("/onego/last", onegoHandler.Last)
+	router.Any("/onego/hash", onegoHandler.Hash)
 	for _, action := range []string{"listing", "recommend", "hot", "latest"} {
 		router.Any("/vod/"+action, vodHandler.Listing)
 		router.Any("/vod/"+action+"-:params", vodHandler.Listing)

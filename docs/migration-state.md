@@ -202,3 +202,192 @@
 - 兼容规则：未登录返回 `retcode=-9999`、`errmsg=请登录后操作`、空 `data` 对象；登录后返回 `data.rows` 和 PHP Page `pageinfo`；用户行对齐 `procRow2` 的字段、类型、`gicon`、`isvip`、`avatar_url`、`duetime/dueday`、base36 `uniqkey`。
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 sid `250f790ba71ec2b9d3855f424db2259e`、`uid=5`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/myaff`、`/ucp/myaff?page=1`、`/ucp/myaff?page=2` 忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/rolltitle`
+
+- PHP: `c.api.ucp.index->rolltitle`
+- Go: `internal/handler.UCPHandler.RollTitle`
+- Service: `internal/service/ucp.Service.RollTitle`
+- Repository: `internal/repository/ucp.Repository`
+- DB: 读取 `roll_titles`；查询条件 `status=1`；按 `id DESC`，limit 10。
+- 兼容规则：公共只读，不要求登录；返回 `data.messages`，保留数据库原始字段和值类型；旧 PHP 中间件动态 `data.xxx_api_auth` 在 Go 中不返回。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/rolltitle` 忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing`
+
+- PHP: `c.api.ucp.payment->index/listing`
+- Go: `internal/handler.UCPHandler.PaymentListing`
+- Service: `internal/service/ucp.Service.PaymentListing`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `trade_payments`；查询条件 `uid=当前用户 uid`；`listing` 按 `createtime DESC`，`pagesize=20`。
+- 兼容规则：`/ucp/payment` 和 `/ucp/payment/index` 走 `listing`；支持 GET query 和 POST form 的 `page`；金额按分转元字符串两位小数；`createtime/paidtime` 为 `Y-m-d H:i`；未知 `payway/paycode/paytype` 映射返回 `null`；分页 `plist/pages` 对齐 PHP `kernel/lib/Page.php`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/payment/listing?page=1`、`page=2`、`page=0`、`/ucp/payment`、`/ucp/payment/index` 和 POST `/ucp/payment/listing` 忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/payment/safepaylog`
+
+- PHP: `c.api.ucp.payment->safepaylog`
+- Go: `internal/handler.UCPHandler.SafePayLog`
+- Service: `internal/service/ucp.Service.SafePayLog`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `trade_payments`；查询条件 `uid=当前用户 uid AND createtime > now-7天 AND payway='safepay'`；按旧 model 默认 `payid DESC`；limit 10。
+- 兼容规则：返回 `data.payrows`，无 `pageinfo`；支付行字段复用 `payment.procRow2` 映射。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/payment/safepaylog` 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/account`、`/ucp/account/index`
+
+- PHP: `c.api.ucp.account->index`
+- Go: `internal/handler.UCPHandler.AccountIndex`
+- Service: `internal/service/ucp.Service.AccountIndex`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；普通请求按 PHP 行为 cookie 优先，OPTIONS 或无 cookie 时读 header；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `users_account`、`users_quota`、`user_balancelogs` 和 `settings.uuid='setting'` 中的 `exrate`；余额日志按 `trxtime DESC LIMIT 10`。
+- 兼容规则：`account.balance/frozen/deposit/available_balance` 为两位小数字符串；`game_balance/game_frozen/game_available_balance` 为 int；`goldcoin/exrate` 为 int；`coin2rmb/max2rmb` 为两位小数字符串；`logrows.trxin/trxout/balance` 为两位小数字符串；`logrows.trxtime` 30 天内为相对时间，超过 30 天为 `Y-m-d`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/account`、`/ucp/account/index`、POST `/ucp/account/index`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/account/balancelog`
+
+- PHP: `c.api.ucp.account->balancelog`
+- Go: `internal/handler.UCPHandler.BalanceLog`
+- Service: `internal/service/ucp.Service.BalanceLog`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `user_balancelogs`；查询条件 `uid=当前用户 uid`；按 `trxtime DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/account/balancelog?page=[?]`。
+- 兼容规则：支持 GET query 和 POST form 的 `page`；`page=0` 归一到 1，过大页归一到最后页；`logrows.trxin/trxout/balance` 为两位小数字符串；`paytype` 按 PHP `procLogRow` 映射，未命中为 `--`；`trxtime` 30 天内为相对时间，超过 30 天为 `Y-m-d`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/account/balancelog?page=1`、`page=0`、`page=999999`、POST `/ucp/account/balancelog`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/coinlog`、`/ucp/coinlog/index`
+
+- PHP: `c.api.ucp.coinlog->index`
+- Go: `internal/handler.UCPHandler.CoinLogIndex`
+- Service: `internal/service/ucp.Service.CoinLogIndex`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `users_account`、`users_quota`、`settings.uuid='setting'` 中的 `exrate`，以及 `user_coinlogs LEFT JOIN users ON users.uid=user_coinlogs.invited_uid`；金币日志按 `logid DESC LIMIT 10`。
+- 兼容规则：`/ucp/coinlog` 默认走 `index`；返回 `data.account/goldcoin/exrate/logrows`；`account` 金额字段复用 PHP `account.procRow`；`goldcoin/exrate` 为 int；`logrows.cointype` 按 PHP 映射，未命中为 `--`；`logrows.addtime` 30 天内使用 PHP 相对时间模板并保留天/小时/分钟后的尾随空格，超过 30 天为 `Y-m-d`；`mobi` 按 PHP `maskPhone` 遮罩。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/coinlog`、`/ucp/coinlog/index`、POST `/ucp/coinlog/index`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/coinlog/invitelog`
+
+- PHP: `c.api.ucp.coinlog->invitelog`
+- Go: `internal/handler.UCPHandler.CoinLogInviteLog`
+- Service: `internal/service/ucp.Service.CoinLogInviteLog`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `user_coinlogs LEFT JOIN users ON users.uid=user_coinlogs.invited_uid`；查询条件 `uid=当前用户 uid AND cointype IN (201,32,11)`；按 `addtime DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/coinlog/invitelog?page=[?]`。
+- 兼容规则：支持 GET query 和 POST form 的 `page`；`page=0` 归一到 1；`logrows` 复用 PHP `coinlog.procLogRow`，其中 `201` 映射为 `邀请好友赠送vip天数`，`mobi` 按 PHP `maskPhone` 遮罩。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/coinlog/invitelog?page=1`、`page=0`、POST `/ucp/coinlog/invitelog`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/coinlog/bonuslog`
+
+- PHP: `c.api.ucp.coinlog->bonuslog`
+- Go: `internal/handler.UCPHandler.CoinLogBonusLog`
+- Service: `internal/service/ucp.Service.CoinLogBonusLog`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `user_coinlogs LEFT JOIN users ON users.uid=user_coinlogs.invited_uid`；列表查询条件 `uid=当前用户 uid AND cointype IN (0,1,9,2,3,4,5,6,7,10,11,12,13,14,15,16,17,18,19,32,22)`；按 `addtime DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/coinlog/bonuslog?page=[?]`。
+- 兼容规则：返回 `data.logrows/addinfo/pageinfo`；`logrows` 复用 PHP `coinlog.procLogRow`；`addinfo.inviteTotal` 统计 `cointype=11` 的 `COUNT(DISTINCT invited_uid)`，`activeTotal` 统计 `cointype=15`，`bonusTotal` 只统计 `(0,1,9,2,3,4,5,6,7,10,11,12,13,14,15,16,17,18,19)`，保持 PHP 不含 `22/32` 的兼容行为；分页 `plist` 已按 `kernel/lib/Page.php` 的 `len0=5/len1=4` 算法对齐。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/coinlog/bonuslog?page=1`、`page=0`、POST `/ucp/coinlog/bonuslog`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/affcenter`
+
+- PHP: `c.api.ucp.index->affcenter`
+- Go: `internal/handler.UCPHandler.AffCenter`
+- Service: `internal/service/ucp.Service.AffCenter`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- DB: 读取 `users_quota.goldcoin`、`users_goldbean.gold_bean`、`user_groups`、`vod_playlogs_week` 当日播放次数、`vod_downlogs` 当日下载次数。
+- 兼容规则：登录用户通过 `initGids + initPerm` 合并 `user_groups.perms`，再按 `max.vod.play.daynum` 和 `max.vod.down.daynum` 计算 `uinfo.play_daily_remainders/down_daily_remainders`；`sysgid` 优先于 `gid`；`curr_group/next_group` 按 `minup ASC` 查找；`next_upgrade_need` 最小为 0；`data.user` 复用 PHP `user.procRow2` 字段。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/affcenter` GET header、POST header、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `/ucp/index`
+
+- PHP: `c.api.ucp.index->index`
+- Go: `internal/handler.UCPHandler.Index`
+- Service: `internal/service/ucp.Service.Index`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；旧 PHP 仅显式注册 `/ucp/index`，Go 不把裸 `/ucp` 等价到该接口。
+- DB: 登录态读取 `users_quota`、`users_goldbean`、`user_groups`、`vod_playlogs_week`、`vod_downlogs`、`minivod_viewlogs_{uid%100}`、`user_coinlogs`；游客态读取 `user_guests`、`vod_guest_playlogs`、`vod_guest_downlogs`、`minivod_guestviewlogs_{sid首字符}`。
+- 兼容规则：登录态返回 `data.user/uinfo/signed/groups`；游客态返回 `data.user/uinfo/signed` 且 `groups` 省略；游客缺 `user_guests` 时返回 `retcode=-1`、`errmsg=请登录后操作，客户端游客请先携带信息` 且省略 `data`；游客 `uinfo.curr_group/next_group` 为 `null`；登录态 `curr_group/next_group` 包含 `gid/gname/gicon/minup`；登录态 `mobi/email` 以 `~` 开头时清空；用户组能力列表只保留 `gicon` 非空组。
+- 本地兼容：本地导入库缺部分 minivod 分表时，计数按 0 处理，避免只读接口因缺表失败；生产完整分表会按 PHP 分表规则查询。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`；游客对比使用本地 `user_guests.sid=0003b1c936338fd7871e3926db105db5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；旧 PHP `/ucp/index` 在本地 GET/POST/header/cookie/guest 场景均超时，未能完成 PHP-Go 响应体对比；新 Go 对应场景均返回 200，字段键和关键空值按源码契约验证。
+
+### `GET /ucp/feedback`
+
+- PHP: `c.api.ucp.index->feedback` 的 GET 分支
+- Go: `internal/handler.UCPHandler.FeedbackListing`
+- Service: `internal/service/ucp.Service.FeedbackListing`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `feedbacks`；查询条件 `uid=当前用户 uid`；按 `id DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/feedback?page=[?]`。
+- 兼容规则：只接管 GET，`POST /ucp/feedback` 本轮不注册新 handler；返回 `data.rows/pageinfo`；行字段对齐 PHP `misc.feedback->procRow2`，其中本旧入口未传 `payrow`，所以 `itemname=null`、`paidtime=""`；`ctimestamp/replytime` 使用 `Y-m-d H:i`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback?page=1`、`page=0`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致；Go `POST /ucp/feedback` 返回 404，未接管写入。
+
+### `GET /ucp/msg`、`GET /ucp/msg/index`
+
+- PHP: `c.api.ucp.msg->index`
+- Go: `internal/handler.UCPHandler.MsgListing`
+- Service: `internal/service/ucp.Service.MsgListing`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `msgc a LEFT JOIN msgs b ON b.msgid=a.last_msgid LEFT JOIN users c ON c.uid=a.ruid`；查询条件 `a.uid=当前用户 uid`；按 `a.last_sendtime DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/msg?page=[?]`。
+- 兼容规则：只接管 GET `/ucp/msg` 和 GET `/ucp/msg/index`；返回 `data.rows/pageinfo`；行字段保留 PHP SQL 输出字符串/NULL 表现并追加 `__url__=/ucp/msg/show?cid=<cid>`；`sendtime/last_sendtime` 不格式化；旧 PHP 在 `total==0` 时会 `cleanRead(uid)` 写 `users.newmsg=0`，Go 本轮为只读迁移不复刻该副作用。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/msg`、`/ucp/msg/index`、`/ucp/msg?page=0`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致；Go `POST /ucp/msg` 返回 404，未接管旧 `Route::any` 可能触发的写状态行为。
+
+### `GET /ucp/feedback/index`
+
+- PHP: `c.api.ucp.feedback->index`
+- Go: `internal/handler.UCPHandler.FeedbackIndex`
+- Service: `internal/service/ucp.Service.FeedbackIndex`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `trade_payments`；查询条件 `uid=当前用户 uid AND createtime > now-30天`；按 `payid DESC`；最多 100 条。
+- 兼容规则：只接管 GET `/ucp/feedback/index`；返回 `data.payrows`；支付行复用 PHP `payment.procRow2` 兼容字段；裸 `/ucp/feedback` 仍是旧版 legacy feedback 列表，不指向新版 index。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback/index`、`/ucp/feedback/index?page=1`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致；Go `POST /ucp/feedback/index` 返回 404，未接管旧 `Route::any`。
+
+### `GET /ucp/feedback/listing`
+
+- PHP: `c.api.ucp.feedback->listing`
+- Go: `internal/handler.UCPHandler.FeedbackNewListing`
+- Service: `internal/service/ucp.Service.FeedbackNewListing`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `feedbacks`；基础条件 `uid=当前用户 uid`；`type=1` 增加 `cid IN (0,1,2,3,4)`；`type=2` 增加 `cid IN (5,6,7)`；其他 type 归一为 0；按 `id DESC`；`pagesize=20`。
+- 兼容规则：只接管 GET `/ucp/feedback/listing`；返回 `data.rows/pageinfo`；行字段复用 PHP `misc.feedback->procRow2`，本入口未传 `payrow`，所以 `itemname=null`、`paidtime=""`；`pageinfo` URL 为 `/ucp/feedback/listing?type={0|1|2}&page=[?]`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback/listing`、`type=1&page=1`、`type=2&page=1`、非法 type + `page=0`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致；Go `POST /ucp/feedback/listing` 返回 404，未接管旧 `Route::any`。
+
+### `GET /ucp/feedback/detail`
+
+- PHP: `c.api.ucp.feedback->detail`
+- Go: `internal/handler.UCPHandler.FeedbackDetail`
+- Service: `internal/service/ucp.Service.FeedbackDetail`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `feedbacks` 单条记录并校验 `row.uid=当前用户 uid`；`row.aids` 非空时按原顺序读取 `attachs`，SQL 对齐 PHP `ORDER BY FIELD(aid, ...)`；`row.payid>0` 时读取 `trade_payments` 单条记录。
+- 兼容规则：只接管 GET `/ucp/feedback/detail`；返回 `data.row/picurls`；`row` 字段复用 PHP `misc.feedback->procRow2`，关联支付只用于 `itemname/paidtime`，不额外校验 payment uid；空附件返回 `picurls=null`；记录不存在或越权返回 PHP 默认错误壳，不带 `data`；Go `POST /ucp/feedback/detail` 返回 404，未接管旧 `Route::any`。
+- 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback/detail?id=1917132` 成功响应一致，`picurls=null`、无 payment 时 `itemname=null/paidtime=""`；GET `id=0` 的不存在错误壳一致；未登录分支除旧 PHP 动态 `xxx_api_auth` 外语义一致。
+
+### `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`
+
+- PHP: `c.api.onego->rules/rooms/current/last/hash`
+- Go: `internal/handler.OneGoHandler`
+- Service: `internal/service/onego.Service`
+- Repository: `internal/repository/onego.Repository`
+- Auth: 公共接口，不要求登录；旧 `c.api.__init__` 可能在 `data.xxx_api_auth` 写入动态游客 token，Go 本轮不生成该动态字段。
+- DB: `/onego/rules` 读取 `one_go LIMIT 1`；`/onego/rooms` 读取 `one_go_rooms ORDER BY id ASC LIMIT 10`；`/onego/current` 读取当前房间未开奖记录；`/onego/last` 读取最近已开奖 period 或指定 room 的已开奖记录；`/onego/hash` 不访问 DB。
+- 兼容规则：规则表无数据时返回 PHP 默认错误壳 `retcode=-1`、`errmsg=系统尚未开放该活动`；`last` 无已开奖记录返回 `暂无数据`；记录行按 PHP `onego.record->procRow` 将核心数字字段转 int，并按 winner 查 `users` 或 `bot_users`；`hash` 对 `plaintext` trim 后计算 SHA256，提取 hash 中末尾 6 位数字，首位为 0 时继续向前取，空参数返回 `请传入参数`；支持 GET/POST，匹配旧 `Route::any('/onego/?(:action)?')` 的 method 范围。
+- 测试：聚焦 `go test ./internal/service/onego ./internal/server` 通过；PHP-Go 对比 `/onego/rules` 本地空表错误一致；`/onego/rooms` GET/POST 房间列表业务数据一致；`/onego/current?roomid=1` 和 `/onego/last` 本地错误分支一致；`/onego/hash?plaintext=abc` 和缺少 plaintext 错误分支一致；均忽略旧 PHP 动态 `data.xxx_api_auth`。
