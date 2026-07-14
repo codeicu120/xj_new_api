@@ -260,6 +260,52 @@ func TestLuckyEmptyRanks(t *testing.T) {
 	}
 }
 
+func TestMarqueeReturnsMessages(t *testing.T) {
+	service := NewService(fakeStore{
+		latestRecord: map[string]interface{}{"period": "2026071401"},
+		rules:        map[string]interface{}{"marquee": "{user} 在 {room} 第 {period} 期赢得 {awards} 金币，胜率 {win_rate}%"},
+		periodRecords: []map[string]interface{}{
+			sampleRecord("5"),
+			func() map[string]interface{} {
+				row := sampleRecord("5")
+				row["id"] = "11"
+				row["awards"] = "0"
+				return row
+			}(),
+		},
+		room: map[string]interface{}{"id": "1", "name": "初级场"},
+		user: map[string]interface{}{"uid": "5", "username": "winner", "avatar": ""},
+	})
+
+	data, err := service.Marquee(context.Background())
+	if err != nil {
+		t.Fatalf("marquee: %v", err)
+	}
+	messages, ok := data.Data.([]string)
+	if !ok {
+		t.Fatalf("expected messages, got %T", data.Data)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected one message, got %#v", messages)
+	}
+	want := "winner 在 初级场 第 2026071401 期赢得 100 金币，胜率 65%"
+	if messages[0] != want {
+		t.Fatalf("unexpected message %q", messages[0])
+	}
+}
+
+func TestMarqueeNoDataAndNotOpen(t *testing.T) {
+	service := NewService(fakeStore{})
+	if _, err := service.Marquee(context.Background()); !errors.Is(err, ErrNoData) {
+		t.Fatalf("expected ErrNoData, got %v", err)
+	}
+
+	service = NewService(fakeStore{latestRecord: map[string]interface{}{"period": "2026071401"}})
+	if _, err := service.Marquee(context.Background()); !errors.Is(err, ErrNotOpen) {
+		t.Fatalf("expected ErrNotOpen, got %v", err)
+	}
+}
+
 func sampleRecord(winner string) map[string]interface{} {
 	return map[string]interface{}{
 		"id":          "10",
@@ -273,7 +319,7 @@ func sampleRecord(winner string) map[string]interface{} {
 		"total_coins": "30",
 		"open_no":     "-1",
 		"winner":      winner,
-		"awards":      "0",
+		"awards":      "100",
 		"win_rate":    "6500",
 		"bot":         "0",
 		"paid":        "0",

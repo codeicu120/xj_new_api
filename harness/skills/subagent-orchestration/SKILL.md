@@ -36,6 +36,7 @@ compatibility: 本地 Codex 工作区、Go 项目文件和可选 multi-agent/sub
    - 聚焦 `go test`，必要时 `make ci`。
    - PHP 迁移任务必须跑 PHP-Go 对比脚本或说明无法运行的原因。
    - PHP 接口迁移任务必须更新根目录 `MIGRATION_ENDPOINTS.md`，并同步必要的 `docs/*` 迁移记录。
+   - 用户要求批量迁移剩余接口时，完成单个 endpoint 后不得默认停止；应继续选择下一低风险 endpoint，直到清单完成或出现明确阻断。
 7. 主线执行 CR Gate：
    - PHP 接口迁移、公开 API 行为变更、缓存/数据库/鉴权/支付/VIP 相关变更，交付前必须有 reviewer 结论。
 8. 主线输出交付总结：

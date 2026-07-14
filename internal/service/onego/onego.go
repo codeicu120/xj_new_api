@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -182,6 +183,53 @@ func (s *Service) Lucky(ctx context.Context) (domain.OneGoData, error) {
 	return domain.OneGoData{Data: ranks}, nil
 }
 
+func (s *Service) Marquee(ctx context.Context) (domain.OneGoData, error) {
+	latest, err := s.store.LatestRecord(ctx)
+	if err != nil {
+		return domain.OneGoData{}, fmt.Errorf("get onego latest record: %w", err)
+	}
+	if len(latest) == 0 {
+		return domain.OneGoData{}, ErrNoData
+	}
+	rules, err := s.store.Rules(ctx)
+	if err != nil {
+		return domain.OneGoData{}, fmt.Errorf("get onego rules: %w", err)
+	}
+	if len(rules) == 0 {
+		return domain.OneGoData{}, ErrNotOpen
+	}
+	records, err := s.store.RecordsByPeriod(ctx, str(latest["period"]), 1, 10)
+	if err != nil {
+		return domain.OneGoData{}, fmt.Errorf("get onego marquee records: %w", err)
+	}
+	records, err = s.processRecords(ctx, records)
+	if err != nil {
+		return domain.OneGoData{}, err
+	}
+
+	messages := make([]string, 0, len(records))
+	template := str(rules["marquee"])
+	for _, row := range records {
+		if atoi(row["awards"]) == 0 {
+			continue
+		}
+		room, err := s.store.RoomByID(ctx, atoi(row["room_id"]))
+		if err != nil {
+			return domain.OneGoData{}, fmt.Errorf("get onego marquee room: %w", err)
+		}
+		if len(room) == 0 {
+			continue
+		}
+		message := strings.ReplaceAll(template, "{user}", winnerUsername(row["winner"]))
+		message = strings.ReplaceAll(message, "{room}", str(room["name"]))
+		message = strings.ReplaceAll(message, "{period}", str(row["period"]))
+		message = strings.ReplaceAll(message, "{awards}", str(row["awards"]))
+		message = strings.ReplaceAll(message, "{win_rate}", formatRate(atoi(row["win_rate"])))
+		messages = append(messages, message)
+	}
+	return domain.OneGoData{Data: messages}, nil
+}
+
 func (s *Service) processRecords(ctx context.Context, rows []map[string]interface{}) ([]map[string]interface{}, error) {
 	out := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
@@ -252,4 +300,16 @@ func digitsOnly(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+func winnerUsername(value interface{}) string {
+	winner, ok := value.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	return str(winner["username"])
+}
+
+func formatRate(value int) string {
+	return strconv.FormatFloat(float64(value)/100, 'f', -1, 64)
 }

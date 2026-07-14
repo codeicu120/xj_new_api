@@ -24,7 +24,7 @@ func (h *OneGoHandler) Rules(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		if errors.Is(err, onegoService.ErrNotOpen) {
-			c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+			c.JSON(http.StatusOK, oneGoError("系统尚未开放该活动"))
 			return
 		}
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购规则失败"))
@@ -38,7 +38,7 @@ func (h *OneGoHandler) Rooms(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		if errors.Is(err, onegoService.ErrNotOpen) {
-			c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+			c.JSON(http.StatusOK, oneGoError("系统尚未开放该活动"))
 			return
 		}
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购房间失败"))
@@ -76,9 +76,9 @@ func (h *OneGoHandler) Hash(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, onegoService.ErrMissingPlaintext):
-			c.JSON(http.StatusOK, legacyjson.Error("请传入参数"))
+			c.JSON(http.StatusOK, oneGoError("请传入参数"))
 		case errors.Is(err, onegoService.ErrHashNumberUnavailable):
-			c.JSON(http.StatusOK, legacyjson.Error("无法计算后六位数字"))
+			c.JSON(http.StatusOK, oneGoError("无法计算后六位数字"))
 		default:
 			c.JSON(http.StatusInternalServerError, legacyjson.Error("计算一元购哈希失败"))
 		}
@@ -97,17 +97,31 @@ func (h *OneGoHandler) Lucky(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *OneGoHandler) Marquee(c *gin.Context) {
+	data, err := h.service.Marquee(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		h.writeOneGoError(c, err, "获取一元购跑马灯失败")
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *OneGoHandler) writeOneGoError(c *gin.Context, err error, fallback string) {
 	switch {
 	case errors.Is(err, onegoService.ErrNotOpen):
-		c.JSON(http.StatusOK, legacyjson.Error("系统尚未开放该活动"))
+		c.JSON(http.StatusOK, oneGoError("系统尚未开放该活动"))
 	case errors.Is(err, onegoService.ErrSelectRoom):
-		c.JSON(http.StatusOK, legacyjson.Error("请选择场次"))
+		c.JSON(http.StatusOK, oneGoError("请选择场次"))
 	case errors.Is(err, onegoService.ErrActivityEnded):
-		c.JSON(http.StatusOK, legacyjson.Error("活动已结束或尚未开始"))
+		c.JSON(http.StatusOK, oneGoError("活动已结束或尚未开始"))
 	case errors.Is(err, onegoService.ErrNoData):
-		c.JSON(http.StatusOK, legacyjson.Error("暂无数据"))
+		c.JSON(http.StatusOK, oneGoError("暂无数据"))
 	default:
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(fallback))
 	}
+}
+
+func oneGoError(message string) legacyjson.Response {
+	return legacyjson.Response{RetCode: -1, ErrMsg: message, Data: map[string]interface{}{}}
 }

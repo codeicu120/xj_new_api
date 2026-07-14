@@ -451,6 +451,38 @@ func TestOneGoLuckyWithoutMySQL(t *testing.T) {
 	}
 }
 
+func TestOneGoMarqueeNoDataWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/onego/marquee"},
+		{method: http.MethodPost, path: "/onego/marquee"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -1 || body.ErrMsg != "暂无数据" {
+				t.Fatalf("unexpected response %#v", body)
+			}
+		})
+	}
+}
+
 func TestV2VODListingRoutes(t *testing.T) {
 	router := newTestRouter()
 
