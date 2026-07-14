@@ -55,7 +55,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
 | `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
-| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash` | ANY | `OneGoHandler` |
+| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky` | ANY | `OneGoHandler` |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | ANY | `VODHandler.Listing` |
 | `/vod/listing-:params`、`/vod/recommend-:params`、`/vod/hot-:params`、`/vod/latest-:params` | ANY | `VODHandler.Listing` |
 | `/v2/amazing/categories` | ANY | `AmazingHandler.Categories` |
@@ -99,6 +99,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
 | `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
+| `/onego/lucky` | `c.api.onego->lucky` | `OneGoHandler.Lucky` | 已重构，对比通过；一元购幸运榜公共只读，保留旧 PHP 排行 SQL 未分页行为 |
 
 ### v2 公共接口
 
@@ -333,7 +334,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/test` | `c.api.game.wali->ping` | 未重构；外部平台测试 |
 | `/game/lottery/gameList`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台 |
 | `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
-| `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`） | `c.api.onego->$action` | 未重构；一元购剩余 lucky/marquee 等公共动作及 history/bet 等登录/投注写入 |
+| `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`） | `c.api.onego->$action` | 未重构；一元购剩余 marquee 等公共动作及 history/bet 等登录/投注写入 |
 | `/bought/:action?` | `c.api.bought->$action` | 未重构；付费影片 |
 
 ### 社区、HGame、AI
@@ -358,7 +359,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 ## 建议后续顺序
 
 1. 继续按风险优先级评估 `/ucp/msg/show`：旧 PHP 读取详情同时可能涉及已读状态，需要明确是否复刻写入副作用。
-2. 继续公共只读接口：`/special/listing`、`/special/detail`、`/onego/lucky`、`/onego/marquee`；`/search` 会写搜索日志，放入普通写入批次评估。
+2. 继续公共只读接口：`/special/listing`、`/special/detail`、`/onego/marquee`；`/search` 会写搜索日志，放入普通写入批次评估。
 3. 中风险接口：`/getGlobalData`、`/init`、`/vod/show/:vodid`。
 4. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
 

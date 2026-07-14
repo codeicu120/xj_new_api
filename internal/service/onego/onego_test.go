@@ -14,6 +14,8 @@ type fakeStore struct {
 	latestRecord   map[string]interface{}
 	periodRecords  []map[string]interface{}
 	roomRecords    []map[string]interface{}
+	rankWinCoins   []map[string]interface{}
+	userWins       []map[string]interface{}
 	user           map[string]interface{}
 	bot            map[string]interface{}
 	err            error
@@ -45,6 +47,14 @@ func (s fakeStore) RecordsByRoom(context.Context, int, int, int) ([]map[string]i
 
 func (s fakeStore) RecordsByPeriod(context.Context, string, int, int) ([]map[string]interface{}, error) {
 	return s.periodRecords, s.err
+}
+
+func (s fakeStore) RankWinCoins(context.Context) ([]map[string]interface{}, error) {
+	return s.rankWinCoins, s.err
+}
+
+func (s fakeStore) UserWins(context.Context, int) ([]map[string]interface{}, error) {
+	return s.userWins, s.err
 }
 
 func (s fakeStore) UserByID(context.Context, int) (map[string]interface{}, error) {
@@ -192,6 +202,61 @@ func TestHashRequiresPlaintext(t *testing.T) {
 	_, err := service.Hash(" \t ")
 	if !errors.Is(err, ErrMissingPlaintext) {
 		t.Fatalf("expected ErrMissingPlaintext, got %v", err)
+	}
+}
+
+func TestLuckyReturnsRanksWithWinsAndWinner(t *testing.T) {
+	service := NewService(fakeStore{
+		rankWinCoins: []map[string]interface{}{
+			{"total_awards": "300", "winner": "5"},
+		},
+		userWins: []map[string]interface{}{
+			{"wins": "2", "room_id": "1"},
+		},
+		user: map[string]interface{}{"uid": "5", "username": "winner", "avatar": ""},
+	})
+
+	data, err := service.Lucky(context.Background())
+	if err != nil {
+		t.Fatalf("lucky: %v", err)
+	}
+	rows, ok := data.Data.([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected ranks, got %T", data.Data)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one rank, got %d", len(rows))
+	}
+	row := rows[0]
+	if row["total_awards"] != 300 {
+		t.Fatalf("unexpected total_awards %#v", row["total_awards"])
+	}
+	winner, ok := row["winner"].(map[string]interface{})
+	if !ok || winner["username"] != "winner" {
+		t.Fatalf("unexpected winner %#v", row["winner"])
+	}
+	wins := row["wins"].([]map[string]interface{})
+	if wins[0]["wins"] != 2 || wins[0]["room_id"] != 1 {
+		t.Fatalf("unexpected wins %#v", wins)
+	}
+	if row["id"] != 0 || row["awards"] != 0 || row["open_time"] != 0 {
+		t.Fatalf("expected PHP procRow zero-fill fields, got %#v", row)
+	}
+}
+
+func TestLuckyEmptyRanks(t *testing.T) {
+	service := NewService(fakeStore{})
+
+	data, err := service.Lucky(context.Background())
+	if err != nil {
+		t.Fatalf("lucky: %v", err)
+	}
+	rows, ok := data.Data.([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected ranks, got %T", data.Data)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected empty ranks, got %#v", rows)
 	}
 }
 

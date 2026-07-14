@@ -87,6 +87,16 @@ func (h *OneGoHandler) Hash(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *OneGoHandler) Lucky(c *gin.Context) {
+	data, err := h.service.Lucky(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购幸运榜失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *OneGoHandler) writeOneGoError(c *gin.Context, err error, fallback string) {
 	switch {
 	case errors.Is(err, onegoService.ErrNotOpen):

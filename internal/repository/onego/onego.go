@@ -85,6 +85,20 @@ func (r *Repository) RecordsByPeriod(ctx context.Context, period string, page in
 	return r.queryRows(ctx, "SELECT * FROM one_go_records WHERE 1=1 AND period=? ORDER BY id DESC LIMIT ? OFFSET ?", period, pageSize, offset(page, pageSize))
 }
 
+func (r *Repository) RankWinCoins(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT SUM(awards) as total_awards, winner FROM one_go_records WHERE awards > 0 GROUP BY winner ORDER BY total_awards DESC")
+}
+
+func (r *Repository) UserWins(ctx context.Context, uid int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT COUNT(*) as wins, room_id FROM one_go_records WHERE winner = ? GROUP BY room_id", uid)
+}
+
 func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil

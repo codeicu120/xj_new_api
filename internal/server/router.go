@@ -126,6 +126,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/onego/current", onegoHandler.Current)
 	router.Any("/onego/last", onegoHandler.Last)
 	router.Any("/onego/hash", onegoHandler.Hash)
+	router.Any("/onego/lucky", onegoHandler.Lucky)
 	for _, action := range []string{"listing", "recommend", "hot", "latest"} {
 		router.Any("/vod/"+action, vodHandler.Listing)
 		router.Any("/vod/"+action+"-:params", vodHandler.Listing)

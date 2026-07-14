@@ -27,6 +27,8 @@ type Store interface {
 	LatestRecord(ctx context.Context) (map[string]interface{}, error)
 	RecordsByRoom(ctx context.Context, roomID int, page int, pageSize int) ([]map[string]interface{}, error)
 	RecordsByPeriod(ctx context.Context, period string, page int, pageSize int) ([]map[string]interface{}, error)
+	RankWinCoins(ctx context.Context) ([]map[string]interface{}, error)
+	UserWins(ctx context.Context, uid int) ([]map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	BotByID(ctx context.Context, uid int) (map[string]interface{}, error)
 }
@@ -150,6 +152,34 @@ func (s *Service) Hash(plaintext string) (domain.OneGoData, error) {
 		"hash_code":   hashCode,
 		"hash_number": hashNumber,
 	}}, nil
+}
+
+func (s *Service) Lucky(ctx context.Context) (domain.OneGoData, error) {
+	ranks, err := s.store.RankWinCoins(ctx)
+	if err != nil {
+		return domain.OneGoData{}, fmt.Errorf("get onego lucky ranks: %w", err)
+	}
+	for _, row := range ranks {
+		winner := atoi(row["winner"])
+		row["total_awards"] = atoi(row["total_awards"])
+		row["winner"] = winner
+
+		wins, err := s.store.UserWins(ctx, winner)
+		if err != nil {
+			return domain.OneGoData{}, fmt.Errorf("get onego lucky user wins: %w", err)
+		}
+		for _, win := range wins {
+			win["wins"] = atoi(win["wins"])
+			win["room_id"] = atoi(win["room_id"])
+		}
+		row["wins"] = wins
+	}
+
+	ranks, err = s.processRecords(ctx, ranks)
+	if err != nil {
+		return domain.OneGoData{}, err
+	}
+	return domain.OneGoData{Data: ranks}, nil
 }
 
 func (s *Service) processRecords(ctx context.Context, rows []map[string]interface{}) ([]map[string]interface{}, error) {

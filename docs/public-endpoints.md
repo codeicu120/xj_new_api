@@ -34,13 +34,14 @@
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
 | `/onego/hash` | `c.api.onego->hash` | 本轮完成 | 一元购公共哈希计算接口，复刻 PHP `hash('sha256')` 和末尾数字期号截取规则。 |
+| `/onego/lucky` | `c.api.onego->lucky` | 本轮完成 | 一元购幸运榜公共只读接口，按获奖金币总数排序并附带各房间获奖次数；保留 PHP 未分页排行 SQL。 |
 
 ## 优先候选
 
 | 优先级 | 接口 | PHP handler | 风险 |
 | --- | --- | --- | --- |
 | 1 | `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 中；专题只读，但会聚合视频行和详情浏览数。 |
-| 2 | `/onego/lucky`、`/onego/marquee` | `c.api.onego->$action` | 低到中；公共只读，一元购排行和跑马灯。 |
+| 2 | `/onego/marquee` | `c.api.onego->marquee` | 低到中；公共只读，一元购跑马灯。 |
 | 3 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
 | 4 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
 | 5 | `/search` | `c.api.search->index` | 中；搜索结果会写入/更新搜索日志。 |

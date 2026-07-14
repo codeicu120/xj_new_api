@@ -404,6 +404,53 @@ func TestOneGoHashPostAndMissingPlaintext(t *testing.T) {
 	}
 }
 
+func TestOneGoLuckyWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/onego/lucky?page=1"},
+		{method: http.MethodPost, path: "/onego/lucky", body: "page=2"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != 0 {
+				t.Fatalf("expected retcode 0, got %d", body.RetCode)
+			}
+			data, ok := body.Data.(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected data object, got %T", body.Data)
+			}
+			rows, ok := data["data"].([]interface{})
+			if !ok {
+				t.Fatalf("expected nested data array, got %T", data["data"])
+			}
+			if len(rows) != 0 {
+				t.Fatalf("expected empty ranks, got %#v", rows)
+			}
+		})
+	}
+}
+
 func TestV2VODListingRoutes(t *testing.T) {
 	router := newTestRouter()
 
