@@ -1,0 +1,21 @@
+.DS_Store
+.idea/
+bin/
+coverage.out
+tmp/
+*.log
+
+# Local Docker state
+.docker/
+
+# Local database dumps for MySQL bootstrap/import.
+deploy/mysql/*.sql
+deploy/mysql/*.sql.gz
+deploy/mysql/init/*.sql
+deploy/mysql/init/*.sql.gz
+
+# Local env files may contain passwords.
+.env
+.env.*
+!.env.example
+!.env.mysql.example

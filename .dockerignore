@@ -1,0 +1,7 @@
+.git
+.github
+.idea
+bin
+coverage.out
+tmp
+*.log

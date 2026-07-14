@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xj-comp-api
+  labels:
+    app.kubernetes.io/name: xj-comp-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xj-comp-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xj-comp-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/OWNER/REPO/xj-comp-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: prod
+            - name: HTTP_PORT
+              value: "8080"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xj-comp-api
+  labels:
+    app.kubernetes.io/name: xj-comp-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: xj-comp-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

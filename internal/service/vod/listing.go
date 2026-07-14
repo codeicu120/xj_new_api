@@ -1,0 +1,802 @@
+package vod
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"xj_comp/internal/domain"
+	vodRepo "xj_comp/internal/repository/vod"
+)
+
+const sampleParams = "$cateid:0-$areaid:0-$yearid:0-$definition:0-$duration:0-$freetype:0-$mosaic:0-$langvoice:0-$orderby:0-$page:1"
+
+var paramKeys = []string{"cateid", "areaid", "yearid", "definition", "duration", "freetype", "mosaic", "langvoice", "orderby", "page"}
+
+var ErrVODNotFound = errors.New("vod not found")
+
+type ListingStore interface {
+	Categories(ctx context.Context) ([]map[string]interface{}, error)
+	Areas(ctx context.Context) ([]map[string]interface{}, error)
+	Years(ctx context.Context) ([]map[string]interface{}, error)
+	Servers(ctx context.Context) ([]map[string]interface{}, error)
+	CountVODs(ctx context.Context, filter vodRepo.ListingFilter) (int, error)
+	ListVODs(ctx context.Context, filter vodRepo.ListingFilter, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
+	RandomVODs(ctx context.Context, pageSize int) ([]map[string]interface{}, error)
+	RandomVODsExcept(ctx context.Context, pageSize int, excludeID int, cateID int) ([]map[string]interface{}, error)
+	VODByID(ctx context.Context, vodID int) (map[string]interface{}, error)
+	SimilarVODsByTagIDs(ctx context.Context, tagIDs []int, excludeID int, since int64, pageSize int) ([]map[string]interface{}, error)
+	TagsByNames(ctx context.Context, names []string) ([]map[string]interface{}, error)
+}
+
+type ListingService struct {
+	store           ListingStore
+	resourceBaseURL string
+	vipDiscount     int
+	fetcher         M3U8Fetcher
+	now             func() time.Time
+}
+
+type ListingRequest struct {
+	Action      string
+	PathParams  string
+	QueryPage   string
+	IsH5Request bool
+}
+
+func NewListingService(store ListingStore, resourceBaseURL string, vipDiscount int) *ListingService {
+	if vipDiscount == 0 {
+		vipDiscount = 100
+	}
+	return &ListingService{
+		store:           store,
+		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
+		vipDiscount:     vipDiscount,
+		fetcher:         httpM3U8Fetcher{},
+		now:             time.Now,
+	}
+}
+
+func (s *ListingService) List(ctx context.Context, req ListingRequest) (domain.VODListingData, error) {
+	params := parseParams(req.PathParams)
+	if atoi(params["page"]) == 0 {
+		params["page"] = req.QueryPage
+		if params["page"] == "" {
+			params["page"] = "0"
+		}
+	}
+
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.VODListingData{}, err
+	}
+
+	categoryIDs := descendantCategoryIDs(categories, atoi(params["cateid"]))
+	filter := vodRepo.ListingFilter{
+		CateIDs:    categoryIDs,
+		AreaID:     atoi(params["areaid"]),
+		YearID:     atoi(params["yearid"]),
+		Definition: atoi(params["definition"]),
+		Duration:   atoi(params["duration"]),
+		FreeType:   atoi(params["freetype"]),
+		Mosaic:     atoi(params["mosaic"]),
+		LangVoice:  atoi(params["langvoice"]),
+	}
+
+	pageSize := 16
+	page := atoi(params["page"])
+	total := 0
+	rows := []map[string]interface{}{}
+	if req.Action == "recommend" {
+		rows, err = s.store.RandomVODs(ctx, pageSize)
+	} else {
+		orderBy := orderBy(req.Action, atoi(params["orderby"]))
+		total, err = s.store.CountVODs(ctx, filter)
+		if err == nil {
+			rows, err = s.store.ListVODs(ctx, filter, total, page, pageSize, orderBy)
+		}
+	}
+	if err != nil {
+		return domain.VODListingData{}, fmt.Errorf("list vods: %w", err)
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return domain.VODListingData{}, fmt.Errorf("list tags: %w", err)
+	}
+
+	now := s.now().Unix()
+	return domain.VODListingData{
+		Now:          now,
+		Action:       req.Action,
+		SampleParams: sampleParams,
+		Params:       params,
+		VODRows:      s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), req.IsH5Request, now),
+		PageInfo:     pageInfo(total, pageSize, page, "/vod/"+req.Action+"-"+buildParams(params, map[string]string{"page": "[?]"})),
+		Orders:       optionRows([][2]interface{}{{1, "最多好评"}, {2, "最多播放"}, {3, "最高评分"}}),
+		Categories:   categories,
+		Areas:        areas,
+		Years:        years,
+		Definitions:  optionRows([][2]interface{}{{1, "标清"}, {2, "高清"}}),
+		Durations:    optionRows([][2]interface{}{{1, "长片"}, {2, "短片"}}),
+		FreeTypes:    optionRows([][2]interface{}{{1, "免费"}, {2, "会员"}}),
+		Mosaics:      optionRows([][2]interface{}{{1, "有码"}, {2, "无码"}}),
+		LangVoices:   optionRows([][2]interface{}{{1, "中文字幕"}, {2, "国语对白"}, {3, "其它"}}),
+	}, nil
+}
+
+func (s *ListingService) LikeRows(ctx context.Context, isH5Request bool) (domain.VODLikeRowsData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.VODLikeRowsData{}, err
+	}
+
+	rows, err := s.store.RandomVODs(ctx, 6)
+	if err != nil {
+		return domain.VODLikeRowsData{}, fmt.Errorf("list random vods: %w", err)
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return domain.VODLikeRowsData{}, fmt.Errorf("list tags: %w", err)
+	}
+
+	return domain.VODLikeRowsData{
+		LikeRows: s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix()),
+	}, nil
+}
+
+func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) (domain.VODShowData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.VODShowData{}, err
+	}
+
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return domain.VODShowData{}, fmt.Errorf("get vod: %w", err)
+	}
+	if len(row) == 0 || atoi(str(row["showtype"])) > 0 {
+		return domain.VODShowData{}, ErrVODNotFound
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames([]map[string]interface{}{row}))
+	if err != nil {
+		return domain.VODShowData{}, fmt.Errorf("list tags: %w", err)
+	}
+
+	similarRows, err := s.store.SimilarVODsByTagIDs(ctx, tagIDs(tagRows), vodID, s.now().AddDate(0, 0, -90).Unix(), 11)
+	if err != nil {
+		return domain.VODShowData{}, fmt.Errorf("list similar vods: %w", err)
+	}
+	if len(similarRows) > 10 {
+		similarRows = similarRows[:10]
+	}
+	if len(similarRows) < 10 {
+		fillRows, err := s.store.RandomVODsExcept(ctx, 10-len(similarRows), vodID, 0)
+		if err != nil {
+			return domain.VODShowData{}, fmt.Errorf("list similar fallback vods: %w", err)
+		}
+		similarRows = append(similarRows, fillRows...)
+		if len(similarRows) > 10 {
+			similarRows = similarRows[:10]
+		}
+	}
+
+	likeRows, err := s.store.RandomVODsExcept(ctx, 5, vodID, atoi(str(row["cateid"])))
+	if err != nil {
+		return domain.VODShowData{}, fmt.Errorf("list like vods: %w", err)
+	}
+
+	allRows := append([]map[string]interface{}{row}, similarRows...)
+	allRows = append(allRows, likeRows...)
+	allTagRows, err := s.store.TagsByNames(ctx, collectTagNames(allRows))
+	if err != nil {
+		return domain.VODShowData{}, fmt.Errorf("list all tags: %w", err)
+	}
+
+	env := processEnv(categories, areas, years, servers, allTagRows)
+	now := s.now().Unix()
+	vodRows := s.processRows([]map[string]interface{}{row}, env, isH5Request, now)
+	vodRow := map[string]interface{}{}
+	if len(vodRows) > 0 {
+		vodRow = vodRows[0]
+	}
+
+	return domain.VODShowData{
+		VODRow:      vodRow,
+		Categories:  categoryParents(categories, atoi(str(row["cateid"]))),
+		SimilarRows: s.processRows(similarRows, env, isH5Request, now),
+		LikeRows:    s.processRows(likeRows, env, isH5Request, now),
+	}, nil
+}
+
+func (s *ListingService) listMetadata(ctx context.Context) ([]map[string]interface{}, []map[string]interface{}, []map[string]interface{}, []map[string]interface{}, error) {
+	categories, err := s.store.Categories(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("list categories: %w", err)
+	}
+	areas, err := s.store.Areas(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("list areas: %w", err)
+	}
+	years, err := s.store.Years(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("list years: %w", err)
+	}
+	servers, err := s.store.Servers(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("list servers: %w", err)
+	}
+	return categories, areas, years, servers, nil
+}
+
+func parseParams(raw string) map[string]string {
+	params := map[string]string{}
+	defaults := []string{"0", "0", "0", "0", "0", "0", "0", "0", "0", "1"}
+	values := []string{}
+	if raw != "" {
+		values = strings.Split(raw, "-")
+	}
+	for i, key := range paramKeys {
+		value := defaults[i]
+		if i < len(values) && values[i] != "" {
+			value = values[i]
+		}
+		params[key] = value
+	}
+	return params
+}
+
+func buildParams(params map[string]string, replace map[string]string) string {
+	values := make([]string, 0, len(paramKeys))
+	for _, key := range paramKeys {
+		value := params[key]
+		if next, ok := replace[key]; ok {
+			value = next
+		}
+		values = append(values, value)
+	}
+	return strings.Join(values, "-")
+}
+
+func orderBy(action string, order int) string {
+	switch action {
+	case "hot":
+		return "playcount_week DESC"
+	case "latest":
+		return "vodid DESC"
+	}
+	switch order {
+	case 1:
+		return "upnum DESC"
+	case 2:
+		return "playcount_total DESC"
+	case 3:
+		return "scorenum DESC"
+	default:
+		return "utimestamp DESC"
+	}
+}
+
+func processEnv(categories, areas, years, servers, tags []map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"categories": indexBy(categories, "cateid"),
+		"areas":      indexBy(areas, "areaid"),
+		"years":      indexBy(years, "yearid"),
+		"servers":    groupBy(servers, "srvtype"),
+		"tags":       indexBy(tags, "tagname"),
+	}
+}
+
+func (s *ListingService) processRows(rows []map[string]interface{}, env map[string]interface{}, isH5 bool, now int64) []map[string]interface{} {
+	result := []map[string]interface{}{}
+	categories := env["categories"].(map[string]map[string]interface{})
+	areas := env["areas"].(map[string]map[string]interface{})
+	years := env["years"].(map[string]map[string]interface{})
+	servers := env["servers"].(map[string][]map[string]interface{})
+	tags := env["tags"].(map[string]map[string]interface{})
+	previewBase := ""
+	if list := servers["preview"]; len(list) > 0 {
+		previewBase = fmt.Sprint(list[0]["srvhost"])
+	}
+	if previewBase == "" {
+		previewBase = ""
+	}
+	for _, row := range rows {
+		vodid := str(row["vodid"])
+		playURL := ""
+		downURL := ""
+		previewURL := ""
+		if str(row["play_url"]) != "" {
+			playURL = "/vod/reqplay/" + vodid
+			previewURL = strings.TrimRight(previewBase, "/") + "/vod/preView/" + vodid + "/index.m3u8"
+		}
+		if str(row["down_url"]) != "" {
+			downURL = "/vod/reqdown/" + vodid
+		}
+		coverRaw := cleanCover(str(row["coverpic"]))
+		item := map[string]interface{}{
+			"vodid":           vodid,
+			"title":           str(row["title"]),
+			"intro":           str(row["intro"]),
+			"coverpic":        s.coverPic(coverRaw, atoi(str(row["cover_srvid"])), servers["cover"], isH5),
+			"coverx":          coverRaw,
+			"createtime":      formatTimestamp(atoi64(str(row["ctimestamp"]))),
+			"updatetime":      formatTimestamp(atoi64(str(row["utimestamp"]))),
+			"vodkey":          str(row["vodkey"]),
+			"scorenum":        scoreString(row["scorenum"]),
+			"upnum":           str(row["upnum"]),
+			"downnum":         str(row["downnum"]),
+			"authorid":        str(row["authorid"]),
+			"author":          str(row["author"]),
+			"play_url":        playURL,
+			"down_url":        downURL,
+			"preview_url":     previewURL,
+			"definition":      str(row["definition"]),
+			"duration":        formatDuration(atoi(str(row["duration"]))),
+			"yearid":          str(row["yearid"]),
+			"yearname":        lookup(years, str(row["yearid"]), "yearname"),
+			"mosaic":          str(row["mosaic"]),
+			"portrait":        str(row["portrait"]),
+			"view_price":      atoi(str(row["view_price"])),
+			"vip_price":       float64(atoi(str(row["view_price"]))*s.vipDiscount) / 100,
+			"limit_free":      limitFree(now, atoi64(str(row["free_sdate"])), atoi64(str(row["free_edate"]))),
+			"need_buy":        0,
+			"isvip":           str(row["isvip"]),
+			"islimit":         str(row["islimit"]),
+			"islimitv3":       str(row["islimitv3"]),
+			"exclusive":       boolInt(str(row["prop4"]) == "1"),
+			"commentcount":    str(row["commentcount"]),
+			"playcount_total": countValue(atoi(str(row["playcount_total"]))),
+			"downcount_total": countValue(atoi(str(row["downcount_total"]))),
+			"tags":            resolveTags(str(row["tags"]), tags),
+			"actor_tags":      resolveTags(str(row["actor_tags"]), tags),
+			"areaid":          str(row["areaid"]),
+			"areaname":        lookup(areas, str(row["areaid"]), "areaname"),
+			"cateid":          str(row["cateid"]),
+			"catename":        lookup(categories, str(row["cateid"]), "catename"),
+			"playlist":        playLists(str(row["playlist"])),
+			"downlist":        playLists(str(row["downlist"])),
+			"episode_total":   str(row["episode_total"]),
+			"episode_status":  str(row["episode_status"]),
+			"playindex":       0,
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func descendantCategoryIDs(categories []map[string]interface{}, parent int) []int {
+	if parent <= 0 {
+		return nil
+	}
+	children := map[int][]int{}
+	for _, row := range categories {
+		pid := atoi(str(row["parentid"]))
+		id := atoi(str(row["cateid"]))
+		children[pid] = append(children[pid], id)
+	}
+	result := []int{parent}
+	var walk func(int)
+	walk = func(id int) {
+		for _, child := range children[id] {
+			result = append(result, child)
+			walk(child)
+		}
+	}
+	walk(parent)
+	return result
+}
+
+func collectTagNames(rows []map[string]interface{}) []string {
+	names := []string{}
+	for _, row := range rows {
+		for _, field := range []string{"tags", "actor_tags"} {
+			for _, name := range strings.Split(str(row[field]), ",") {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	return names
+}
+
+func tagIDs(tags []map[string]interface{}) []int {
+	ids := []int{}
+	seen := map[int]struct{}{}
+	for _, tag := range tags {
+		id := atoi(str(tag["tagid"]))
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func categoryParents(categories []map[string]interface{}, cateID int) []map[string]interface{} {
+	byID := indexBy(categories, "cateid")
+	stack := []map[string]interface{}{}
+	for cateID > 0 {
+		row, ok := byID[strconv.Itoa(cateID)]
+		if !ok {
+			break
+		}
+		stack = append(stack, map[string]interface{}{
+			"cateid":    str(row["cateid"]),
+			"catename":  str(row["catename"]),
+			"itemcount": row["itemcount"],
+		})
+		cateID = atoi(str(row["parentid"]))
+	}
+	for left, right := 0, len(stack)-1; left < right; left, right = left+1, right-1 {
+		stack[left], stack[right] = stack[right], stack[left]
+	}
+	return stack
+}
+
+func resolveTags(value string, tags map[string]map[string]interface{}) []map[string]interface{} {
+	result := []map[string]interface{}{}
+	if value == "" {
+		return result
+	}
+	for _, name := range strings.Split(value, ",") {
+		if tag, ok := tags[strings.TrimSpace(name)]; ok {
+			result = append(result, map[string]interface{}{
+				"tagid":     str(tag["tagid"]),
+				"tagtype":   str(tag["tagtype"]),
+				"tagname":   str(tag["tagname"]),
+				"itemcount": str(tag["itemcount"]),
+			})
+		}
+	}
+	return result
+}
+
+func pageInfo(total int, pageSize int, page int, pageURL string) map[string]interface{} {
+	if total < 0 {
+		total = 0
+	}
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	totalPage := int(math.Ceil(float64(total) / float64(pageSize)))
+	if totalPage < 1 {
+		totalPage = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPage {
+		page = totalPage
+	}
+	start := 0
+	if total > 0 {
+		start = (page-1)*pageSize + 1
+	}
+	end := start + pageSize - 1
+	if end > total {
+		end = total
+	}
+	return map[string]interface{}{
+		"plist":     plist(page, totalPage, pageURL),
+		"pagesize":  pageSize,
+		"total":     total,
+		"totalpage": totalPage,
+		"page":      page,
+		"start":     start,
+		"end":       end,
+		"prev":      ternary(page > 1, page-1, 0),
+		"next":      ternary(page < totalPage, page+1, 0),
+		"curr_url":  strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(page)),
+		"first_url": strings.ReplaceAll(pageURL, "[?]", "1"),
+		"prev_url":  strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(ternary(page > 1, page-1, 1))),
+		"next_url":  strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(ternary(page < totalPage, page+1, totalPage))),
+		"last_url":  strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(totalPage)),
+		"page_url":  pageURL,
+		"pages":     pageSelector(page, totalPage),
+	}
+}
+
+func plist(page int, totalPage int, pageURL string) []map[string]interface{} {
+	pages := []int{}
+	for i := page - 5; i < page; i++ {
+		if i > 0 {
+			pages = append(pages, i)
+		}
+	}
+	pages = append(pages, page)
+	for i := page + 1; i <= totalPage && len(pages) < 10; i++ {
+		pages = append(pages, i)
+	}
+	for i := pages[0] - 1; i > 0 && len(pages) < 10; i-- {
+		pages = append([]int{i}, pages...)
+	}
+	result := []map[string]interface{}{}
+	if page-5 > 1 {
+		result = append(result, pageLink("first", 1, "FirstPage", pageURL))
+		if page-5 > 2 {
+			result = append(result, pageLink("more", 0, "...", ""))
+		}
+	}
+	if len(pages) > 0 && pages[0] > 1 {
+		result = append(result, pageLink("prev", page-1, "PrevPage", pageURL))
+	}
+	for _, p := range pages {
+		pos := ""
+		if p == page {
+			pos = "curr"
+		}
+		result = append(result, pageLink(pos, p, p, pageURL))
+	}
+	if len(pages) > 0 && pages[len(pages)-1] < totalPage {
+		result = append(result, pageLink("next", page+1, "NextPage", pageURL))
+	}
+	if totalPage-page > 4 {
+		if totalPage-page > 5 {
+			result = append(result, pageLink("more", 0, "...", ""))
+		}
+		result = append(result, pageLink("last", totalPage, "LastPage", pageURL))
+	}
+	return result
+}
+
+func pageLink(pos string, page int, text interface{}, pageURL string) map[string]interface{} {
+	urlValue := ""
+	if pageURL != "" {
+		urlValue = strings.ReplaceAll(pageURL, "[?]", strconv.Itoa(page))
+	}
+	return map[string]interface{}{"pos": pos, "page": page, "text": text, "url": urlValue}
+}
+
+func pageSelector(pageNow int, totalPage int) []int {
+	showAll := 50
+	sliceStart := 5
+	sliceEnd := 5
+	percent := 20
+	rangeSize := 10
+	if totalPage < showAll {
+		pages := make([]int, 0, totalPage)
+		for i := 1; i <= totalPage; i++ {
+			pages = append(pages, i)
+		}
+		return pages
+	}
+	pages := []int{}
+	for i := 1; i <= sliceStart; i++ {
+		pages = append(pages, i)
+	}
+	for i := totalPage - sliceEnd; i <= totalPage; i++ {
+		pages = append(pages, i)
+	}
+
+	increment := int(math.Floor(float64(totalPage) / float64(percent)))
+	if increment < 1 {
+		increment = 1
+	}
+	pageNowMinusRange := pageNow - rangeSize
+	pageNowPlusRange := pageNow + rangeSize
+	i := sliceStart
+	x := totalPage - sliceEnd
+	metBoundary := false
+	for i <= x {
+		if i >= pageNowMinusRange && i <= pageNowPlusRange {
+			i++
+			metBoundary = true
+		} else {
+			i += increment
+			if i > pageNowMinusRange && !metBoundary {
+				i = pageNowMinusRange
+			}
+		}
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	i = pageNow
+	dist := 1
+	for i < x {
+		dist *= 2
+		i = pageNow + dist
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	i = pageNow
+	dist = 1
+	for i > 0 {
+		dist *= 2
+		i = pageNow - dist
+		if i > 0 && i <= x {
+			pages = append(pages, i)
+		}
+	}
+
+	sort.Ints(pages)
+	unique := pages[:0]
+	var last int
+	for idx, page := range pages {
+		if idx == 0 || page != last {
+			unique = append(unique, page)
+			last = page
+		}
+	}
+	return unique
+}
+
+func (s *ListingService) coverPic(uri string, srvid int, servers []map[string]interface{}, isH5 bool) string {
+	if uri == "" {
+		return ""
+	}
+	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+		return uri
+	}
+	if !isH5 && srvid > 0 {
+		for _, server := range servers {
+			if atoi(str(server["srvid"])) == srvid {
+				return strings.TrimRight(str(server["srvhost"]), "/") + "/" + strings.TrimLeft(uri, "/")
+			}
+		}
+	}
+	return s.resourceBaseURL + "/" + strings.TrimLeft(uri, "/")
+}
+
+func playLists(value string) []map[string]interface{} {
+	value = strings.ReplaceAll(value, "\r", "")
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return []map[string]interface{}{}
+	}
+	result := []map[string]interface{}{}
+	for index, line := range strings.Split(value, "\n") {
+		parts := strings.Split(line, "$")
+		for len(parts) < 3 {
+			parts = append(parts, "")
+		}
+		result = append(result, map[string]interface{}{
+			"playindex":  index + 1,
+			"play_name":  parts[0],
+			"view_price": ternary(isNumeric(parts[2]), atoi(parts[2]), -1),
+		})
+	}
+	return result
+}
+
+func optionRows(items [][2]interface{}) []map[string]interface{} {
+	rows := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		rows = append(rows, map[string]interface{}{"keyid": item[0], "value": item[1]})
+	}
+	return rows
+}
+
+func indexBy(rows []map[string]interface{}, key string) map[string]map[string]interface{} {
+	result := map[string]map[string]interface{}{}
+	for _, row := range rows {
+		result[str(row[key])] = row
+	}
+	return result
+}
+
+func groupBy(rows []map[string]interface{}, key string) map[string][]map[string]interface{} {
+	result := map[string][]map[string]interface{}{}
+	for _, row := range rows {
+		group := str(row[key])
+		result[group] = append(result[group], row)
+	}
+	return result
+}
+
+func formatTimestamp(ts int64) string {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	return time.Unix(ts, 0).In(loc).Format("2006-01-02 15:04:05")
+}
+
+func formatDuration(seconds int) string {
+	if seconds < 0 {
+		seconds = 0
+	}
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+func countValue(value int) interface{} {
+	if value < 1000 {
+		return strconv.Itoa(value)
+	}
+	return int(math.Round(float64(value) / 10000))
+}
+
+func cleanCover(value string) string {
+	replacer := strings.NewReplacer("\n", "", "\r", "", "\t", "", "'", "", "\"", "")
+	return replacer.Replace(value)
+}
+
+func lookup(rows map[string]map[string]interface{}, id string, key string) string {
+	if row, ok := rows[id]; ok {
+		return str(row[key])
+	}
+	return ""
+}
+
+func limitFree(now int64, start int64, end int64) int {
+	if now > start && now < end {
+		return 1
+	}
+	return 0
+}
+
+func boolInt(ok bool) int {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func str(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
+}
+
+func scoreString(value interface{}) string {
+	raw := strings.TrimSpace(str(value))
+	if raw == "" {
+		return ""
+	}
+	if strings.Contains(raw, ".") {
+		return raw
+	}
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return raw
+	}
+	return strconv.FormatFloat(parsed, 'f', 1, 64)
+}
+
+func atoi(value string) int {
+	parsed, _ := strconv.Atoi(strings.TrimSpace(value))
+	return parsed
+}
+
+func atoi64(value string) int64 {
+	parsed, _ := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	return parsed
+}
+
+func isNumeric(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.Atoi(value)
+	return err == nil
+}
+
+func ternary[T any](ok bool, yes T, no T) T {
+	if ok {
+		return yes
+	}
+	return no
+}

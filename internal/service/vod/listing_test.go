@@ -1,0 +1,340 @@
+package vod
+
+import (
+	"context"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	vodRepo "xj_comp/internal/repository/vod"
+)
+
+type fakeListingStore struct {
+	lastFilter vodRepo.ListingFilter
+	lastTotal  int
+	lastPage   int
+	lastSize   int
+	lastOrder  string
+	randomUsed bool
+	vodByID    map[string]interface{}
+}
+
+type fakeM3U8Fetcher map[string]string
+
+func (f fakeM3U8Fetcher) Get(_ context.Context, url string) (string, error) {
+	return f[url], nil
+}
+
+func (s *fakeListingStore) Categories(context.Context) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{
+		{"cateid": "1", "parentid": "0", "uuid": "a", "catename": "主类"},
+		{"cateid": "2", "parentid": "1", "uuid": "b", "catename": "子类"},
+	}, nil
+}
+
+func (s *fakeListingStore) Areas(context.Context) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{{"areaid": "3", "areaname": "日本", "sortnum": "1"}}, nil
+}
+
+func (s *fakeListingStore) Years(context.Context) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{{"yearid": "4", "yearname": "2025", "sortnum": "1"}}, nil
+}
+
+func (s *fakeListingStore) Servers(context.Context) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{
+		{"srvid": "9", "srvtype": "cover", "srvhost": "https://cover.example.test", "sortnum": "1"},
+		{"srvid": "9", "srvtype": "play", "srvhost": "https://cover.example.test", "sortnum": "1"},
+		{"srvid": "10", "srvtype": "preview", "srvhost": "https://preview.example.test", "sortnum": "1"},
+	}, nil
+}
+
+func (s *fakeListingStore) CountVODs(_ context.Context, filter vodRepo.ListingFilter) (int, error) {
+	s.lastFilter = filter
+	return 20, nil
+}
+
+func (s *fakeListingStore) ListVODs(_ context.Context, filter vodRepo.ListingFilter, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error) {
+	s.lastFilter = filter
+	s.lastTotal = total
+	s.lastPage = page
+	s.lastSize = pageSize
+	s.lastOrder = orderBy
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) RandomVODs(_ context.Context, pageSize int) ([]map[string]interface{}, error) {
+	s.randomUsed = true
+	s.lastSize = pageSize
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) RandomVODsExcept(_ context.Context, pageSize int, _ int, _ int) ([]map[string]interface{}, error) {
+	s.randomUsed = true
+	s.lastSize = pageSize
+	rows := []map[string]interface{}{}
+	for len(rows) < pageSize {
+		rows = append(rows, fixtureVODRows()[0])
+	}
+	return rows, nil
+}
+
+func (s *fakeListingStore) VODByID(context.Context, int) (map[string]interface{}, error) {
+	if s.vodByID != nil {
+		return s.vodByID, nil
+	}
+	return fixtureVODRows()[0], nil
+}
+
+func (s *fakeListingStore) SimilarVODsByTagIDs(context.Context, []int, int, int64, int) ([]map[string]interface{}, error) {
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) TagsByNames(context.Context, []string) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{
+		{"tagid": "7", "tagtype": "1", "tagname": "剧情", "itemcount": "12"},
+		{"tagid": "8", "tagtype": "0", "tagname": "演员", "itemcount": "3"},
+	}, nil
+}
+
+func TestListingServiceShowProcessesDetailRows(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.Show(context.Background(), 100, false)
+	if err != nil {
+		t.Fatalf("show vod: %v", err)
+	}
+	if data.VODRow["vodid"] != "100" {
+		t.Fatalf("unexpected vodrow %#v", data.VODRow)
+	}
+	if len(data.Categories) != 1 || data.Categories[0]["cateid"] != "1" {
+		t.Fatalf("unexpected categories %#v", data.Categories)
+	}
+	if len(data.SimilarRows) != 10 {
+		t.Fatalf("expected 10 similar rows, got %d", len(data.SimilarRows))
+	}
+	if len(data.LikeRows) != 5 {
+		t.Fatalf("expected 5 like rows, got %d", len(data.LikeRows))
+	}
+}
+
+func TestListingServiceShowMissingVOD(t *testing.T) {
+	store := &fakeListingStore{vodByID: map[string]interface{}{}}
+	service := NewListingService(store, "https://res.example.test", 50)
+
+	_, err := service.Show(context.Background(), 404, false)
+	if err != ErrVODNotFound {
+		t.Fatalf("expected ErrVODNotFound, got %v", err)
+	}
+}
+
+func TestListingServicePreviewProcessesM3U8(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.fetcher = fakeM3U8Fetcher{
+		"https://cover.example.test/202501/a.jpg":  "",
+		"https://cover.example.test/202501/a.m3u8": "#EXTM3U\nlow/index.m3u8\n",
+		"https://cover.example.test/low/index.m3u8": strings.Join([]string{
+			"#EXTM3U",
+			"#EXT-X-VERSION:3",
+			`#EXT-X-KEY:METHOD=AES-128,URI="key.key"`,
+			"#EXTINF:10,",
+			"seg1.ts",
+			"#EXTINF:10,",
+			"http://cdn.example.test/seg2.ts",
+		}, "\n"),
+	}
+	store.vodByID = fixtureVODRows()[0]
+	store.vodByID["play_url"] = "202501/a.m3u8"
+	store.vodByID["play_srvid"] = "9"
+
+	body, err := service.Preview(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	for _, want := range []string{
+		"#EXTM3U",
+		`URI="https://cover.example.test/key.key"`,
+		"https://cover.example.test/seg1.ts",
+		"http://cdn.example.test/seg2.ts",
+		"#EXT-X-ENDLIST",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected preview body to contain %q, got:\n%s", want, body)
+		}
+	}
+}
+
+func TestListingServicePreviewMissingVODReturnsEmpty(t *testing.T) {
+	store := &fakeListingStore{vodByID: map[string]interface{}{}}
+	service := NewListingService(store, "https://res.example.test", 50)
+
+	body, err := service.Preview(context.Background(), 404)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if body != "" {
+		t.Fatalf("expected empty body, got %q", body)
+	}
+}
+
+func TestListingServiceParsesParamsAndProcessesRows(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.List(context.Background(), ListingRequest{
+		Action:     "listing",
+		PathParams: "1-3-4-2-1-1-2-3-2-0",
+		QueryPage:  "2",
+	})
+	if err != nil {
+		t.Fatalf("list vods: %v", err)
+	}
+
+	if data.Params["page"] != "2" {
+		t.Fatalf("expected query page fallback, got %q", data.Params["page"])
+	}
+	if store.lastOrder != "playcount_total DESC" {
+		t.Fatalf("unexpected order %q", store.lastOrder)
+	}
+	if !reflect.DeepEqual(store.lastFilter.CateIDs, []int{1, 2}) {
+		t.Fatalf("unexpected cate ids %#v", store.lastFilter.CateIDs)
+	}
+	if store.lastFilter.AreaID != 3 || store.lastFilter.YearID != 4 || store.lastFilter.Definition != 2 {
+		t.Fatalf("unexpected filter %#v", store.lastFilter)
+	}
+	if len(data.VODRows) != 1 {
+		t.Fatalf("expected one vod row, got %d", len(data.VODRows))
+	}
+
+	row := data.VODRows[0]
+	if row["coverpic"] != "https://cover.example.test/202501/a.jpg" {
+		t.Fatalf("unexpected coverpic %v", row["coverpic"])
+	}
+	if row["duration"] != "30:01" {
+		t.Fatalf("unexpected duration %v", row["duration"])
+	}
+	if row["vip_price"] != float64(50) {
+		t.Fatalf("unexpected vip price %v", row["vip_price"])
+	}
+	if row["limit_free"] != 1 {
+		t.Fatalf("unexpected limit_free %v", row["limit_free"])
+	}
+	if row["playcount_total"] != 2 {
+		t.Fatalf("unexpected playcount_total %v", row["playcount_total"])
+	}
+	tags := row["tags"].([]map[string]interface{})
+	if len(tags) != 1 || tags[0]["tagname"] != "剧情" {
+		t.Fatalf("unexpected tags %#v", tags)
+	}
+}
+
+func TestListingServiceActionOrdering(t *testing.T) {
+	tests := []struct {
+		action string
+		order  string
+	}{
+		{action: "hot", order: "playcount_week DESC"},
+		{action: "latest", order: "vodid DESC"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			store := &fakeListingStore{}
+			service := NewListingService(store, "https://res.example.test", 50)
+			_, err := service.List(context.Background(), ListingRequest{Action: tt.action})
+			if err != nil {
+				t.Fatalf("list vods: %v", err)
+			}
+			if store.lastOrder != tt.order {
+				t.Fatalf("expected order %q, got %q", tt.order, store.lastOrder)
+			}
+		})
+	}
+}
+
+func TestListingServiceRecommendUsesRandomRows(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+
+	data, err := service.List(context.Background(), ListingRequest{Action: "recommend"})
+	if err != nil {
+		t.Fatalf("list vods: %v", err)
+	}
+	if !store.randomUsed {
+		t.Fatal("expected recommend to use random rows")
+	}
+	if data.PageInfo["total"] != 0 {
+		t.Fatalf("expected recommend page total 0, got %v", data.PageInfo["total"])
+	}
+}
+
+func TestListingServiceLikeRowsUsesSixRandomRows(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.LikeRows(context.Background(), false)
+	if err != nil {
+		t.Fatalf("list like rows: %v", err)
+	}
+	if !store.randomUsed {
+		t.Fatal("expected like rows to use random rows")
+	}
+	if store.lastSize != 6 {
+		t.Fatalf("expected PHP-compatible page size 6, got %d", store.lastSize)
+	}
+	if len(data.LikeRows) != 1 {
+		t.Fatalf("expected one fixture row, got %d", len(data.LikeRows))
+	}
+	if data.LikeRows[0]["coverpic"] != "https://cover.example.test/202501/a.jpg" {
+		t.Fatalf("unexpected coverpic %v", data.LikeRows[0]["coverpic"])
+	}
+}
+
+func fixtureVODRows() []map[string]interface{} {
+	return []map[string]interface{}{
+		{
+			"vodid":           "100",
+			"title":           "标题",
+			"intro":           "",
+			"coverpic":        "202501/a.jpg",
+			"cover_srvid":     "9",
+			"ctimestamp":      "1735689600",
+			"utimestamp":      "1735689600",
+			"vodkey":          "ABC",
+			"scorenum":        "9.0",
+			"upnum":           "1",
+			"downnum":         "2",
+			"authorid":        "0",
+			"author":          "",
+			"play_url":        "a.m3u8",
+			"down_url":        "a.mp4",
+			"definition":      "2",
+			"duration":        "1801",
+			"yearid":          "4",
+			"mosaic":          "1",
+			"portrait":        "0",
+			"view_price":      "100",
+			"free_sdate":      "1000",
+			"free_edate":      "3000",
+			"isvip":           "2",
+			"islimit":         "0",
+			"islimitv3":       "0",
+			"prop4":           "1",
+			"commentcount":    "5",
+			"playcount_total": "20000",
+			"downcount_total": "6",
+			"tags":            "剧情",
+			"actor_tags":      "演员",
+			"areaid":          "3",
+			"cateid":          "1",
+			"playlist":        "第一集$http://example.test$10",
+			"downlist":        "",
+			"episode_total":   "1",
+			"episode_status":  "0",
+		},
+	}
+}

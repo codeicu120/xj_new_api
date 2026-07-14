@@ -1,0 +1,25 @@
+services:
+  mysql:
+    build:
+      context: .
+      dockerfile: deploy/mysql/Dockerfile
+    image: xj-comp-mysql:8-local
+    container_name: xj-comp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-xj_root_123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-xj_comp}
+      MYSQL_USER: ${MYSQL_USER:-xj_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-xj_app_123456}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - ./.docker/mysql/data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
