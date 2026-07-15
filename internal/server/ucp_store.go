@@ -79,6 +79,10 @@ func (s ucpStore) Taskboxes(ctx context.Context) ([]map[string]interface{}, erro
 	return s.ucp.Taskboxes(ctx)
 }
 
+func (s ucpStore) TaskboxByID(ctx context.Context, taskID int) (map[string]interface{}, error) {
+	return s.ucp.TaskboxByID(ctx, taskID)
+}
+
 func (s ucpStore) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error) {
 	return s.ucp.TaskboxLog(ctx, uid, taskID, dayKey)
 }

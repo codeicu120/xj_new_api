@@ -1564,3 +1564,16 @@
 - Go: `internal/handler.GameHandler.TransferTopup/TransferWithdraw`、`internal/service/game.WaliService.TopupEdge/WithdrawEdge`、`internal/repository/game.PlatformRepository.Setting`。
 - Subagent：`Harvey` 核对四个游戏金额失败分支，确认均发生在外部平台请求和资产事务之前。
 - 测试：`go test ./internal/service/user ./internal/service/minivod ./internal/service/game ./internal/server` 通过。
+
+### 账号 v2 参数失败与 UCP 任务只读失败分支
+
+- 已迁移账号新增失败分支：`/v2/register` 的手机注册手机号格式错误、邮箱注册邮箱格式错误、账号注册密码长度错误；`/v2/login` 查到账号后的普通登录空密码。
+- PHP: `src/c/apiv2/user.php::register/login`、`src/m/user/user.php::checkEmail/checkPassword/checkLogin`。
+- Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`。
+- 兼容规则：只迁移 v2 注册中位于验证码/写库前的输入校验；v1 `/register` 的后续参数校验暂不提前迁移，因为旧 PHP 在其前面还有注册关闭和 IP 频控动态检查。登录成功、验证码、session、Redis 注销状态清理仍未接管。
+- 已迁移 UCP 任务只读失败分支：`/ucp/task/sign` 游客缺失/今日已签到；`/ucp/task/invitecodeInput` 今日已保存/邀请码错误；`/ucp/task/adviewClick` 今日已送过；`/ucp/taskbox/taskboxopen` 任务不存在/停用和宝箱金币为 0。
+- PHP: `src/c/api/ucp/task.php::sign/invitecodeInput/adviewClick`、`src/c/api/ucp/taskbox.php::taskboxopen`。
+- Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`、`internal/repository/ucp.Repository.TaskboxByID`。
+- 兼容规则：这些分支均在奖励写入、金币/VIP 变更、图片生成或事务成功路径之前；时间窗口、已领过、推广人数不足等处于事务/锁之后的分支暂不迁移。
+- Subagent：`Pasteur` 核对账号剩余可迁分支并指出 v1 注册参数校验优先级风险；`Poincare` 核对 UCP/task/taskbox；`Gauss` 核对 payment/respond 剩余分支并确认普通 provider 成功路径需等锁单/入账架构。
+- 测试：`go test ./internal/service/user ./internal/service/ucp ./internal/server` 通过。

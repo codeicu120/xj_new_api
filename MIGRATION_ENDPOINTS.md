@@ -137,9 +137,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
 | `/ucp/task/qrlink` | ANY | `UCPHandler.TaskQRLink` |
 | `/ucp/task/invite` | ANY | `UCPHandler.TaskInvite` |
-| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/task/sign`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | ANY | `UCPHandler.TaskSign/TaskInviteCodeInput/TaskAdviewClick` |
+| `/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave` | ANY | `UCPHandler.HighRiskAction` |
 | `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxShare/TaskboxQRLink` |
-| `/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/taskbox/taskboxopen` | ANY | `UCPHandler.TaskboxOpen` |
+| `/ucp/taskbox/qrcode` | ANY | `UCPHandler.HighRiskAction` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/upgrade` | ANY | `UCPHandler.HighRiskAction` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
@@ -211,8 +213,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | `UserHandler.SysAvatar` | 已重构，对比通过 |
 | `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
-| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议和已登录，不执行验证码、注册写库、邀请奖励或 session |
-| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录、v2 空账号、v2 手机/邮箱/用户名未注册，不执行密码/验证码校验或 session 写入 |
+| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议、已登录、v2 手机注册手机号格式、v2 邮箱注册邮箱格式和 v2 账号注册密码长度，不执行验证码、注册写库、邀请奖励或 session |
+| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录、v2 空账号、v2 手机/邮箱/用户名未注册和 v2 已存在账号空密码，不执行密码校验、验证码校验或 session 写入 |
 | `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在和 step1 推进，不执行验证码或改密 |
 | `/delete` | `c.api.user2->delAccount` | `UserHandler.Delete` | 部分已重构；未登录 `retcode=-9999` 分支，不写 Redis 注销申请、不删除 session |
 | `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式、步骤错误、相同手机号、手机号已存在和 step1 推进分支，不执行验证码或换绑事务 |
@@ -478,12 +480,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | `UCPHandler.TaskSharePic` | 已重构，对比通过；公共随机推广海报，只读无奖励写入 |
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | `UCPHandler.TaskQRLink` | 已重构，对比通过；登录只读推广二维码链接，读取推广 URL 和邀请码，不生成图片、不写 keylimit |
 | `/ucp/task/invite` | `c.api.ucp.task->invite` | `UCPHandler.TaskInvite` | 已重构；未登录错误分支对齐，登录后按 PHP 空方法体返回 200 空 body |
-| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | `c.api.ucp.task->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支返回 `retcode=-9999 errmsg=您还没有登录`，登录奖励、二维码图片生成和 keylimit 写入分支暂未接管 |
+| `/ucp/task/sign`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | `c.api.ucp.task->$action` | `UCPHandler.TaskSign/TaskInviteCodeInput/TaskAdviewClick` | 部分已重构；`sign` 游客缺失/今日已签到、`invitecodeInput` 今日已保存/邀请码错误、`adviewClick` 今日已送过分支已迁移，签到/奖励/keylimit 写入暂未接管 |
+| `/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave` | `c.api.ucp.task->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支返回 `retcode=-9999 errmsg=您还没有登录`，登录奖励、二维码图片生成和 keylimit 写入分支暂未接管 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
 | `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | `UCPHandler.TaskboxShare` | 已重构；公共只读任务宝箱分享文案，替换随机/登录邀请码和每日推广 URL，按 shape 对比通过 |
 | `/ucp/taskbox/qrlink` | `c.api.ucp.taskbox->qrlink` | `UCPHandler.TaskboxQRLink` | 已重构，对比通过；登录只读任务宝箱推广二维码链接，不生成图片、不发奖励 |
-| `/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，领奖写入和二维码图片生成暂未接管 |
+| `/ucp/taskbox/taskboxopen` | `c.api.ucp.taskbox->taskboxopen` | `UCPHandler.TaskboxOpen` | 部分已重构；未登录、任务不存在/停用、宝箱赠送金币为 0 分支已迁移，领奖写入暂未接管 |
+| `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，二维码图片生成暂未接管 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，会员升级和金币扣减成功分支暂未接管 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；未登录、兑换类型、兑换数量和 100 万上限前置分支已迁移，金币/余额互换事务写入暂未接管 |
@@ -536,8 +540,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议/已登录等失败分支已迁移，成功注册、验证码、IP 频控、邀请奖励和写库仍未迁移 |
-| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v2 空账号和 v2 账号不存在失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
+| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议/已登录/v2 参数格式等失败分支已迁移，成功注册、验证码、IP 频控、邀请奖励和写库仍未迁移 |
+| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v2 空账号、v2 账号不存在和 v2 空密码失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
 | `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式/空手机号邮箱/无效 step、step1 查用户和 step1 推进已迁移，step2 验证码和 step3 改密仍未迁移 |
 | `/delete` | `c.api.user2->delAccount` | 部分未重构；未登录分支已迁移，验证码、Redis 注销申请和退出登录仍未迁移 |
 | `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误、手机号存在校验和 step1 推进已迁移，step2 验证码和事务换绑仍未迁移 |
@@ -556,10 +560,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录分支已迁移，会员升级和金币扣减成功分支仍需事务化迁移 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
-| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
+| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录分支已迁移，提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 未登录分支已迁移，金币兑换写入仍需迁移 |
-| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen/qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金币兑换和会员资产仍需迁移 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录分支已迁移，支付下单和金币资产仍需迁移 |
 | `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金豆和金币兑换仍需迁移 |

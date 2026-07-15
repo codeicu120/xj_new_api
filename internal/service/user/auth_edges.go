@@ -29,14 +29,17 @@ type AuthEdgeRequest struct {
 	Mobi       string
 	Email      string
 	Username   string
+	Password   string
 	MobiPrefix string
+	RegType    int
+	LoginType  int
 }
 
 func NewAuthEdgeService(store AuthEdgeStore) *AuthEdgeService {
 	return &AuthEdgeService{store: store}
 }
 
-func (s *AuthEdgeService) Register(ctx context.Context, req AuthEdgeRequest) (int, string, error) {
+func (s *AuthEdgeService) Register(ctx context.Context, req AuthEdgeRequest, v2 bool) (int, string, error) {
 	user, err := s.userByToken(ctx, req.Token)
 	if err != nil {
 		return -1, "注册失败", err
@@ -46,6 +49,15 @@ func (s *AuthEdgeService) Register(ctx context.Context, req AuthEdgeRequest) (in
 	}
 	if req.AUP != 1 {
 		return -1, "请同意用户协议", nil
+	}
+	if v2 && req.RegType == 2 && !validMainlandMobile(req.MobiPrefix, req.Mobi) {
+		return -1, "手机号码填写不正确", nil
+	}
+	if v2 && req.RegType == 3 && !validEmail(req.Email) {
+		return -1, "请输入正确邮箱地址", nil
+	}
+	if v2 && req.RegType == 1 && !validPassword(req.Password) {
+		return -1, "密码6-16位", nil
 	}
 	return -1, "注册成功分支暂未迁移", nil
 }
@@ -75,6 +87,9 @@ func (s *AuthEdgeService) Login(ctx context.Context, req AuthEdgeRequest, v2 boo
 			default:
 				return -1, "用户名未注册", nil
 			}
+		}
+		if req.LoginType != 1 && strings.TrimSpace(req.Password) == "" {
+			return -1, "密码不能为空", nil
 		}
 	}
 	return -1, "登录成功分支暂未迁移", nil
@@ -238,6 +253,18 @@ func validMainlandMobile(prefix string, mobi string) bool {
 		}
 	}
 	return true
+}
+
+func validEmail(email string) bool {
+	email = strings.TrimSpace(email)
+	at := strings.Index(email, "@")
+	dot := strings.LastIndex(email, ".")
+	return at > 0 && dot > at+1 && dot < len(email)-1
+}
+
+func validPassword(password string) bool {
+	n := len(password)
+	return n >= 6 && n <= 16
 }
 
 func normalizedMobi(prefix string, mobi string) string {

@@ -250,7 +250,6 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 
 	paths := []string{
 		"/ucp/upgrade",
-		"/ucp/task/sign",
 		"/ucp/task/share",
 		"/ucp/task/qrcode",
 		"/ucp/task/qrcodeSave",
@@ -287,6 +286,20 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 		if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
 			t.Fatalf("%s unexpected response %#v", path, body)
 		}
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/task/sign", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/ucp/task/sign: expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("/ucp/task/sign decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "请登录后操作，客户端游客请先携带信息" {
+		t.Fatalf("/ucp/task/sign unexpected response %#v", body)
 	}
 }
 

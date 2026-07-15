@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,8 +36,7 @@ func (h *UserHandler) Logout(c *gin.Context) {
 }
 
 func (h *UserHandler) Register(c *gin.Context) {
-	aup, _ := strconv.Atoi(inputValue(c, "aup"))
-	retcode, errmsg, err := h.authEdgeService.Register(c.Request.Context(), userService.AuthEdgeRequest{Token: authToken(c), AUP: aup})
+	retcode, errmsg, err := h.authEdgeService.Register(c.Request.Context(), authEdgeRequest(c), strings.HasPrefix(c.FullPath(), "/v2/"))
 	respondUserEdge(c, retcode, errmsg, err)
 }
 
@@ -72,6 +72,8 @@ func (h *UserHandler) ChangePhone(c *gin.Context) {
 
 func authEdgeRequest(c *gin.Context) userService.AuthEdgeRequest {
 	aup, _ := strconv.Atoi(inputValue(c, "aup"))
+	regType, _ := strconv.Atoi(inputValue(c, "regtype"))
+	loginType, _ := strconv.Atoi(inputValue(c, "logintype"))
 	return userService.AuthEdgeRequest{
 		Token:      authToken(c),
 		AUP:        aup,
@@ -79,7 +81,10 @@ func authEdgeRequest(c *gin.Context) userService.AuthEdgeRequest {
 		Mobi:       inputValue(c, "mobi"),
 		Email:      inputValue(c, "email"),
 		Username:   inputValue(c, "username"),
+		Password:   inputValue(c, "password"),
 		MobiPrefix: inputValue(c, "mobiprefix"),
+		RegType:    regType,
+		LoginType:  loginType,
 	}
 }
 

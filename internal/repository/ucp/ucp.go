@@ -56,6 +56,13 @@ func (r *Repository) Taskboxes(ctx context.Context) ([]map[string]interface{}, e
 	return scanRows(rows)
 }
 
+func (r *Repository) TaskboxByID(ctx context.Context, taskID int) (map[string]interface{}, error) {
+	if r.db == nil || taskID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	return r.queryOne(ctx, "SELECT * FROM promotion_taskboxs WHERE taskid=?", taskID)
+}
+
 func (r *Repository) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil

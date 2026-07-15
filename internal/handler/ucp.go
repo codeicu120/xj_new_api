@@ -87,6 +87,21 @@ func (h *UCPHandler) TaskInvite(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+func (h *UCPHandler) TaskSign(c *gin.Context) {
+	retcode, errmsg, err := h.service.TaskSignEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) TaskInviteCodeInput(c *gin.Context) {
+	retcode, errmsg, err := h.service.TaskInviteCodeInputEdge(c.Request.Context(), authToken(c), inputValue(c, "inviteCode"))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) TaskAdviewClick(c *gin.Context) {
+	retcode, errmsg, err := h.service.TaskAdviewClickEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		retcode, errmsg, err := h.service.HighRiskActionEdge(c.Request.Context(), authToken(c), message)
@@ -145,6 +160,12 @@ func (h *UCPHandler) VODOrderCreate(c *gin.Context) {
 func (h *UCPHandler) VODOrderSupport(c *gin.Context) {
 	orderID, _ := strconv.Atoi(inputValue(c, "orderid"))
 	retcode, errmsg, err := h.service.VODOrderSupportEdge(c.Request.Context(), authToken(c), orderID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) TaskboxOpen(c *gin.Context) {
+	taskID, _ := strconv.Atoi(inputValue(c, "taskid"))
+	retcode, errmsg, err := h.service.TaskboxOpenEdge(c.Request.Context(), authToken(c), taskID)
 	h.respondEdge(c, retcode, errmsg, err)
 }
 

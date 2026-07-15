@@ -31,7 +31,7 @@ func (s fakeAuthEdgeStore) UserByUsername(context.Context, string) (map[string]i
 func TestRegisterEdgeBranches(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{})
 
-	retcode, errmsg, err := service.Register(context.Background(), AuthEdgeRequest{})
+	retcode, errmsg, err := service.Register(context.Background(), AuthEdgeRequest{}, false)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -40,12 +40,36 @@ func TestRegisterEdgeBranches(t *testing.T) {
 	}
 
 	logged := NewAuthEdgeService(fakeAuthEdgeStore{user: map[string]interface{}{"uid": "5"}})
-	retcode, errmsg, err = logged.Register(context.Background(), AuthEdgeRequest{Token: "250f790ba71ec2b9d3855f424db2259e", AUP: 1})
+	retcode, errmsg, err = logged.Register(context.Background(), AuthEdgeRequest{Token: "250f790ba71ec2b9d3855f424db2259e", AUP: 1}, false)
 	if err != nil {
 		t.Fatalf("register logged: %v", err)
 	}
 	if retcode != -1 || errmsg != "用户已登录" {
 		t.Fatalf("unexpected logged response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 2}, true)
+	if err != nil {
+		t.Fatalf("v2 register mobile: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机号码填写不正确" {
+		t.Fatalf("unexpected v2 mobile response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 3, Email: "bad"}, true)
+	if err != nil {
+		t.Fatalf("v2 register email: %v", err)
+	}
+	if retcode != -1 || errmsg != "请输入正确邮箱地址" {
+		t.Fatalf("unexpected v2 email response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Password: "123"}, true)
+	if err != nil {
+		t.Fatalf("v2 register password: %v", err)
+	}
+	if retcode != -1 || errmsg != "密码6-16位" {
+		t.Fatalf("unexpected v2 password response %d %q", retcode, errmsg)
 	}
 }
 
@@ -74,6 +98,15 @@ func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "邮箱未注册" {
 		t.Fatalf("unexpected email response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byMobi: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Mobi: "13800138000"}, true)
+	if err != nil {
+		t.Fatalf("login password: %v", err)
+	}
+	if retcode != -1 || errmsg != "密码不能为空" {
+		t.Fatalf("unexpected password response %d %q", retcode, errmsg)
 	}
 }
 

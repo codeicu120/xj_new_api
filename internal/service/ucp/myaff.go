@@ -92,6 +92,7 @@ type UserStore interface {
 	SumVODSupportCoins(ctx context.Context, uid int, onlyFrozen bool) (int, error)
 	Posters(ctx context.Context) ([]map[string]interface{}, error)
 	Taskboxes(ctx context.Context) ([]map[string]interface{}, error)
+	TaskboxByID(ctx context.Context, taskID int) (map[string]interface{}, error)
 	TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error)
 	TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error)
 	CountTaskboxLogs(ctx context.Context, uid int) (int, error)

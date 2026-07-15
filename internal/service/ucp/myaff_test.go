@@ -15,6 +15,7 @@ type fakeUserStore struct {
 	missingGuest       bool
 	coinLogTypes       []int
 	coinLogOrderBy     string
+	countCoinLogSince  *int
 	countCoinLogTypes  []int
 	countCoinLogResult int
 	coinBonusStats     map[string]interface{}
@@ -25,6 +26,7 @@ type fakeUserStore struct {
 	attachRows         []map[string]interface{}
 	posters            []map[string]interface{}
 	taskboxes          []map[string]interface{}
+	taskboxRow         map[string]interface{}
 	taskboxLog         map[string]interface{}
 	taskboxLogs        []map[string]interface{}
 	bankcards          []map[string]interface{}
@@ -98,6 +100,13 @@ func (s fakeUserStore) Posters(context.Context) ([]map[string]interface{}, error
 
 func (s fakeUserStore) Taskboxes(context.Context) ([]map[string]interface{}, error) {
 	return s.taskboxes, nil
+}
+
+func (s fakeUserStore) TaskboxByID(context.Context, int) (map[string]interface{}, error) {
+	if s.taskboxRow != nil {
+		return s.taskboxRow, nil
+	}
+	return map[string]interface{}{}, nil
 }
 
 func (s fakeUserStore) TaskboxLog(context.Context, int, int, int) (map[string]interface{}, error) {
@@ -242,6 +251,9 @@ func (s fakeUserStore) CountGuestMiniVODViewLogsSince(_ context.Context, _ strin
 }
 
 func (s fakeUserStore) CountCoinLogsSinceByType(context.Context, int, int, int64) (int, error) {
+	if s.countCoinLogSince != nil {
+		return *s.countCoinLogSince, nil
+	}
 	return 1, nil
 }
 
@@ -755,6 +767,65 @@ func TestHighRiskActionEdgeRequiresLoginAndBlocksSuccess(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "成功分支暂未迁移" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestTaskRewardEdgePrechecks(t *testing.T) {
+	zero := 0
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "0", "sid": "guest"}, missingGuest: true}, "https://res.example.test")
+	retcode, errmsg, err := service.TaskSignEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请登录后操作，客户端游客请先携带信息" {
+		t.Fatalf("task sign guest retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5", "uniqkey": "12345"}, countCoinLogResult: 1}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskInviteCodeInputEdge(context.Background(), "token", "BAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您今天已经保存过了" {
+		t.Fatalf("invitecode saved retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5", "uniqkey": "12345"}, countCoinLogSince: &zero}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskInviteCodeInputEdge(context.Background(), "token", "BAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "邀请码不正确" {
+		t.Fatalf("invitecode bad retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, countCoinLogResult: 1}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskAdviewClickEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您今天已经送过了" {
+		t.Fatalf("adview retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestTaskboxOpenEdgePrechecks(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	retcode, errmsg, err := service.TaskboxOpenEdge(context.Background(), "token", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "任务不存在或已停用" {
+		t.Fatalf("taskbox missing retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, taskboxRow: map[string]interface{}{"taskid": "1", "showtype": "0", "mincoin": "0", "maxcoin": "0"}}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskboxOpenEdge(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "宝箱赠送金币为0" {
+		t.Fatalf("taskbox zero retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
 

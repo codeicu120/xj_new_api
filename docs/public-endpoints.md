@@ -44,7 +44,7 @@
 | `/payment/reqpay`、`/payment/pay12req` | `c.api.payment->reqpay/pay12req` | 本轮完成 | 仅接管缺失/已支付/过期/非本人等前置失败分支；`pay12req` 错误分支返回 payerror HTML，成功请求网关暂未接管。 |
 | `/respond/*` 常见支付 provider 失败分支 | `c.respond.*` | 本轮完成 | 空请求/解析失败分支返回旧 provider `echoErr()` 文本；成功验签、锁单入账和 `payment->doAction()` 未接管。 |
 | `/respond/chan1` | `c.respond.chan1` | 本轮完成 | 仅接管 `mobi|secret` token 校验失败分支，返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理未接管。 |
-| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号格式、空账号、无效 step、v2 账号不存在、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |
+| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号格式、空账号、无效 step、v2 注册格式、v2 账号不存在、v2 空密码、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
@@ -115,7 +115,7 @@
 | `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | 本轮完成 | 公共只读任务宝箱分享文案；随机游客邀请码/登录邀请码和每日推广 URL 形态对齐。 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志；未登录错误、登录测试 token 分页和首行内容 live 对比通过。 |
 | `/ucp/task/invite` | `c.api.ucp.task->invite` | 本轮完成 | 未登录返回旧错误；登录后 PHP 方法体为空，Go 返回 200 空 body。 |
-| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.*` | 本轮完成 | 仅接管高风险写入接口的未登录失败分支，统一返回 `retcode=-9999 errmsg=您还没有登录`；登录成功的奖励、资产、支付下单、提现、二维码/图片生成仍未接管。 |
+| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.*` | 本轮完成 | 接管高风险写入接口未登录及部分只读失败分支：`sign` 已签到/游客缺失、邀请码错误、广告今日已送、宝箱不存在/金币为 0；登录成功奖励、资产、支付下单、提现、二维码/图片生成仍未接管。 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | 本轮完成 | 接管未登录、缺兑换类型、缺兑换数量和超过 100 万数量前置失败分支；金币兑换成功分支未接管。 |
 | `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->create/support` | 本轮完成 | 接管未登录、求片缺番号/名称、求片金币低于 100 和助力记录缺失前置失败分支；求片扣费、助力写入和通知未接管。 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
