@@ -63,6 +63,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/activity/recommends` | ANY | `ActivityHandler.Recommends` |
 | `/invite/info` | ANY | `InviteHandler.Info` |
 | `/payment/index`、`/payment/query` | ANY | `PaymentHandler.Query` |
+| `/payment/payways` | ANY | `PaymentHandler.Payways` |
 | `/payment/unpaid`、`/payment/success`、`/payment/failed` | ANY | `PaymentHandler.Unpaid/Success/Failed` |
 | `/bought/listing`、`/bought/delete` | ANY | `BoughtHandler.Listing/Delete` |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
@@ -191,6 +192,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/activity/recommends` | `c.api.activity->recommends` | `ActivityHandler.Recommends` | 已重构，对比通过；登录邀请记录只读，复刻用户行处理 |
 | `/invite/info` | `c.api.invite->info` | `InviteHandler.Info` | 已重构，对比通过；登录只读当前绑定邀请码 |
 | `/payment/index`、`/payment/query` | `c.api.payment->index/query` | `PaymentHandler.Query` | 已重构；只读订单状态查询，校验订单归属后返回 `payrow`；裸 `/payment` 旧 PHP 为 404，不接管 |
+| `/payment/payways` | `c.api.payment->payways` | `PaymentHandler.Payways` | 已重构；只读订单支付方式列表，校验订单存在、未支付和归属后返回 `payrow/payments`；支付通道通过接口隔离，不伪造生产配置 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | `PaymentHandler.Unpaid` | 已重构；旧 PHP 当前直接返回 `data.total_count=0`，后续未执行的 24 小时未支付查询分支不接管 |
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | `PaymentHandler.Success/Failed` | 已重构；固定支付状态 JSON 文案，不包含平台回调验签 |
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
@@ -454,7 +456,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/payment/:action`（除 `/payment/index`、`/payment/query`、`/payment/unpaid`、`/payment/success`、`/payment/failed`） | `c.api.payment->$action` | 未重构；剩余 `payways/chpayway/reqpay` 等涉及支付方式、下单或平台请求；裸 `/payment` 旧 PHP 为 404 |
+| `/payment/:action`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/unpaid`、`/payment/success`、`/payment/failed`） | `c.api.payment->$action` | 未重构；剩余 `chpayway/reqpay` 等涉及支付方式切换、下单或平台请求；裸 `/payment` 旧 PHP 为 404 |
 | `/respond/:action` | `c.respond.*` | 未重构；支付平台回调 |
 | `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay5` | `c.respond.*` | 未重构 |
 | `/respond/hawpay`、`/respond/easypay`、`/respond/chan1`、`/respond/pay6`、`/respond/pay7` | `c.respond.*` | 未重构 |

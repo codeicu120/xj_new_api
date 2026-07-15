@@ -38,6 +38,21 @@ func (h *PaymentHandler) Query(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *PaymentHandler) Payways(c *gin.Context) {
+	payID, _ := strconv.Atoi(inputValue(c, "payid"))
+	data, retcode, errmsg, err := h.service.Payways(c.Request.Context(), authToken(c), payID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *PaymentHandler) Success(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	c.JSON(http.StatusOK, legacyjson.Response{

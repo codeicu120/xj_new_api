@@ -13,6 +13,7 @@ import (
 type Store interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
 	PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error)
+	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
 }
 
 type Service struct {
@@ -56,6 +57,35 @@ func (s *Service) Query(ctx context.Context, token string, payID int) (map[strin
 	return map[string]interface{}{"payrow": rows[0]}, 0, "", nil
 }
 
+func (s *Service) Payways(ctx context.Context, token string, payID int) (map[string]interface{}, int, string, error) {
+	if s.store == nil {
+		return nil, -1, "记录不存在或已支付", nil
+	}
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -1, "获取支付方式失败", err
+	}
+	payrow, err := s.store.PaymentByID(ctx, payID)
+	if err != nil {
+		return nil, -1, "获取支付方式失败", err
+	}
+	if len(payrow) == 0 || atoi(payrow["ispaid"]) > 0 {
+		return nil, -1, "记录不存在或已支付", nil
+	}
+	if atoi(payrow["uid"]) > 0 && atoi(user["uid"]) != atoi(payrow["uid"]) {
+		return nil, -1, "无权限", nil
+	}
+	channels, err := s.store.PaymentChannels(ctx, false)
+	if err != nil {
+		return nil, -1, "获取支付方式失败", err
+	}
+	rows := processPaymentRows([]map[string]interface{}{payrow})
+	return map[string]interface{}{
+		"payrow":   rows[0],
+		"payments": filterPaymentChannels(channels, atoi(payrow["paytype"])),
+	}, 0, "", nil
+}
+
 func (s *Service) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, error) {
 	sid := userRepo.CleanToken(strings.TrimSpace(token))
 	if sid == "" {
@@ -69,6 +99,71 @@ func (s *Service) authenticatedUser(ctx context.Context, token string) (map[stri
 		user = map[string]interface{}{"uid": "0"}
 	}
 	return user, nil
+}
+
+func filterPaymentChannels(channels []map[string]interface{}, payType int) []map[string]interface{} {
+	out := []map[string]interface{}{}
+	for _, channel := range channels {
+		if atoi(channel["disabled"]) > 0 {
+			continue
+		}
+		payways, _ := channel["payways"].([]map[string]interface{})
+		filtered := []map[string]interface{}{}
+		for _, payway := range payways {
+			if !paywayAllowsType(payway, payType) {
+				continue
+			}
+			filtered = append(filtered, map[string]interface{}{
+				"payname":       payway["payname"],
+				"paylogo":       payway["paylogo"],
+				"dscr":          payway["dscr"],
+				"paycode":       payway["paycode"],
+				"trxamount_min": atoi(payway["trxamount_min"]),
+				"trxamount_max": atoi(payway["trxamount_max"]),
+				"extras":        mapOrEmpty(payway["extras"]),
+			})
+		}
+		if len(filtered) == 0 {
+			continue
+		}
+		item := map[string]interface{}{
+			"channame": channel["channame"],
+			"chanlogo": channel["chanlogo"],
+			"dscr":     channel["dscr"],
+			"payways":  filtered,
+		}
+		for _, key := range []string{"appId", "appSecret", "appKey", "notifyUrl"} {
+			if value := str(channel[key]); value != "" {
+				item[key] = value
+			}
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func paywayAllowsType(payway map[string]interface{}, payType int) bool {
+	allow, ok := payway["allow_paytypes"].(map[int][]string)
+	if !ok || len(allow) == 0 {
+		return true
+	}
+	platforms, ok := allow[payType]
+	if !ok {
+		return false
+	}
+	for _, platform := range platforms {
+		if platform == "ALL" || platform == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func mapOrEmpty(value interface{}) map[string]interface{} {
+	if typed, ok := value.(map[string]interface{}); ok {
+		return typed
+	}
+	return map[string]interface{}{}
 }
 
 func processPaymentRows(rows []map[string]interface{}) []map[string]interface{} {

@@ -64,6 +64,6 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | 接口 | 原因 |
 | --- | --- |
 | `/ucp/task/*`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
+| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/*`（除已迁移只读/状态接口） | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog` 和 `/payment/payways` 只读记录/支付方式已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用。 |
 | `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |
