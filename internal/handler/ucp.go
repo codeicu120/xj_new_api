@@ -119,6 +119,35 @@ func (h *UCPHandler) UserBindMobi(c *gin.Context) {
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
+func (h *UCPHandler) UserProfile(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserProfileEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) UserPasswd(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserPasswdEdge(c.Request.Context(), authToken(c), inputValue(c, "password"), inputValue(c, "password_confirm"))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) CoinLogExchange(c *gin.Context) {
+	extype, _ := strconv.Atoi(inputValue(c, "extype"))
+	exnum, _ := strconv.Atoi(inputValue(c, "exnum"))
+	retcode, errmsg, err := h.service.CoinLogExchangeEdge(c.Request.Context(), authToken(c), extype, exnum)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) VODOrderCreate(c *gin.Context) {
+	coins, _ := strconv.Atoi(inputValue(c, "coins"))
+	retcode, errmsg, err := h.service.VODOrderCreateEdge(c.Request.Context(), authToken(c), inputValue(c, "vodserial"), inputValue(c, "vodname"), coins)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) VODOrderSupport(c *gin.Context) {
+	orderID, _ := strconv.Atoi(inputValue(c, "orderid"))
+	retcode, errmsg, err := h.service.VODOrderSupportEdge(c.Request.Context(), authToken(c), orderID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) respondEdge(c *gin.Context, retcode int, errmsg string, err error) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {

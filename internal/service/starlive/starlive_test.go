@@ -112,3 +112,27 @@ func TestQueryCoinBalanceBranches(t *testing.T) {
 		t.Fatalf("missing response %#v", missing)
 	}
 }
+
+func TestAssetEdgesReturnSafeFailures(t *testing.T) {
+	service := NewService(nil, nil, nil, nil)
+
+	guest := service.GameBetEdge(map[string]interface{}{"memberId": "tourist-member-123456"})
+	if guest.Code != -1 || guest.Data["msg"] != "游客用户请先登录" {
+		t.Fatalf("guest response %#v", guest)
+	}
+
+	unknown := service.GameWinEdge(map[string]interface{}{"memberId": ""})
+	if unknown.Code != -1 || unknown.Data["msg"] != "未知用户" {
+		t.Fatalf("unknown response %#v", unknown)
+	}
+
+	translated := service.TranslateEdge(map[string]interface{}{"memberId": "tourist-member-123456"})
+	if translated.Code != -1 || translated.Data["msg"] != "游客用户请先登录" {
+		t.Fatalf("translate response %#v", translated)
+	}
+
+	retry := service.TryAgainEdge(map[string]interface{}{"busiType": 9})
+	if retry.Code != -1 || retry.Data["msg"] != "未知业务类型" {
+		t.Fatalf("tryAgain response %#v", retry)
+	}
+}

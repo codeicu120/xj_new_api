@@ -487,3 +487,15 @@ func TestReqCoinPassesStoreError(t *testing.T) {
 		t.Fatalf("retcode=%d errmsg=%q reqcoin=%#v", retcode, errmsg, store.reqCoin)
 	}
 }
+
+func TestThrowCoinEdgeRequiresLogin(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeProcessor{}, "https://res.test")
+
+	retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), "")
+	if err != nil {
+		t.Fatalf("throwcoin: %v", err)
+	}
+	if retcode != -9999 || errmsg != "需登录后方可使用投币功能" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}

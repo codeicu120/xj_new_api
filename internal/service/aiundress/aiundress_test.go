@@ -58,6 +58,18 @@ func TestListingRequiresLoginWithPHPErrorCode(t *testing.T) {
 	}
 }
 
+func TestRequireLoginEdge(t *testing.T) {
+	service := NewService(fakeAuth{}, fakeStore{}, "https://res.example")
+
+	retcode, errmsg, err := service.RequireLoginEdge(context.Background(), "", "pending")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请先登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestListingBuildsResourceURLsAndPageInfo(t *testing.T) {
 	service := NewService(
 		fakeAuth{user: map[string]interface{}{"uid": "7"}},

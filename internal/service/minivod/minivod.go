@@ -398,6 +398,17 @@ func (s *Service) ReqCoin(ctx context.Context, token string, logid int) (int, st
 	return retcode, errmsg, nil
 }
 
+func (s *Service) ThrowCoinEdge(ctx context.Context, token string) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -9999, "需登录后方可使用投币功能", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -9999, "需登录后方可使用投币功能", nil
+	}
+	return -1, "小视频投币成功分支暂未迁移", nil
+}
+
 func (s *Service) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {
 	return s.reqMedia(ctx, token, vodID, playIndex, true)
 }

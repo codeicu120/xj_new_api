@@ -98,6 +98,41 @@ func (s *Service) QueryCoinBalance(ctx context.Context, memberID string) (domain
 	return domain.StarLiveBalanceResponse{Code: 0, Data: map[string]interface{}{"balance": atoi(quota["goldcoin"]) * 10}}, nil
 }
 
+func (s *Service) GameBetEdge(params map[string]interface{}) domain.StarLiveBalanceResponse {
+	return starLiveMemberEdge(params)
+}
+
+func (s *Service) GameWinEdge(params map[string]interface{}) domain.StarLiveBalanceResponse {
+	return starLiveMemberEdge(params)
+}
+
+func (s *Service) TranslateEdge(params map[string]interface{}) domain.StarLiveBalanceResponse {
+	return starLiveMemberEdge(params)
+}
+
+func (s *Service) TryAgainEdge(params map[string]interface{}) domain.StarLiveBalanceResponse {
+	busiType := atoi(params["busiType"])
+	if busiType != 0 && busiType != 1 && busiType != 2 {
+		return starLiveFail("未知业务类型")
+	}
+	return starLiveFail("重试成功分支暂未迁移")
+}
+
+func starLiveMemberEdge(params map[string]interface{}) domain.StarLiveBalanceResponse {
+	memberID := strings.TrimSpace(fmt.Sprint(params["memberId"]))
+	if len(memberID) > 12 {
+		return starLiveFail("游客用户请先登录")
+	}
+	if atoi(memberID) <= 0 {
+		return starLiveFail("未知用户")
+	}
+	return starLiveFail("直播资产成功分支暂未迁移")
+}
+
+func starLiveFail(message string) domain.StarLiveBalanceResponse {
+	return domain.StarLiveBalanceResponse{Code: -1, Data: map[string]interface{}{"msg": message}}
+}
+
 func (s *Service) memberID(ctx context.Context, token string) (interface{}, int, string, error) {
 	sid := userRepo.CleanToken(token)
 	if sid == "" {

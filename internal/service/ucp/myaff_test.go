@@ -784,6 +784,74 @@ func TestUserContactEdges(t *testing.T) {
 	if retcode != -1 || errmsg != "手机验证码不正确" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
+
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "资料设置成功分支暂未迁移" {
+		t.Fatalf("profile retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "123", "123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "密码6-16位" {
+		t.Fatalf("passwd length retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "123456", "654321")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "两次输入密码不一致" {
+		t.Fatalf("passwd confirm retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUCPWriteActionPrecheckEdges(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.CoinLogExchangeEdge(context.Background(), "token", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请指定兑换类型" {
+		t.Fatalf("exchange type retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请指定兑换数量" {
+		t.Fatalf("exchange num retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.VODOrderCreateEdge(context.Background(), "token", "", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请填写视频番号或者视频名称" {
+		t.Fatalf("vodorder create missing retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.VODOrderCreateEdge(context.Background(), "token", "ABC-001", "", 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "求片金币不能低于100" {
+		t.Fatalf("vodorder create coins retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.VODOrderSupportEdge(context.Background(), "token", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您助力的求片记录不存在" {
+		t.Fatalf("vodorder support retcode=%d errmsg=%q", retcode, errmsg)
+	}
 }
 
 func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {

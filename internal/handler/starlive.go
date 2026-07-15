@@ -45,3 +45,31 @@ func (h *StarLiveHandler) QueryCoinBalance(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, data)
 }
+
+func (h *StarLiveHandler) GameBet(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, h.service.GameBetEdge(starLiveBody(c)))
+}
+
+func (h *StarLiveHandler) GameWin(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, h.service.GameWinEdge(starLiveBody(c)))
+}
+
+func (h *StarLiveHandler) Translate(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, h.service.TranslateEdge(starLiveBody(c)))
+}
+
+func (h *StarLiveHandler) TryAgain(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, h.service.TryAgainEdge(starLiveBody(c)))
+}
+
+func starLiveBody(c *gin.Context) map[string]interface{} {
+	var body map[string]interface{}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil || body == nil {
+		return map[string]interface{}{}
+	}
+	return body
+}

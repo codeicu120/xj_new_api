@@ -1535,3 +1535,16 @@
 - Go: `internal/handler.OneGoHandler.Bet`、`internal/service/onego.Service.BetEdge`。
 - 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后 `quantity<1` 返回 `押注数量不能为零`。投注金币扣减、号码生成、订单写入和事务回滚暂未接管。
 - 测试：`go test ./internal/service/onego ./internal/server` 通过。
+
+### 资产/媒体/AI 安全边界分支批量迁移
+
+- 已迁移 UCP 前置分支：`/ucp/coinlog/exchange`、`/ucp/vodorder/create`、`/ucp/vodorder/support`、`/ucp/user/profile`、`/ucp/user/passwd`。
+- PHP: `src/c/api/ucp/coinlog.php`、`vodorder.php`、`user.php`。
+- Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`。
+- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；密码修改校验长度和确认密码一致。成功写入、扣费、通知、旧密码校验和资料更新暂未接管。
+- 已迁移小视频投币未登录分支：`/minivod/throwcoin/:vodid`，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；投币事务和作者收益暂未接管。
+- 已迁移 StarLive raw JSON 安全失败分支：`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`。游客长 `memberId` 返回 `游客用户请先登录`，未知用户返回 `未知用户`，`tryAgain` 未知业务类型返回 `未知业务类型`；下注、结算、翻译扣款和外部幂等回调暂未接管。
+- 已迁移 Respond token 失败分支：`/respond/chan1`，`md5(mobi+"|"+secret)` 校验失败返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理暂未接管。
+- 已迁移 AI 脱衣未登录分支：`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`，返回 `retcode=-1 errmsg=请先登录`；图片上传、第三方 AI、Redis 并发锁、删除外部资源和金豆扣减暂未接管。
+- Subagent：`Confucius` 梳理 payment/respond/starlive/game 安全候选；`Halley` 梳理 media/AI/UCP/account 安全候选。主线按确定、低副作用分支落地，未采纳需要事务、支付、资产或外部 provider 的成功路径。
+- 测试：`go test ./internal/service/aiundress ./internal/service/ucp ./internal/service/minivod ./internal/service/starlive ./internal/server` 通过。

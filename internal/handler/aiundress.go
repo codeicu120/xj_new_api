@@ -25,6 +25,21 @@ func (h *AIUndressHandler) Listing(c *gin.Context) {
 	respondLegacy(c, data, retcode, errmsg, err)
 }
 
+func (h *AIUndressHandler) Upload(c *gin.Context) {
+	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 上传成功分支暂未迁移")
+	respondLegacy(c, nil, retcode, errmsg, err)
+}
+
+func (h *AIUndressHandler) Undress(c *gin.Context) {
+	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 生成成功分支暂未迁移")
+	respondLegacy(c, nil, retcode, errmsg, err)
+}
+
+func (h *AIUndressHandler) Delete(c *gin.Context) {
+	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 删除成功分支暂未迁移")
+	respondLegacy(c, nil, retcode, errmsg, err)
+}
+
 func (h *AIUndressHandler) ModuleList(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.ModuleList(c.Request.Context())
 	respondLegacy(c, data, retcode, errmsg, err)

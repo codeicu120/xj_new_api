@@ -47,7 +47,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/lottery/gameList` | ANY | `GameHandler.LotteryGames` |
 | `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | ANY | `GameHandler.HighRiskAction` |
 | `/hgame/index` | ANY | `HGameHandler.Index` |
-| `/starLive/index`、`/starLive/queryCoinBalance` | ANY | `StarLiveHandler.Index/QueryCoinBalance` |
+| `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | ANY | `StarLiveHandler` |
 | `/art`、`/art/index` | ANY | `ArtHandler.Index` |
 | `/art/announce` | ANY | `ArtHandler.Announce` |
 | `/art/show` | ANY | `ArtHandler.Show` |
@@ -75,7 +75,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/shangfu`、`/payment/wappay3`、`/payment/wappay4`、`/payment/wappay4a`、`/payment/wappay5`、`/payment/hawpay`、`/payment/easypay`、`/payment/pay6` | ANY | `PaymentHandler.Success` |
 | `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12` | ANY | `PaymentHandler.SuccessHTML` |
 | `/payment/gpay1`、`/payment/gpay2`、`/payment/newpay*`（已注册页面 action） | ANY | `PaymentHandler.SuccessHTML` |
-| `/respond/*`（已注册支付回调失败分支，除 `chan1`） | ANY | `RespondHandler.Failed` |
+| `/respond/*`（已注册支付回调失败分支） | ANY | `RespondHandler.Failed/Chan1` |
 | `/bought/listing`、`/bought/delete`、`/bought/buy` | ANY | `BoughtHandler.Listing/Delete/Buy` |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
 | `/playlog/listing`、`/playlog/remove`、`/downlog/listing`、`/downlog/remove` | ANY | `HistoryHandler` |
@@ -85,6 +85,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest`、`/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` | ANY | `MiniVODHandler.Listing` |
 | `/minivod/*-:params`（上述 action） | ANY | `MiniVODHandler.Listing` |
 | `/minivod/show/:vodid` | ANY | `MiniVODHandler.Show` |
+| `/minivod/throwcoin/:vodid` | ANY | `MiniVODHandler.ThrowCoin` |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | ANY | `MiniVODHandler.ReqPlay/ReqDown` |
 | `/minivod/reqcoin` | ANY | `MiniVODHandler.ReqCoin` |
 | `/my/:authorid`、`/my/:authorid/:action` | ANY | `MiniVODHandler.Author` |
@@ -108,12 +109,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/explore/vodtask/reqcoin` | ANY | `ExploreHandler.VodTaskReqCoin` |
 | `/aiundress`、`/aiundress/listing` | ANY | `AIUndressHandler.Listing` |
 | `/aiundress/index` | ANY | `handler.EmptyHTML` |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | ANY | `AIUndressHandler.Upload/Undress/Delete` |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | ANY | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` |
 | `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
 | `/getGlobalData` | ANY | `IndexHandler.GetGlobalData` |
 | `/init` | ANY | `IndexHandler.Init` |
 | `/ucp/index` | ANY | `UCPHandler.Index` |
 | `/ucp/user`、`/ucp/user/index` | ANY | `UCPHandler.UserIndex` |
+| `/ucp/user/profile`、`/ucp/user/passwd` | ANY | `UCPHandler.UserProfile/UserPasswd` |
 | `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | ANY | `UCPHandler.UserCheckEmail/SendEmail/VerifyEmail/BindMobi` |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | ANY | `UCPHandler.BankcardIndex` |
 | `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete` | ANY | `UCPHandler.BankcardCreate/Modify/Delete` |
@@ -148,7 +151,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog`、`/ucp/coinlog/index` | ANY | `UCPHandler.CoinLogIndex` |
 | `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
-| `/ucp/coinlog/exchange` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/coinlog/exchange` | ANY | `UCPHandler.CoinLogExchange` |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | ANY | `UCPHandler.VIPPkgIndex` |
 | `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | ANY | `UCPHandler.HighRiskAction` |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | ANY | `UCPHandler.CoinPkgIndex` |
@@ -157,7 +160,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | ANY | `UCPHandler.HighRiskAction` |
 | `/ucp/vodorder`、`/ucp/vodorder/index` | ANY | `UCPHandler.VODOrderIndex` |
 | `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders` | ANY | `UCPHandler.VODOrderMyOrders/MySupports/HistoryOrders` |
-| `/ucp/vodorder/create`、`/ucp/vodorder/support` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/vodorder/create`、`/ucp/vodorder/support` | ANY | `UCPHandler.VODOrderCreate/VODOrderSupport` |
 | `/vod/show/:vodid` | ANY | `VODHandler.Show` |
 | `/vod/up/:vodid`、`/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 | `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | ANY | `VODHandler.ReqPlay/ReqDown` |
@@ -381,6 +384,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | `MiniVODHandler.Up/Down` | 已重构；小视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，扣金币与任务奖励分支暂不写资产 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | `MiniVODHandler.ReqCoin` | 已重构；领取小视频播放任务金币，事务锁定任务日志，登录用户写 `users_quota/user_coinlogs(cointype=25)`，游客更新 `user_guests.goldcoin`；保留旧 PHP 未校验 log 归属行为 |
+| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录固定错误 `需登录后方可使用投币功能` 已迁移，视频/作者只读校验、GET 初始化和金币打赏事务暂未接管 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已接管可控读取路径；从现有待展示 viewlog 读取小视频并包装作者/收藏状态，拉取推荐、标记已浏览和广告插入副作用暂不执行 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
@@ -420,8 +424,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` | 已重构；只读外部资源查询，第三方 host/key 通过 `AIUNDRESS_THIRD_HOST`/`AIUNDRESS_THIRD_KEY` 注入，缺配置或外部请求失败返回 `retcode=-1 errmsg=请求失败` |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->$action` | `AIUndressHandler.Upload/Undress/Delete` | 部分已重构；未登录返回 `retcode=-1 errmsg=请先登录`，文件保存/R2 上传/Redis 锁/金豆扣减/第三方生成/删除写入暂未接管 |
 | `/starLive/index` | `c.api.starlive->index` | `StarLiveHandler.Index` | 已重构；直播初始化，兼容登录用户或游客 sid，读取 `starlive_info`，按 PHP AES-128-CBC/base64 生成 `encryptUid` 并返回嵌套 `data.data` |
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | `StarLiveHandler.QueryCoinBalance` | 已重构；直播平台余额查询 raw JSON 响应，游客长 memberId 返回 0，用户金币余额按 `goldcoin*10` 返回 |
+| `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | `StarLiveHandler.GameBet/GameWin/Translate/TryAgain` | 部分已重构；raw JSON 游客长 `memberId`、空/非法 memberId 和未知 `busiType` 安全失败分支已迁移，下注/中奖/钻石兑换资产事务和重复订单查询暂未接管 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | `IndexHandler.GetGlobalData` | 已重构；全局配置/版本/广告/弹窗/开关聚合，核心 key shape 和版本覆盖对比通过 |
 | `/init` | `c.api.index->init` | `IndexHandler.Init` | 已重构；客户端初始化聚合，复用 globalData，登录/游客 user、appver、通知、邀请和站点配置 live 对比通过 |
 
@@ -459,6 +465,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | `UCPHandler.UserIndex` | 已重构，对比通过；登录只读当前用户资料，复用 PHP user row 字段 |
+| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | `UCPHandler.UserProfile/UserPasswd` | 部分已重构；未登录分支和密码长度/确认不一致本地校验已迁移，资料写入、密码更新和重新登录暂未接管 |
 | `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | `UCPHandler.UserCheckEmail/SendEmail/VerifyEmail/BindMobi` | 部分已重构；未登录、邮箱格式错误、邮箱验证码缺失/失效和手机验证码错误分支已迁移，邮件发送、邮箱/手机绑定成功分支暂未接管 |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表 |
 | `/ucp/bankcard/create` | `c.api.ucp.bankcard->create` | `UCPHandler.BankcardCreate` | 已重构；登录新增提款地址，保留 PHP 的类型到支付宝/微信映射、最多 5 条判断和旧错误文案 |
@@ -477,7 +484,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，领奖写入和二维码图片生成暂未接管 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，会员升级和金币扣减成功分支暂未接管 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
-| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，金币兑换资产写入暂未接管 |
+| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；未登录、兑换类型、兑换数量和 100 万上限前置分支已迁移，金币/余额互换事务写入暂未接管 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，支付下单、金币兑换和会员资产成功分支暂未接管 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
@@ -488,7 +495,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vodorder/myorders` | `c.api.ucp.vodorder->myorders` | `UCPHandler.VODOrderMyOrders` | 已重构，对比通过；登录只读我的求片记录、累计消耗和当前冻结金币 |
 | `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
 | `/ucp/vodorder/historyorders` | `c.api.ucp.vodorder->historyorders` | `UCPHandler.VODOrderHistoryOrders` | 已重构，对比通过；登录只读成功的历史求片记录 |
-| `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，求片金币扣减和助力写入成功分支暂未接管 |
+| `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->$action` | `UCPHandler.VODOrderCreate/VODOrderSupport` | 部分已重构；未登录、缺番号/名称、求片金币下限和缺失助力记录前置分支已迁移，求片金币扣减和助力写入成功分支暂未接管 |
 | `/vod/breaking` | `c.api.vod->breaking` | `VODHandler.Breaking` | 已重构，对比通过；公共只读每日爆料，返回当天 cateid=99 的 vodid/title |
 | `/vod/errorreport`、`/v2/vod/errorreport` | `c.api.vod->errorreport`、`c.apiv2.vod->errorreport` | `VODHandler.ErrorReport` | 已重构；视频报错反馈写入 `vod_errors`，不涉及金币、支付或播放权限 |
 
@@ -520,7 +527,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/minivod/reqlist` 的拉取/标记/广告副作用 | `c.api.minivod->reqlist` | 部分未重构；`pullViewLogs`、`mUpdate(showtype=1)` 和随机广告插入仍需单独迁移 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
-| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 未重构；金币打赏 |
+| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录分支已迁移，视频/作者只读校验、GET 初始化和金币打赏事务仍需迁移 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
 
 ### 用户账号
@@ -539,14 +546,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 部分未重构；`reqpay/pay12req` 失败分支、常见 public 成功回调文案和支付页面已迁移，钱包支付、第三方网关请求、订单状态写入和成功跳转仍需 provider 配置与网关接口 |
 | `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 未重构；已注册常见 provider 的失败分支，成功分支仍需先补 `SELECT ... FOR UPDATE` 锁单、幂等入账、`payment->doAction()` 和 provider 验签适配 |
-| `/respond/chan1` | `c.respond.chan1` | 未重构；不是普通支付回调，硬编码 secret，包含创建订单、充值入账和赠送 VIP |
+| `/respond/chan1` | `c.respond.chan1` | 部分未重构；token 校验失败分支已迁移，合法 token 后用户查询、套餐查询、下单、充值入账和赠送 VIP 仍需事务化迁移 |
 
 ### 个人中心
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录分支已迁移，会员升级和金币扣减成功分支仍需事务化迁移 |
-| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；邮箱/手机前置失败分支已迁移，资料修改、密码修改、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
+| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录分支已迁移，提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 未登录分支已迁移，金币兑换写入仍需迁移 |
@@ -571,14 +578,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 部分未重构；未登录分支已迁移，下分外部平台请求、金币增加和订单写入仍需迁移 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 部分未重构；未登录分支已迁移，外部平台进入游戏成功分支仍需迁移 |
 | `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；未登录分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
-| `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`） | `c.api.starlive->$action` | 未重构；剩余 `gameBet/gameWin/tryAgain/translate` 涉及下注、结算、翻译扣款或外部回调 |
+| `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`） | `c.api.starlive->$action` | 部分未重构；资产 action 的游客/未知用户/未知业务类型前置失败分支已迁移，重复订单查询、下注扣款、中奖加钱和钻石兑换事务仍需迁移 |
 | `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/bet`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 部分未重构；`bet` 前置失败分支已迁移，投注金币扣减、号码生成和订单写入成功分支仍需事务化迁移 |
 
 ### 社区、HGame、AI
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 未重构；上传、生成等依赖外部 AI 服务、Redis 锁和金豆扣减 |
+| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 部分未重构；upload/undress/delete 未登录分支已迁移，上传保存、R2、Redis 锁、第三方 AI、金豆扣减和删除写入仍需迁移 |
 
 ### 图片、附件和通配资源
 

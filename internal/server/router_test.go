@@ -186,6 +186,25 @@ func TestRespondFailureRoutes(t *testing.T) {
 	}
 }
 
+func TestRespondChan1InvalidToken(t *testing.T) {
+	router := newTestRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/respond/chan1", strings.NewReader("mobi=86.18812345678&token=bad"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 1 || body.ErrMsg != "校验失败" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestUserAuthEdgeRoutes(t *testing.T) {
 	router := newTestRouter()
 
@@ -202,6 +221,11 @@ func TestUserAuthEdgeRoutes(t *testing.T) {
 		"delete":      {path: "/delete", retcode: -9999, errmsg: "您还没有登录"},
 		"changePhone": {path: "/changePhone", retcode: -9999, errmsg: "请登录后操作"},
 		"taskInvite":  {path: "/ucp/task/invite", retcode: -9999, errmsg: "您还没有登录"},
+		"ucpProfile":  {path: "/ucp/user/profile", retcode: -9999, errmsg: "您还没有登录"},
+		"ucpPasswd":   {path: "/ucp/user/passwd", retcode: -9999, errmsg: "您还没有登录"},
+		"aiUpload":    {path: "/aiundress/upload", retcode: -1, errmsg: "请先登录"},
+		"aiUndress":   {path: "/aiundress/undress", retcode: -1, errmsg: "请先登录"},
+		"aiDelete":    {path: "/aiundress/delete", retcode: -1, errmsg: "请先登录"},
 	}
 	for name, tc := range cases {
 		rec := httptest.NewRecorder()
@@ -2508,6 +2532,24 @@ func TestMiniVODReqMediaRoutes(t *testing.T) {
 	}
 }
 
+func TestMiniVODThrowCoinRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/minivod/throwcoin/1", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 || body.ErrMsg != "需登录后方可使用投币功能" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestMiniVODReqListRoute(t *testing.T) {
 	router := newTestRouter()
 
@@ -2550,6 +2592,41 @@ func TestVODReqMediaRoutes(t *testing.T) {
 		}
 		if body.RetCode != 1 || body.ErrMsg != "记录不存在或已被删除" {
 			t.Fatalf("%s unexpected response %#v", path, body)
+		}
+	}
+}
+
+func TestStarLiveEdgeRoutes(t *testing.T) {
+	router := newTestRouter()
+	tests := []struct {
+		path string
+		body string
+		msg  string
+	}{
+		{path: "/starLive/gameBet", body: `{"memberId":"tourist-member-123456"}`, msg: "游客用户请先登录"},
+		{path: "/starLive/gameWin", body: `{"memberId":""}`, msg: "未知用户"},
+		{path: "/starLive/translate", body: `{"memberId":"tourist-member-123456"}`, msg: "游客用户请先登录"},
+		{path: "/starLive/tryAgain", body: `{"busiType":9}`, msg: "未知业务类型"},
+	}
+
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", tt.path, http.StatusOK, rec.Code)
+		}
+		var body struct {
+			Code int                    `json:"code"`
+			Data map[string]interface{} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", tt.path, err)
+		}
+		if body.Code != -1 || body.Data["msg"] != tt.msg {
+			t.Fatalf("%s unexpected response %#v", tt.path, body)
 		}
 	}
 }

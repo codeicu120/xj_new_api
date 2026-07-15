@@ -151,6 +151,20 @@ func (s *Service) Listing(ctx context.Context, token string, page int, module in
 	}, 0, "", nil
 }
 
+func (s *Service) RequireLoginEdge(ctx context.Context, token string, pendingMessage string) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "请先登录", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -1, "请先登录", nil
+	}
+	if pendingMessage == "" {
+		pendingMessage = "AI 成功分支暂未迁移"
+	}
+	return -1, pendingMessage, nil
+}
+
 func (s *Service) ModuleList(ctx context.Context) (domain.AIUndressExternalData, int, string, error) {
 	return s.externalRequest(ctx, "/cps/getModuleList", map[string]interface{}{})
 }
