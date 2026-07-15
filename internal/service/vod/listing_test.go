@@ -35,6 +35,18 @@ type fakeListingStore struct {
 	boughtCount         int
 	playLogCount        int
 	downLogCount        int
+	recordedPlay        *vodMediaRecord
+	recordedDown        *vodMediaRecord
+}
+
+type vodMediaRecord struct {
+	uid        int
+	sid        string
+	vodID      int
+	playIndex  int
+	deduct     int
+	updateTime bool
+	now        int64
 }
 
 type fakeM3U8Fetcher map[string]string
@@ -256,6 +268,16 @@ func (s *fakeListingStore) PlayLogCount(context.Context, int, string, int, int, 
 
 func (s *fakeListingStore) DownLogCount(context.Context, int, string, int, int, int64) (int, error) {
 	return s.downLogCount, nil
+}
+
+func (s *fakeListingStore) RecordVODPlay(_ context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	s.recordedPlay = &vodMediaRecord{uid: uid, sid: sid, vodID: vodID, playIndex: playIndex, deduct: deduct, updateTime: updateTime, now: now}
+	return nil
+}
+
+func (s *fakeListingStore) RecordVODDown(_ context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	s.recordedDown = &vodMediaRecord{uid: uid, sid: sid, vodID: vodID, playIndex: playIndex, deduct: deduct, updateTime: updateTime, now: now}
+	return nil
 }
 
 func TestListingServiceSearchIndex(t *testing.T) {
@@ -642,6 +664,7 @@ func TestReqPlayFreeVOD(t *testing.T) {
 		favoriteCount: 1,
 	}
 	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
 
 	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
 	if err != nil {
@@ -652,6 +675,9 @@ func TestReqPlayFreeVOD(t *testing.T) {
 	}
 	if data["isfavorite"] != 1 || data["iszan"] != 0 {
 		t.Fatalf("flags=%#v", data)
+	}
+	if store.recordedPlay == nil || store.recordedPlay.uid != 5 || store.recordedPlay.sid != "s" || store.recordedPlay.vodID != 100 || store.recordedPlay.updateTime {
+		t.Fatalf("recorded play = %#v", store.recordedPlay)
 	}
 }
 
@@ -677,6 +703,7 @@ func TestReqDownFreeVOD(t *testing.T) {
 		"view_price": "0",
 	}}
 	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
 
 	data, retcode, errmsg, err := service.ReqDown(context.Background(), "token", 100, 0)
 	if err != nil {
@@ -684,6 +711,42 @@ func TestReqDownFreeVOD(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "免费观看提供下载" || data["httpurl"] != "https://cover.example.test/d/file.mp4" {
 		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.recordedDown == nil || store.recordedDown.uid != 5 || store.recordedDown.sid != "s" || store.recordedDown.vodID != 100 || store.recordedDown.updateTime {
+		t.Fatalf("recorded down = %#v", store.recordedDown)
+	}
+}
+
+func TestReqPlayWithinPermissionRecordsWithUpdateTime(t *testing.T) {
+	store := &fakeListingStore{
+		vodByID: map[string]interface{}{
+			"vodid":      "100",
+			"showtype":   "0",
+			"play_url":   "p/index.m3u8",
+			"play_srvid": "9",
+			"view_price": "10",
+			"isvip":      "0",
+		},
+		playLogCount: 0,
+	}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{
+		"uid": "5",
+		"sid": "s",
+		"perms": map[string]interface{}{
+			"max.vod.play.daynum": "2",
+		},
+	}})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "用户权限范围内免费播放" || data["httpurl"] != "https://cover.example.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.recordedPlay == nil || !store.recordedPlay.updateTime || store.recordedPlay.deduct != 0 || store.recordedPlay.now != 1770000000 {
+		t.Fatalf("recorded play = %#v", store.recordedPlay)
 	}
 }
 

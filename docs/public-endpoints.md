@@ -62,7 +62,7 @@
 | `/v2/amazing/listing`、`/v2/amazing/recommend`、`/v2/amazing/hot`、`/v2/amazing/latest` | `c.apiv2.amazing->listing` | 本轮完成 | 动态 action 路由组，支持 `-params`，迁移精彩推荐列表筛选、排序和分页。 |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | `c.api.vod->listing` | 本轮完成 | 非 v2 动态 action 路由组，支持 `-params`；复用 VOD 列表服务并对齐 PHP 分页 selector。 |
 | `/vod/show/:vodid` | `c.api.vod->show` | 本轮完成 | 视频详情只读接口，迁移主视频、父级分类、相似视频和猜你喜欢；随机列表按 shape 对比。 |
-| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 本轮完成 | 长视频播放/下载地址请求的可控路径；记录/购买/权限/地址错误、免费/限免、已观看和权限额度内提供地址已接管，扣金币、日志和奖励分支后续事务化迁移。 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 本轮完成 | 长视频播放/下载地址请求的可控路径；记录/购买/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址已接管，非扣费成功路径写播放/下载日志与 `vods` 计数；超限扣金币、扣费日志和奖励分支后续事务化迁移。 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | 本轮完成 | m3u8 试看输出；HTTP 拉取通过 fetcher 注入，测试用 fixture，不依赖真实 CDN。 |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | `c.api.sendfile->play/down` | 本轮完成 | 兼容旧 PHP 空壳行为：play 只做登录和 vodid 存在性检查，成功空 200；down 空 200。 |
 | `/comment/listing-:params` | `c.api.comment->listing` | 本轮完成 | 评论列表公共只读接口，支持评论树、排序、分页和用户头像/VIP 标识。 |
@@ -172,5 +172,5 @@
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数和 topup 余额不足前置失败已迁；剩余游戏资产、外部平台调用需要登录、事务、灰度和回滚策略。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
 | `/minivod/throwcoin` 成功路径、`/minivod/parselong` 成功路径，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支、长视频地址转换和 parselong 前置错误已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
-| `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |
+| `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余涉及超限扣金币、扣费日志和奖励。 |
 | `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询、未登录失败和 delete 空记录 OK 分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、删除外部资源和金豆扣减。 |

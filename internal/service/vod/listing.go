@@ -66,6 +66,8 @@ type ListingStore interface {
 	BoughtCount(ctx context.Context, uid int, vodID int) (int, error)
 	PlayLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error)
 	DownLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error)
+	RecordVODPlay(ctx context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error
+	RecordVODDown(ctx context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error
 }
 
 type AuthStore interface {
@@ -662,6 +664,9 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 	now := s.now().Unix()
 	if price == 0 || (atoi64(str(row["free_sdate"])) < now && now < atoi64(str(row["free_edate"]))) {
 		data["httpurl"] = httpURL
+		if err := s.recordVODMedia(ctx, user, vodID, playIndex, play, false, now); err != nil {
+			return nil, -1, vodMediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			if price == 0 {
@@ -689,6 +694,9 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 	}
 	if watched > 0 {
 		data["httpurl"] = httpURL
+		if err := s.recordVODMedia(ctx, user, vodID, playIndex, play, false, now); err != nil {
+			return nil, -1, vodMediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			return data, 0, "本周已观看过继续提供", nil
@@ -711,6 +719,9 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 	}
 	if actionDayCount < getVODPermInt(user["perms"], dayKey) {
 		data["httpurl"] = httpURL
+		if err := s.recordVODMedia(ctx, user, vodID, playIndex, play, true, now); err != nil {
+			return nil, -1, vodMediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			if atoi(str(user["uid"])) > 0 {
@@ -734,6 +745,15 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 		return data, 4, "今日下载次数已用完，是否去免费增加次数？", nil
 	}
 	return data, 3, "今日下载次数已用完，请点击免费注册会员获取更多影片下载次数。", nil
+}
+
+func (s *ListingService) recordVODMedia(ctx context.Context, user map[string]interface{}, vodID int, playIndex int, play bool, updateTime bool, now int64) error {
+	uid := atoi(str(user["uid"]))
+	sid := str(user["sid"])
+	if play {
+		return s.store.RecordVODPlay(ctx, uid, sid, vodID, playIndex, 0, updateTime, now)
+	}
+	return s.store.RecordVODDown(ctx, uid, sid, vodID, playIndex, 0, updateTime, now)
 }
 
 func (s *ListingService) Breaking(ctx context.Context) (map[string]interface{}, int, string, error) {

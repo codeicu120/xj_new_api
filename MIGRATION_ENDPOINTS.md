@@ -333,7 +333,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/latest` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/v2/vod/latest-:params` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/v2/vod/show/:vodid` | `c.apiv2.vod->show` | `VODHandler.Show` | 已重构，对比通过；复用视频详情实现 |
-| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；复用普通视频播放/下载地址请求实现，记录/购买/权限/地址错误、免费/限免和额度内分支可用，扣金币、日志和奖励分支暂不写资产 |
+| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；复用普通视频播放/下载地址请求实现，记录/购买/权限/地址错误、免费/限免、已观看/下载和额度内分支可用，非扣费成功路径写播放/下载日志与 `vods` 计数；超限扣金币、扣费日志和奖励分支暂不写资产 |
 | `/v2/vod/buy/:vodid` | `c.apiv2.vod->buy` | `BoughtHandler.Buy` | 已重构；复用购买付费影片事务，返回码按 v2 PHP：未登录 `-9999`、余额不足 `4`、不存在 `-1` |
 | `/v2/minifavorite`、`/v2/minifavorite/index` | `c.apiv2.minifavorite->index` | `handler.EmptyHTML` | 已重构；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/v2/minifavorite/listing` | `c.apiv2.minifavorite->listing` | `FavoriteHandler.MiniV2Listing` | 已重构；登录只读小视频收藏，支持 `wd` 搜索，rows 按 v2 PHP 包装为 `{vodrow,user}` |
@@ -354,7 +354,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/latest-:params` | `c.api.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/vod/show/:vodid` | `c.api.vod->show` | `VODHandler.Show` | 已重构，详情主字段对比通过；相似/喜欢随机列表按 shape 对比 |
 | `/vod/up/:vodid`、`/vod/down/:vodid`、`/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | `c.api.vod/apiv2.vod->up/down` | `VODHandler.Up/Down` | 已重构；普通视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
-| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/购买/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，扣金币、日志写入和奖励分支暂不写资产 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/购买/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，非扣费成功路径写播放/下载日志与 `vods` 计数；超限扣金币、扣费日志和奖励分支暂不写资产 |
 | `/vod/buy/:vodid` | `c.api.vod->buy` | `BoughtHandler.Buy` | 已重构；复用购买付费影片事务，金豆扣减和已购写入保持同一事务 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | `VODHandler.Preview` | 已重构，m3u8 输出对比通过 |
 | `/sendfile/play/:file` | `c.api.sendfile->play` | `SendfileHandler.Play` | 已重构，按旧 PHP 空壳行为对齐 |
@@ -531,8 +531,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的扣费/日志/奖励分支 | `c.api.vod->reqplay/reqdown` | 部分未重构；超限扣金币、播放/下载日志写入、播放/下载任务奖励、推荐奖励仍需事务化迁移 |
-| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 阻断未重构；剩余 `reqplay/reqdown` 资产副作用涉及用户/游客扣金币、播放/下载日志、任务奖励、推广奖励、Redis 频控和 keylimits，需完整资产事务设计后迁移 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的扣费/奖励分支 | `c.api.vod->reqplay/reqdown` | 部分未重构；免费/限免、已观看/下载和权限额度内非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余超限扣金币、扣费日志、播放/下载任务奖励、推荐奖励仍需事务化迁移 |
+| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 阻断未重构；剩余 `reqplay/reqdown` 资产副作用涉及用户/游客扣金币、扣费日志、任务奖励、推广奖励、Redis 频控和 keylimits，需完整资产事务设计后迁移 |
 
 ### 小视频、作者页
 

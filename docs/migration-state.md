@@ -183,7 +183,7 @@
 - Go: `internal/handler.VODHandler.ReqPlay/ReqDown`
 - Service: `internal/service/vod.ListingService`
 - 兼容规则：复用 `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的可控路径迁移；v2 PHP 当前 `ver` 默认仍为 0，稳定错误、权限、免费/限免和额度内分支按普通视频接口返回 legacy JSON。
-- 风险边界：扣金币、播放/下载日志写入和奖励分支仍随普通视频接口保留在未重构高风险清单。
+- 风险边界：非扣费成功路径的播放/下载日志与 `vods` 计数随普通视频接口迁移；超限扣金币、扣费日志和奖励分支仍随普通视频接口保留在未重构高风险清单。
 - 测试：`go test ./internal/service/vod ./internal/server` 通过；server 测试覆盖 `/v2/vod/reqplay/0` 和 `/v2/vod/reqdown/0` 已走 Go handler；PHP-Go live 对比两个路径的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
 ### `/v2/minifavorite`、`/v2/minifavorite/index`、`/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove`
@@ -236,10 +236,11 @@
 - Service: `internal/service/vod.ListingService`
 - Repository: `internal/repository/vod.ListingRepository`
 - Auth: 登录用户通过 `x-cookie-auth`/`xxx_api_auth` 读取用户和权限；游客必须有 sid，否则保持旧 PHP `客户端游客请先携带信息`。
-- DB: 读取 `vods(showtype=0)`、`vod_servers`、`vod_favorites`、`vod_updowns`、`user_bought`、`vod_playlogs_week/vod_guest_playlogs`、`vod_downlogs/vod_guest_downlogs`；只读判断购买、已播放/已下载和当日额度。
-- 兼容规则：已接管记录不存在、付费未购买、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全。
-- 风险边界：本批不执行金币扣减、播放/下载日志写入、播放 10 部奖励、下载任务奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
-- 测试：`go test ./internal/service/vod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝和免费下载；PHP-Go live 对比 `/vod/reqplay/0`、`/vod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
+- DB: 读取 `vods(showtype=0)`、`vod_servers`、`vod_favorites`、`vod_updowns`、`user_bought`、`vod_playlogs_week/vod_guest_playlogs`、`vod_downlogs/vod_guest_downlogs`；判断购买、已播放/已下载和当日额度；免费/限免、已观看/下载和权限额度内非扣费成功路径写 `vod_playlogs/vod_playlogs_week/vod_guest_playlogs` 或 `vod_downlogs/vod_guest_downlogs`，并递增 `vods.playcount_*`/`vods.downcount_*`。
+- 兼容规则：已接管记录不存在、付费未购买、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全；免费/限免和已观看/下载复用 PHP `incPlay/incDown(..., deduct=0, updateTime=0)` 行为，额度内复用 `deduct=0, updateTime=1` 行为。
+- 风险边界：本批不执行超限金币扣减、扣费日志、播放 10 部奖励、下载任务奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
+- Subagent：`Anscombe` 只读核对 PHP `incPlay/incDown` 参数，确认非扣费成功路径均应写日志并递增 `vods` 计数；超额度扣金币和奖励可继续暂缓。
+- 测试：`go test ./internal/service/vod ./internal/repository/vod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝、免费下载和权限额度内播放记录 `updateTime`；PHP-Go live 对比 `/vod/reqplay/0`、`/vod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
 ### `/vod/preView/:vodid/index.m3u8`
 
@@ -1721,5 +1722,5 @@
 
 ### VOD 与 Respond 阻断说明
 
-- `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 剩余资产副作用经 `Lorentz` 只读核对，涉及用户/游客扣金币、播放/下载日志、任务奖励、推广奖励、Redis 频控、keylimits 和多处非统一事务；当前不作为普通路由补齐。
+- `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余资产副作用经 `Lorentz`/`Anscombe` 只读核对，涉及用户/游客扣金币、扣费日志、任务奖励、推广奖励、Redis 频控、keylimits 和多处非统一事务；当前不作为普通路由补齐。
 - `/respond/:action` 成功验签/入账经 `Heisenberg` 只读核对，涉及数十个 provider 的 MD5/RSA/raw JSON 验签、缺失密钥配置注入、`trade_payments FOR UPDATE` 锁单、账户入账和 `payment->doAction()` 二段事务；没有安全配置和统一事务接口前不能硬迁成功分支。

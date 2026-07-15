@@ -562,6 +562,187 @@ func (r *ListingRepository) DownLogCount(ctx context.Context, uid int, sid strin
 	return r.vodGuestLogCount(ctx, "vod_guest_downlogs", sid, vodID, playIndex, "downtime", since)
 }
 
+func (r *ListingRepository) RecordVODPlay(ctx context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin vod play log: %w", err)
+	}
+	defer tx.Rollback()
+	if err := incrementVODMediaCounter(ctx, tx, vodID, "playcount", now); err != nil {
+		return fmt.Errorf("increment vod play counter: %w", err)
+	}
+	if uid > 0 {
+		if err := recordUserVODPlay(ctx, tx, uid, vodID, playIndex, deduct, updateTime, now); err != nil {
+			return fmt.Errorf("record user vod play: %w", err)
+		}
+	} else if strings.TrimSpace(sid) != "" {
+		if err := recordGuestVODMedia(ctx, tx, "vod_guest_playlogs", "sid", sid, vodID, playIndex, "playtime", deduct, updateTime, now); err != nil {
+			return fmt.Errorf("record guest vod play: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit vod play log: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) RecordVODDown(ctx context.Context, uid int, sid string, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin vod down log: %w", err)
+	}
+	defer tx.Rollback()
+	if err := incrementVODMediaCounter(ctx, tx, vodID, "downcount", now); err != nil {
+		return fmt.Errorf("increment vod down counter: %w", err)
+	}
+	if uid > 0 {
+		if err := recordUserVODMedia(ctx, tx, "vod_downlogs", "uid", uid, vodID, playIndex, "downtime", deduct, updateTime, now); err != nil {
+			return fmt.Errorf("record user vod down: %w", err)
+		}
+	} else if strings.TrimSpace(sid) != "" {
+		if err := recordGuestVODMedia(ctx, tx, "vod_guest_downlogs", "sid", sid, vodID, playIndex, "downtime", deduct, updateTime, now); err != nil {
+			return fmt.Errorf("record guest vod down: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit vod down log: %w", err)
+	}
+	return nil
+}
+
+func incrementVODMediaCounter(ctx context.Context, tx *sql.Tx, vodID int, prefix string, now int64) error {
+	if prefix != "playcount" && prefix != "downcount" {
+		return fmt.Errorf("invalid vod media counter %s", prefix)
+	}
+	lastColumn := prefix + "_lasttime"
+	var previous int64
+	if err := tx.QueryRowContext(ctx, "SELECT "+lastColumn+" FROM vods WHERE vodid=?", vodID).Scan(&previous); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	monthValue := prefix + "_month+1"
+	if !sameMonth(previous, now) {
+		monthValue = "1"
+	}
+	dayValue := prefix + "_day+1"
+	if !sameDay(previous, now) {
+		dayValue = "1"
+	}
+	weekValue := prefix + "_week+1"
+	if !sameWeek(previous, now) {
+		weekValue = "1"
+	}
+	_, err := tx.ExecContext(ctx,
+		"UPDATE vods SET "+lastColumn+"=?, "+prefix+"_total="+prefix+"_total+1, "+prefix+"_month="+monthValue+", "+prefix+"_day="+dayValue+", "+prefix+"_week="+weekValue+" WHERE vodid=?",
+		now,
+		vodID,
+	)
+	return err
+}
+
+func recordUserVODPlay(ctx context.Context, tx *sql.Tx, uid int, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	logID, exists, err := vodMediaLogID(ctx, tx, "vod_playlogs", "uid", uid, vodID, playIndex)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		result, err := tx.ExecContext(ctx, "INSERT INTO vod_playlogs(uid, vodid, playindex, playtime, deduct) VALUES(?, ?, ?, ?, ?)", uid, vodID, playIndex, now, deduct)
+		if err != nil {
+			return err
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		logID = int(id)
+		_, err = tx.ExecContext(ctx, "INSERT INTO vod_playlogs_week(logid, uid, vodid, playindex, playtime, deduct) VALUES(?, ?, ?, ?, ?, ?)", logID, uid, vodID, playIndex, now, deduct)
+		return err
+	}
+	if err := updateVODMediaLog(ctx, tx, "vod_playlogs", logID, "playtime", deduct, updateTime, now); err != nil {
+		return err
+	}
+	return upsertVODPlayWeek(ctx, tx, logID, uid, vodID, playIndex, deduct, updateTime, now)
+}
+
+func upsertVODPlayWeek(ctx context.Context, tx *sql.Tx, logID int, uid int, vodID int, playIndex int, deduct int, updateTime bool, now int64) error {
+	if logID <= 0 {
+		return nil
+	}
+	sets := "deduct=?"
+	args := []interface{}{deduct}
+	if updateTime {
+		sets = "playtime=?, deduct=?"
+		args = []interface{}{now, deduct}
+	}
+	args = append(args, logID)
+	result, err := tx.ExecContext(ctx, "UPDATE vod_playlogs_week SET "+sets+" WHERE logid=?", args...)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	_, err = tx.ExecContext(ctx, "INSERT INTO vod_playlogs_week(logid, uid, vodid, playindex, playtime, deduct) VALUES(?, ?, ?, ?, ?, ?)", logID, uid, vodID, playIndex, now, deduct)
+	return err
+}
+
+func recordUserVODMedia(ctx context.Context, tx *sql.Tx, table string, actorColumn string, actorID int, vodID int, playIndex int, timeColumn string, deduct int, updateTime bool, now int64) error {
+	logID, exists, err := vodMediaLogID(ctx, tx, table, actorColumn, actorID, vodID, playIndex)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		_, err = tx.ExecContext(ctx, "INSERT INTO "+table+"("+actorColumn+", vodid, playindex, "+timeColumn+", deduct) VALUES(?, ?, ?, ?, ?)", actorID, vodID, playIndex, now, deduct)
+		return err
+	}
+	return updateVODMediaLog(ctx, tx, table, logID, timeColumn, deduct, updateTime, now)
+}
+
+func recordGuestVODMedia(ctx context.Context, tx *sql.Tx, table string, actorColumn string, actorID string, vodID int, playIndex int, timeColumn string, deduct int, updateTime bool, now int64) error {
+	logID, exists, err := vodMediaLogID(ctx, tx, table, actorColumn, actorID, vodID, playIndex)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		_, err = tx.ExecContext(ctx, "INSERT INTO "+table+"("+actorColumn+", vodid, playindex, "+timeColumn+", deduct) VALUES(?, ?, ?, ?, ?)", actorID, vodID, playIndex, now, deduct)
+		return err
+	}
+	return updateVODMediaLog(ctx, tx, table, logID, timeColumn, deduct, updateTime, now)
+}
+
+func vodMediaLogID(ctx context.Context, tx *sql.Tx, table string, actorColumn string, actorID interface{}, vodID int, playIndex int) (int, bool, error) {
+	var logID int
+	err := tx.QueryRowContext(ctx, "SELECT logid FROM "+table+" WHERE "+actorColumn+"=? AND vodid=? AND playindex=? LIMIT 1", actorID, vodID, playIndex).Scan(&logID)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return logID, true, nil
+}
+
+func updateVODMediaLog(ctx context.Context, tx *sql.Tx, table string, logID int, timeColumn string, deduct int, updateTime bool, now int64) error {
+	if updateTime {
+		_, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+timeColumn+"=?, deduct=? WHERE logid=?", now, deduct, logID)
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "UPDATE "+table+" SET deduct=? WHERE logid=?", deduct, logID)
+	return err
+}
+
 func (r *ListingRepository) vodLogCount(ctx context.Context, table string, actorColumn string, actorID int, vodID int, playIndex int, timeColumn string, since int64) (int, error) {
 	query := "SELECT COUNT(*) FROM " + table + " WHERE " + actorColumn + "=?"
 	args := []interface{}{actorID}
