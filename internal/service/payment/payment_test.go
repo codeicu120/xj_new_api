@@ -154,12 +154,121 @@ func TestReqPayRejectsDisallowedKnownPayway(t *testing.T) {
 		channels: []map[string]interface{}{},
 	})
 
-	retcode, errmsg, err := service.ReqPay(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 10)
+	_, retcode, errmsg, err := service.ReqPay(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 10)
 	if err != nil {
 		t.Fatalf("reqpay: %v", err)
 	}
 	if retcode != -1 || errmsg != "此项目不能使用此支付方式" {
 		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
+func TestReqPayUnknownPaywayReturnsSelectionData(t *testing.T) {
+	service := NewService(fakeStore{
+		user: map[string]interface{}{"uid": "5"},
+		payment: map[string]interface{}{
+			"payid":      "10",
+			"paytype":    "8",
+			"payway":     "legacy",
+			"paycode":    "manual",
+			"itemname":   "60天",
+			"trx_amount": "6800",
+			"pay_amount": "6800",
+			"uid":        "5",
+			"createtime": "9999999999",
+			"ispaid":     "0",
+			"nocheck":    "0",
+		},
+		channels: []map[string]interface{}{
+			{
+				"channame": "余额",
+				"payways": []map[string]interface{}{
+					{
+						"payname":        "余额支付",
+						"paycode":        "walletpay.walletpay",
+						"trxamount_min":  "100",
+						"trxamount_max":  "9999",
+						"allow_paytypes": map[int][]string{8: {"ALL"}},
+					},
+					{
+						"payname":        "游戏支付",
+						"paycode":        "game.pay",
+						"allow_paytypes": map[int][]string{13: {"ALL"}},
+					},
+				},
+			},
+		},
+	})
+
+	data, retcode, errmsg, err := service.ReqPay(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 10)
+	if err != nil {
+		t.Fatalf("reqpay: %v", err)
+	}
+	if retcode != 1 || errmsg != "请选择支持的支付方式" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	payrow := data["payrow"].(map[string]interface{})
+	if payrow["paytype"] != "购买套餐" || payrow["payway"] != "legacy" {
+		t.Fatalf("payrow = %#v", payrow)
+	}
+	payments := data["payments"].([]map[string]interface{})
+	if len(payments) != 1 {
+		t.Fatalf("payments = %#v", payments)
+	}
+	payways := payments[0]["payways"].([]map[string]interface{})
+	if len(payways) != 1 || payways[0]["paycode"] != "walletpay.walletpay" {
+		t.Fatalf("payways = %#v", payways)
+	}
+}
+
+func TestReqPayWalletPayPrechecks(t *testing.T) {
+	tests := []struct {
+		name   string
+		user   map[string]interface{}
+		payUID string
+		code   int
+		msg    string
+	}{
+		{
+			name:   "guest",
+			user:   map[string]interface{}{"uid": "0"},
+			payUID: "0",
+			code:   -9999,
+			msg:    "您还没有登录",
+		},
+		{
+			name:   "owner",
+			user:   map[string]interface{}{"uid": "6"},
+			payUID: "5",
+			code:   -1,
+			msg:    "此项目需要本人操作",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewService(fakeStore{
+				user: tt.user,
+				payment: map[string]interface{}{
+					"payid":      "10",
+					"paytype":    "8",
+					"payway":     "walletpay",
+					"paycode":    "walletpay",
+					"uid":        tt.payUID,
+					"createtime": "9999999999",
+					"ispaid":     "0",
+					"nocheck":    "1",
+				},
+			})
+
+			_, retcode, errmsg, err := service.ReqPay(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 10)
+			if err != nil {
+				t.Fatalf("reqpay: %v", err)
+			}
+			if retcode != tt.code || errmsg != tt.msg {
+				t.Fatalf("unexpected response %d %q", retcode, errmsg)
+			}
+		})
 	}
 }
 

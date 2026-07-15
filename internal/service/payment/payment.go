@@ -42,38 +42,57 @@ func (s *Service) FailedMessage(_ context.Context) string {
 	return "支付失败回调"
 }
 
-func (s *Service) ReqPay(ctx context.Context, token string, payID int) (int, string, error) {
+func (s *Service) ReqPay(ctx context.Context, token string, payID int) (map[string]interface{}, int, string, error) {
 	if s.store == nil {
-		return -1, "记录不存在或已支付", nil
+		return nil, -1, "记录不存在或已支付", nil
 	}
 	user, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -1, "请求支付失败", err
+		return nil, -1, "请求支付失败", err
 	}
 	payrow, err := s.store.PaymentByID(ctx, payID)
 	if err != nil {
-		return -1, "请求支付失败", err
+		return nil, -1, "请求支付失败", err
 	}
 	if len(payrow) == 0 || atoi(payrow["ispaid"]) > 0 {
-		return -1, "记录不存在或已支付", nil
+		return nil, -1, "记录不存在或已支付", nil
 	}
 	if s.now().Unix() > int64(atoi(payrow["createtime"])+3600) {
-		return -1, "支付已过期", nil
+		return nil, -1, "支付已过期", nil
 	}
 	if atoi(payrow["uid"]) > 0 && atoi(user["uid"]) != atoi(payrow["uid"]) {
-		return -1, "此项目需要本人操作", nil
+		return nil, -1, "此项目需要本人操作", nil
 	}
 	payway := str(payrow["payway"])
+	if payway == "walletpay" {
+		if atoi(user["uid"]) == 0 {
+			return nil, -9999, "您还没有登录", nil
+		}
+		if atoi(user["uid"]) != atoi(payrow["uid"]) {
+			return nil, -1, "此项目需要本人支付", nil
+		}
+	}
 	if knownReqPayPayway(payway) && atoi(payrow["nocheck"]) == 0 {
 		channels, err := s.store.PaymentChannels(ctx, false)
 		if err != nil {
-			return -1, "请求支付失败", err
+			return nil, -1, "请求支付失败", err
 		}
 		if !paymentCodeAllowed(channels, atoi(payrow["paytype"]), payway+"."+str(payrow["paycode"])) {
-			return -1, "此项目不能使用此支付方式", nil
+			return nil, -1, "此项目不能使用此支付方式", nil
 		}
 	}
-	return -1, "支付请求成功分支暂未迁移", nil
+	if !knownReqPayPayway(payway) {
+		channels, err := s.store.PaymentChannels(ctx, false)
+		if err != nil {
+			return nil, -1, "请求支付失败", err
+		}
+		rows := processPaymentRows([]map[string]interface{}{payrow})
+		return map[string]interface{}{
+			"payrow":   rows[0],
+			"payments": filterPaymentChannels(channels, atoi(payrow["paytype"])),
+		}, 1, "请选择支持的支付方式", nil
+	}
+	return nil, -1, "支付请求成功分支暂未迁移", nil
 }
 
 func (s *Service) PayErrorHTML(_ context.Context, errmsg string) string {

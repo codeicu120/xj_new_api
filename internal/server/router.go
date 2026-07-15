@@ -56,6 +56,7 @@ import (
 	openService "xj_comp/internal/service/open"
 	paymentService "xj_comp/internal/service/payment"
 	picService "xj_comp/internal/service/pic"
+	respondService "xj_comp/internal/service/respond"
 	sendfileService "xj_comp/internal/service/sendfile"
 	soService "xj_comp/internal/service/so"
 	starliveService "xj_comp/internal/service/starlive"
@@ -156,7 +157,7 @@ func NewRouter(opts Options) *gin.Engine {
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).WithExternalClient(aiundressExternalClient))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
-	respondHandler := handler.NewRespondHandler()
+	respondHandler := handler.NewRespondHandler(respondService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))

@@ -234,6 +234,20 @@ func (r *Repository) PackageRows(ctx context.Context, kind string) ([]map[string
 	return scanRows(rows)
 }
 
+func (r *Repository) VIPPackageByID(ctx context.Context, pkgID int) (map[string]interface{}, error) {
+	if r.db == nil || pkgID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM trade_vippkgs WHERE pkgid=?", pkgID)
+	if err != nil {
+		return nil, fmt.Errorf("query vip package by id: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
 func (r *Repository) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{}, nil
 }
@@ -423,6 +437,17 @@ func (r *Repository) CountPayments(ctx context.Context, uid int) (int, error) {
 	var total int
 	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM trade_payments WHERE 1=1 AND uid=?", uid).Scan(&total); err != nil {
 		return 0, fmt.Errorf("count payments: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) CountPaymentsByUIDPayTypePayway(ctx context.Context, uid int, payType int, payway string) (int, error) {
+	if r.db == nil || uid <= 0 || payType <= 0 || strings.TrimSpace(payway) == "" {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM trade_payments WHERE 1=1 AND uid=? AND paytype=? AND payway=?", uid, payType, payway).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count payments by uid paytype payway: %w", err)
 	}
 	return total, nil
 }

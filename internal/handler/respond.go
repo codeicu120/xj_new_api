@@ -8,12 +8,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xj_comp/internal/legacyjson"
+	respondService "xj_comp/internal/service/respond"
 )
 
-type RespondHandler struct{}
+type RespondHandler struct {
+	service *respondService.Service
+}
 
-func NewRespondHandler() *RespondHandler {
-	return &RespondHandler{}
+func NewRespondHandler(service *respondService.Service) *RespondHandler {
+	return &RespondHandler{service: service}
 }
 
 func (h *RespondHandler) Failed(text string) gin.HandlerFunc {
@@ -33,5 +36,14 @@ func (h *RespondHandler) Chan1(c *gin.Context) {
 		c.JSON(http.StatusOK, legacyjson.Response{RetCode: 1, ErrMsg: "校验失败"})
 		return
 	}
-	c.JSON(http.StatusOK, legacyjson.Response{RetCode: -1, ErrMsg: "chan1 成功分支暂未迁移"})
+	if h.service == nil {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: -1, ErrMsg: "chan1 成功分支暂未迁移"})
+		return
+	}
+	retcode, errmsg, err := h.service.Chan1(c.Request.Context(), mobi)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 }

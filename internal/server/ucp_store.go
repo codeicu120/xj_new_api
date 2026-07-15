@@ -103,6 +103,18 @@ func (s ucpStore) CountPayments(ctx context.Context, uid int) (int, error) {
 	return s.ucp.CountPayments(ctx, uid)
 }
 
+func (s ucpStore) UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error) {
+	return s.user.UserByMobi(ctx, mobi)
+}
+
+func (s ucpStore) CountPaymentsByUIDPayTypePayway(ctx context.Context, uid int, payType int, payway string) (int, error) {
+	return s.ucp.CountPaymentsByUIDPayTypePayway(ctx, uid, payType, payway)
+}
+
+func (s ucpStore) VIPPackageByID(ctx context.Context, pkgID int) (map[string]interface{}, error) {
+	return s.ucp.VIPPackageByID(ctx, pkgID)
+}
+
 func (s ucpStore) Payments(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.Payments(ctx, uid, page, pageSize)
 }

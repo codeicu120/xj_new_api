@@ -1585,3 +1585,13 @@
 - Go: `internal/service/payment.Service.ReqPay`、`knownReqPayPayway`、`paymentCodeAllowed`。
 - 兼容规则：只在已知 payway 且进入 provider/wallet 请求前执行 allow 校验；unknown payway 的 `retcode=1` + `payrow/payments` 需要扩大 handler/service 返回 data，暂未接管。钱包支付、第三方网关请求、订单状态写入和支付成功跳转仍未接管。
 - 测试：`go test ./internal/service/payment ./internal/server` 通过。
+
+### Payment/Respond 只读失败分支补齐
+
+- 已迁移：`/payment/reqpay` unknown payway 分支，订单有效、未支付、未过期和本人校验通过后返回 `retcode=1 errmsg=请选择支持的支付方式`，并带 `data.payrow/payments`；`walletpay` 在订单不绑定用户时补齐未登录 `retcode=-9999 errmsg=您还没有登录`。
+- 已迁移：`/respond/chan1` 合法 token 后的用户不存在、已送过会员、套餐不存在或停用分支。纯数字 `mobi` 会按 PHP 规则补 `86.` 后查用户。
+- PHP: `src/c/api/payment.php::reqpay/_walletpay`、`src/c/respond/chan1.php::index`。
+- Go: `internal/service/payment.Service.ReqPay`、`internal/handler.PaymentHandler.ReqPay`、`internal/service/respond.Service.Chan1`、`internal/handler.RespondHandler.Chan1`、`internal/repository/ucp.Repository`。
+- 兼容规则：只读分支止步于 provider/wallet 请求、`payment->save()`、账户锁、支付记录更新和 `payment->doAction()` 之前；真实支付通道数据仍由 `PaymentChannels` 仓储接口提供，本地空实现可能返回 `payments=[]`，不伪造生产配置。
+- Subagent：`Newton` 核对 payment/respond 可迁分支；`Bacon` 核对账号流剩余验证码/注销顺序；`Aquinas` 核对 UCP/game/media/AI 剩余低风险候选，后续优先考虑 invite bind、game topup 余额不足、onego bet 只读失败、UCP 提现/套餐/求片前置失败等。
+- 测试：`go test ./internal/service/respond ./internal/service/payment ./internal/handler ./internal/server` 通过。

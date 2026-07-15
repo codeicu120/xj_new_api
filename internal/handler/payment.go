@@ -87,18 +87,18 @@ func (h *PaymentHandler) Failed(c *gin.Context) {
 
 func (h *PaymentHandler) ReqPay(c *gin.Context) {
 	payID, _ := strconv.Atoi(inputValue(c, "payid"))
-	retcode, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
+	data, retcode, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
 		return
 	}
-	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
 }
 
 func (h *PaymentHandler) Pay12Req(c *gin.Context) {
 	payID, _ := strconv.Atoi(inputValue(c, "payid"))
-	_, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
+	_, _, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.Data(http.StatusInternalServerError, "text/html; charset=utf-8", []byte(""))
