@@ -1054,6 +1054,17 @@
 - 兼容规则：保留 PHP 的禁言、昵称数字异常、1-30 字长度、字符/标点/空白/换行数量、父评论、深度和 10 分钟相似评论校验；成功评论 `showtype=4` 等待后台审核，返回 `retcode=0`、`errmsg=""`。
 - 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、内容长度、重复内容和成功写入字段，路由测试覆盖未登录错误壳；PHP-Go live 对比 `/community/comment?tid=9&content=hello` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
 
+### `/community/post`
+
+- PHP: `c.api.topic->post`
+- Go: `internal/handler.CommunityHandler.Post`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 必须登录，未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。
+- DB: 无文件成功分支写入 `topics(category_id,title,author,ip,content,tags,summary,created_at,updated_at)`。
+- 兼容规则：保留 PHP 的禁言、昵称数字异常、主题 1-30 字、内容非空、标题/内容字符校验；成功返回 `retcode=0`、`errmsg=""`。图片上传保存暂未接管；PHP 会先写主题再检查上传数量，Go 为避免半成品主题，在文件数超过 3 时写入前返回 `最多允许上传3张图片`。
+- 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、标题校验、文件数限制和无文件成功写入字段，路由测试覆盖未登录错误壳；PHP-Go live 对比 `/community/post?title=a&content=b` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/getGlobalData`
 
 - PHP: `c.api.index->getGlobalData`

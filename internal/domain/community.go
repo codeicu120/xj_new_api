@@ -30,3 +30,15 @@ type CommunityCommentCreateInput struct {
 	IP       string
 	ShowType int
 }
+
+type CommunityTopicCreateInput struct {
+	CategoryID string
+	Title      string
+	Author     int
+	IP         string
+	Content    string
+	Tags       string
+	Summary    string
+	CreatedAt  int64
+	UpdatedAt  int64
+}

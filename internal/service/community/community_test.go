@@ -25,6 +25,7 @@ type fakeStore struct {
 	recentByIP    []map[string]interface{}
 	created       *domain.CommunityCommentCreateInput
 	commentCount  int
+	createdTopic  *domain.CommunityTopicCreateInput
 }
 
 func (s *fakeStore) CountTopics(_ context.Context, filter communityRepo.TopicFilter) (int, error) {
@@ -127,6 +128,10 @@ func (s *fakeStore) CreateComment(_ context.Context, input domain.CommunityComme
 func (s *fakeStore) IncrementTopicCommentCount(context.Context, int) error {
 	s.commentCount++
 	return nil
+}
+func (s *fakeStore) CreateTopic(_ context.Context, input domain.CommunityTopicCreateInput) (int, error) {
+	s.createdTopic = &input
+	return 88, nil
 }
 
 type fakeAuth struct{ user map[string]interface{} }
@@ -336,5 +341,53 @@ func TestCommentCreatesPendingComment(t *testing.T) {
 	}
 	if store.commentCount != 1 {
 		t.Fatalf("comment count=%d", store.commentCount)
+	}
+}
+
+func TestPostRequiresLogin(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.Post(context.Background(), "", domain.CommunityTopicCreateInput{Title: "标题", Content: "内容"}, 0)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请登录后操作" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestPostValidatesTitleAndFileCount(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7", "nickname": "nick", "perms": map[string]interface{}{}}}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.Post(context.Background(), "abc", domain.CommunityTopicCreateInput{Title: "", Content: "内容"}, 0)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 4 || errmsg != "主题允许1-30字之间" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+	retcode, errmsg, err = service.Post(context.Background(), "abc", domain.CommunityTopicCreateInput{Title: "标题", Content: "内容"}, 4)
+	if err != nil {
+		t.Fatalf("post too many files: %v", err)
+	}
+	if retcode != -1 || errmsg != "最多允许上传3张图片" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestPostCreatesTopic(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7", "nickname": "nick", "perms": map[string]interface{}{}}}, store, "https://res.test")
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	retcode, errmsg, err := service.Post(context.Background(), "abc", domain.CommunityTopicCreateInput{CategoryID: "1", Title: "标题", Content: "内容", Tags: "tag", Summary: "sum", IP: "127.0.0.1"}, 0)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+	if store.createdTopic == nil || store.createdTopic.Author != 7 || store.createdTopic.Title != "标题" || store.createdTopic.CreatedAt != 2000 {
+		t.Fatalf("created topic=%#v", store.createdTopic)
 	}
 }

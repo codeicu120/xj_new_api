@@ -327,6 +327,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/community/up", communityHandler.Up)
 	router.Any("/community/up_comment", communityHandler.UpComment)
 	router.Any("/community/comment", communityHandler.Comment)
+	router.Any("/community/post", communityHandler.Post)
 	router.Any("/special/index", specialHandler.Index)
 	router.Any("/special/listing", specialHandler.Listing)
 	router.Any("/special/listing-:params", specialHandler.Listing)

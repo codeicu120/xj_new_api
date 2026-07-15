@@ -52,6 +52,7 @@ type Store interface {
 	RecentCommentsByIP(ctx context.Context, ip string, since int64) ([]map[string]interface{}, error)
 	CreateComment(ctx context.Context, input domain.CommunityCommentCreateInput, parent map[string]interface{}) (int, error)
 	IncrementTopicCommentCount(ctx context.Context, tid int) error
+	CreateTopic(ctx context.Context, input domain.CommunityTopicCreateInput) (int, error)
 }
 
 type Service struct {
@@ -462,6 +463,60 @@ func (s *Service) Comment(ctx context.Context, token string, tid int, parentID i
 	}
 	if err := s.store.IncrementTopicCommentCount(ctx, input.TID); err != nil {
 		return -1, "社区评论失败", err
+	}
+	return 0, "", nil
+}
+
+func (s *Service) Post(ctx context.Context, token string, input domain.CommunityTopicCreateInput, fileCount int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "发布主题失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "请登录后操作", nil
+	}
+	perms, err := s.userPerms(ctx, user)
+	if err != nil {
+		return -1, "发布主题失败", err
+	}
+	if getPermInt(perms, "deny.comment.post") == 1 {
+		return 1, "您已被禁止评论", nil
+	}
+	if tooManyByPattern(str(user["nickname"]), `[\pN]`, 5) {
+		return 11, "账号异常，请联系管理员", nil
+	}
+	input.Title = strings.TrimRight(input.Title, " \t\r\n")
+	input.Content = strings.TrimRight(input.Content, " \t\r\n")
+	input.CategoryID = strings.TrimRight(input.CategoryID, " \t\r\n")
+	input.Tags = strings.TrimRight(input.Tags, " \t\r\n")
+	input.Summary = strings.TrimRight(input.Summary, " \t\r\n")
+	if runeLen(input.Title) < 1 || runeLen(input.Title) > 30 {
+		return 4, "主题允许1-30字之间", nil
+	}
+	if runeLen(input.Content) < 1 {
+		return 4, "内容不合法。", nil
+	}
+	if !commentAllowedChars(input.Title) || tooManyByPattern(input.Title, `[\pP]`, 5) || tooManyByPattern(input.Title, `[\pZ]`, 5) || tooManyByPattern(input.Title, `[\n]`, 5) {
+		return 5, "主题中含有禁止发布的关键词，请检查！", nil
+	}
+	if !commentAllowedChars(input.Content) || tooManyByPattern(input.Content, `[\pP]`, 5) || tooManyByPattern(input.Content, `[\pZ]`, 5) || tooManyByPattern(input.Content, `[\n]`, 5) {
+		return 5, "内容中含有禁止发布的关键词，请检查！", nil
+	}
+	if fileCount > 3 {
+		return -1, "最多允许上传3张图片", nil
+	}
+	now := s.now().Unix()
+	input.Author = uid
+	input.IP = cleanIP(input.IP)
+	input.CreatedAt = now
+	input.UpdatedAt = now
+	tid, err := s.store.CreateTopic(ctx, input)
+	if err != nil {
+		return -1, "发布主题失败", err
+	}
+	if tid == 0 {
+		return -1, "发布主题失败", nil
 	}
 	return 0, "", nil
 }

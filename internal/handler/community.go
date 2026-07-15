@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"xj_comp/internal/domain"
 	"xj_comp/internal/legacyjson"
 	communityService "xj_comp/internal/service/community"
 )
@@ -120,6 +121,23 @@ func (h *CommunityHandler) Comment(c *gin.Context) {
 	tid, _ := strconv.Atoi(inputValue(c, "tid"))
 	parentID, _ := strconv.Atoi(inputValue(c, "parentid"))
 	retcode, errmsg, err := h.service.Comment(c.Request.Context(), authToken(c), tid, parentID, inputValue(c, "content"), c.ClientIP())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func (h *CommunityHandler) Post(c *gin.Context) {
+	retcode, errmsg, err := h.service.Post(c.Request.Context(), authToken(c), domain.CommunityTopicCreateInput{
+		CategoryID: inputValue(c, "category_id"),
+		Title:      inputValue(c, "title"),
+		Content:    inputValue(c, "content"),
+		Tags:       inputValue(c, "tags"),
+		Summary:    inputValue(c, "summary"),
+		IP:         c.ClientIP(),
+	}, multipartFileCount(c, "upfiles"))
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

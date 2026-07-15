@@ -324,6 +324,25 @@ func (r *Repository) IncrementTopicCommentCount(ctx context.Context, tid int) er
 	return nil
 }
 
+func (r *Repository) CreateTopic(ctx context.Context, input domain.CommunityTopicCreateInput) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, `INSERT INTO topics
+		(category_id,title,author,ip,content,tags,summary,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?)`,
+		input.CategoryID, input.Title, input.Author, input.IP, input.Content, input.Tags, input.Summary, input.CreatedAt, input.UpdatedAt,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert topic: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert topic id: %w", err)
+	}
+	return int(id), nil
+}
+
 func (r *Repository) UpCommentIDs(ctx context.Context, uid int, ids []int) (map[int]int, error) {
 	return r.flagTopicIDs(ctx, "topic_comments_ups", "cid", "uid", uid, ids)
 }
