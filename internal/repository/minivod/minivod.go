@@ -27,6 +27,8 @@ type Repository struct {
 	db *sql.DB
 }
 
+const coinTypeMiniVODPlayTask = 25
+
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -357,6 +359,116 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	return total, nil
 }
 
+func (r *Repository) ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
+	if r.db == nil || logid <= 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return -1, "", fmt.Errorf("begin minivod reqcoin: %w", err)
+	}
+	defer tx.Rollback()
+	if uid > 0 {
+		return r.reqUserTaskCoin(ctx, tx, uid, logid, now)
+	}
+	return r.reqGuestTaskCoin(ctx, tx, sid, logid, now)
+}
+
+func (r *Repository) reqUserTaskCoin(ctx context.Context, tx *sql.Tx, uid int, logid int, now int64) (int, string, error) {
+	logrow, err := queryOneTx(ctx, tx, "SELECT * FROM minivod_tasklogs WHERE logid=? FOR UPDATE", logid)
+	if err != nil {
+		return -1, "", fmt.Errorf("lock minivod task log: %w", err)
+	}
+	if len(logrow) == 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	if atoi(logrow["reqtime"]) > 0 {
+		return -1, "您已经领取过金币了", nil
+	}
+	taskcoin := atoi(logrow["taskcoin"])
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		if err == sql.ErrNoRows {
+			return -1, "记录写入失败，请重试", nil
+		}
+		return -1, "", fmt.Errorf("lock users quota: %w", err)
+	}
+	newBalance := balance + taskcoin
+	if newBalance != balance {
+		result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+		if err != nil {
+			return -1, "", fmt.Errorf("update users quota: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return -1, "记录写入失败，请重试", nil
+		}
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, '')", coinTypeMiniVODPlayTask, uid, taskcoin, newBalance, now)
+	if err != nil {
+		return -1, "", fmt.Errorf("insert user coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return -1, "记录写入失败，请重试", nil
+	}
+	if err := updateReqTime(ctx, tx, "minivod_tasklogs", logid, now); err != nil {
+		return -1, "记录更新失败，请重试", err
+	}
+	if err := tx.Commit(); err != nil {
+		return -1, "", fmt.Errorf("commit minivod reqcoin: %w", err)
+	}
+	return 0, "领取成功", nil
+}
+
+func (r *Repository) reqGuestTaskCoin(ctx context.Context, tx *sql.Tx, sid string, logid int, now int64) (int, string, error) {
+	logrow, err := queryOneTx(ctx, tx, "SELECT * FROM minivod_guesttasklogs WHERE logid=? FOR UPDATE", logid)
+	if err != nil {
+		return -1, "", fmt.Errorf("lock minivod guest task log: %w", err)
+	}
+	if len(logrow) == 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	if atoi(logrow["reqtime"]) > 0 {
+		return -1, "您已经领取过金币了", nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE user_guests SET goldcoin=goldcoin+? WHERE sid=?", atoi(logrow["taskcoin"]), sid); err != nil {
+		return -1, "", fmt.Errorf("update guest goldcoin: %w", err)
+	}
+	if err := updateReqTime(ctx, tx, "minivod_guesttasklogs", logid, now); err != nil {
+		return -1, "记录更新失败，请重试", err
+	}
+	if err := tx.Commit(); err != nil {
+		return -1, "", fmt.Errorf("commit minivod guest reqcoin: %w", err)
+	}
+	return 0, "领取成功", nil
+}
+
+func updateReqTime(ctx context.Context, tx *sql.Tx, table string, logid int, now int64) error {
+	result, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET reqtime=? WHERE logid=?", table), now, logid)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update reqtime affected %d rows", affected)
+	}
+	return nil
+}
+
+func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
 func firstRow(rows []map[string]interface{}, err error) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
@@ -449,6 +561,33 @@ func (r *Repository) queryRows(ctx context.Context, query string, args ...interf
 	return result, nil
 }
 
+func scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("read columns: %w", err)
+	}
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		scanArgs := make([]interface{}, len(columns))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+		if err := rows.Scan(scanArgs...); err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+		row := make(map[string]interface{}, len(columns))
+		for i, column := range columns {
+			row[column] = normalizeSQLValue(values[i])
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
+	return result, nil
+}
+
 func normalizeSQLValue(value interface{}) interface{} {
 	switch v := value.(type) {
 	case nil:
@@ -460,6 +599,12 @@ func normalizeSQLValue(value interface{}) interface{} {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func atoi(value interface{}) int {
+	var n int
+	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
+	return n
 }
 
 func intListSQL(ids []int) string {

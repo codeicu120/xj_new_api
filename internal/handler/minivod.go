@@ -86,6 +86,17 @@ func (h *MiniVODHandler) ReqLong(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html", []byte(body))
 }
 
+func (h *MiniVODHandler) ReqCoin(c *gin.Context) {
+	logid, _ := strconv.Atoi(inputValue(c, "logid"))
+	retcode, errmsg, err := h.service.ReqCoin(c.Request.Context(), authToken(c), logid)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func (h *MiniVODHandler) ReqPlay(c *gin.Context) {
 	h.reqMedia(c, true)
 }

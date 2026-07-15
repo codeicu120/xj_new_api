@@ -365,6 +365,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/minivod/down/:vodid", minivodHandler.Down)
 	router.Any("/minivod/reqplay/:vodid", minivodHandler.ReqPlay)
 	router.Any("/minivod/reqdown/:vodid", minivodHandler.ReqDown)
+	router.Any("/minivod/reqcoin", minivodHandler.ReqCoin)
 	router.Any("/minivod/reqlong/:vodid", minivodHandler.ReqLong)
 	router.Any("/my/:authorid", minivodHandler.Author)
 	router.Any("/my/:authorid/:action", minivodHandler.Author)

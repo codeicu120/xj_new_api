@@ -50,6 +50,7 @@ type Store interface {
 	FavoriteCount(ctx context.Context, uid int, vodID int) (int, error)
 	MiniViewLog(ctx context.Context, uid int, sid string, vodID int) (map[string]interface{}, error)
 	CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error)
+	ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error)
 }
 
 type VODProcessor interface {
@@ -383,6 +384,18 @@ func (s *Service) ReqLong(ctx context.Context, token string, vodID int) (string,
 		httpURL = strings.TrimRight(host, "/") + "/" + strings.TrimLeft(httpURL, "/")
 	}
 	return httpURL, 0, "", nil
+}
+
+func (s *Service) ReqCoin(ctx context.Context, token string, logid int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "领取小视频任务金币失败", err
+	}
+	retcode, errmsg, err := s.store.ReqTaskCoin(ctx, atoi(user["uid"]), str(user["sid"]), logid, s.now().Unix())
+	if err != nil {
+		return -1, "领取小视频任务金币失败", err
+	}
+	return retcode, errmsg, nil
 }
 
 func (s *Service) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {

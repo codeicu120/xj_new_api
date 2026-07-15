@@ -370,6 +370,16 @@
 - 风险边界：本批不执行金币扣减、播放/下载日志写入、播放任务金币、每 10 部奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
 - 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝和免费下载；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
+### `/minivod/reqcoin`
+
+- PHP: `c.api.minivod->reqcoin`
+- Go: `internal/handler.MiniVODHandler.ReqCoin`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- DB/Transaction: 登录用户锁 `minivod_tasklogs` 和 `users_quota`，更新金币余额，写 `user_coinlogs(cointype=25)`，再更新 `reqtime`；游客锁 `minivod_guesttasklogs`，更新 `user_guests.goldcoin` 和 `reqtime`。
+- 兼容规则：`logid` 不存在返回 `记录不存在或已被删除`；已领取返回 `您已经领取过金币了`；成功返回 `retcode=0`、`errmsg=领取成功`；保留旧 PHP 未校验任务日志 uid/sid 归属的行为。
+- 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖登录成功和重复领取错误传递，repository 事务逻辑按 PHP 锁表和金币日志规则迁移。
+
 ### `/minivod/reqlist`
 
 - PHP: `c.api.minivod->reqlist`

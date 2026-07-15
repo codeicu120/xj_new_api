@@ -23,6 +23,9 @@ type fakeStore struct {
 	deleted    bool
 	counters   []string
 	daycount   int
+	reqCoinRet int
+	reqCoinMsg string
+	reqCoin    map[string]interface{}
 }
 
 func (s *fakeStore) Categories(context.Context) ([]map[string]interface{}, error) {
@@ -155,6 +158,11 @@ func (s *fakeStore) MiniViewLog(context.Context, int, string, int) (map[string]i
 
 func (s *fakeStore) CountMiniViewLogsSince(context.Context, int, string, int64, int) (int, error) {
 	return s.daycount, nil
+}
+
+func (s *fakeStore) ReqTaskCoin(_ context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
+	s.reqCoin = map[string]interface{}{"uid": uid, "sid": sid, "logid": logid, "now": now}
+	return s.reqCoinRet, s.reqCoinMsg, nil
 }
 
 type fakeProcessor struct{}
@@ -445,5 +453,37 @@ func TestReqLongAddsServerHostForRelativeURL(t *testing.T) {
 	}
 	if body != "https://cdn.test/a/index.m3u8" {
 		t.Fatalf("body=%q", body)
+	}
+}
+
+func TestReqCoinUser(t *testing.T) {
+	store := &fakeStore{reqCoinMsg: "领取成功"}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}}
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	retcode, errmsg, err := service.ReqCoin(context.Background(), "token", 9)
+	if err != nil {
+		t.Fatalf("reqcoin: %v", err)
+	}
+	if retcode != 0 || errmsg != "领取成功" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if store.reqCoin["uid"] != 7 || store.reqCoin["logid"] != 9 || store.reqCoin["now"] != int64(1700000000) {
+		t.Fatalf("reqcoin=%#v", store.reqCoin)
+	}
+}
+
+func TestReqCoinPassesStoreError(t *testing.T) {
+	store := &fakeStore{reqCoinRet: -1, reqCoinMsg: "您已经领取过金币了"}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "0", "sid": "guest"}}
+
+	retcode, errmsg, err := service.ReqCoin(context.Background(), "token", 9)
+	if err != nil {
+		t.Fatalf("reqcoin: %v", err)
+	}
+	if retcode != -1 || errmsg != "您已经领取过金币了" || store.reqCoin["sid"] != "guest" {
+		t.Fatalf("retcode=%d errmsg=%q reqcoin=%#v", retcode, errmsg, store.reqCoin)
 	}
 }

@@ -121,6 +121,7 @@
 | `/art/show` | `c.api.art->show` | 本轮完成 | 公告/文章详情，读 `arts` 和 `arts_content`；成功、缺少 `artid`、不存在记录分支均对比一致。 |
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | 本轮完成 | 登录只读 AI 任务历史；未登录错误、`module/page` 分页、字段集合和 test 环境 R2 资源域名 live 对比通过。 |
 | `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
+| `/minivod/reqcoin` | `c.api.minivod->reqcoin` | 本轮完成 | 小视频播放任务金币领取；登录用户写金币日志，游客更新游客金币，保留旧 PHP 未校验 log 归属行为。 |
 
 ## 优先候选
 
@@ -136,6 +137,6 @@
 | `/payment/*`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付下单、外部平台请求或回调，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
-| `/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
+| `/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |
