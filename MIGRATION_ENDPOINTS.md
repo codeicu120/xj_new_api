@@ -120,6 +120,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/breaking` | ANY | `VODHandler.Breaking` |
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
+| `/comment`、`/comment/index` | ANY | `handler.EmptyHTML` |
 | `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
 | `/comment/up`、`/comment/down` | ANY | `CommentHandler.Up/Down` |
 | `/special/index` | ANY | `SpecialHandler.Index` |
@@ -186,6 +187,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | `PaymentHandler.Success/Failed` | 已重构；固定支付状态 JSON 文案，不包含平台回调验签 |
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
 | `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
+| `/comment`、`/comment/index` | `c.api.comment->index` | `handler.EmptyHTML` | 已重构；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
 | `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 不接管 | PHP `notification` 仅定义 `index/clean`，未发现其他稳定 action |
 | `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，签到写入 action 未接管 |
@@ -412,7 +414,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/comment/:action?`（除 `/comment/listing-:params`、`/comment/up`、`/comment/down`） | `c.api.comment->$action` | 未重构；剩余 `post` 涉及评论发布、敏感词、树结构、金币奖励和通知 |
+| `/comment/post` | `c.api.comment->post` | 未重构；评论发布涉及敏感词、树结构、金币奖励和通知 |
 
 ### 小视频、作者页
 

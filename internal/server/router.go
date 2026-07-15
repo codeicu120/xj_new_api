@@ -298,6 +298,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/vod/preView/:vodid/index.m3u8", vodHandler.Preview)
 	router.Any("/sendfile/play/:file", sendfileHandler.Play)
 	router.Any("/sendfile/down/:file", sendfileHandler.Down)
+	router.Any("/comment", handler.EmptyHTML)
+	router.Any("/comment/index", handler.EmptyHTML)
 	router.Any("/comment/listing-:params", commentHandler.Listing)
 	router.Any("/comment/up", commentHandler.Up)
 	router.Any("/comment/down", commentHandler.Down)

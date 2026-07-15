@@ -57,6 +57,7 @@
 | `/playlog/listing` | `c.api.playlog->listing` | 本轮完成 | 播放记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式，游客 timeline 2/3 保留旧 PHP 边界反序行为。 |
 | `/downlog/listing` | `c.api.downlog->listing` | 本轮完成 | 下载记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式。 |
 | `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 播放/下载记录软删除；未登录按游客 sid，空 `vodids` 返回 `已删除0项`。 |
+| `/comment`、`/comment/index` | `c.api.comment->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | `c.api.favorite/minifavorite->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频公共列表，支持筛选、排序、分页、随机推荐和 latest 用户包装 rows。 |
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
@@ -120,4 +121,5 @@
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
 | `/community/:action?` 剩余 action | 社区列表和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
+| `/comment/post` | 评论发布涉及敏感词、树结构、金币奖励和通知。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

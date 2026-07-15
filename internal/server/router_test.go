@@ -1762,6 +1762,23 @@ func TestPaymentCallbackStatusRoutes(t *testing.T) {
 	}
 }
 
+func TestCommentEmptyIndexRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/comment", "/comment/index"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if body := rec.Body.String(); body != "" {
+			t.Fatalf("%s expected empty body, got %q", path, body)
+		}
+	}
+}
+
 func newTestRouter() http.Handler {
 	return NewRouter(Options{
 		Config: config.Config{

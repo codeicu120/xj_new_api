@@ -1107,6 +1107,14 @@
 - 兼容规则：`success` 返回 `retcode=0`、`errmsg=支付成功回调`、无 `data`；`failed` 返回 `retcode=-1`、`errmsg=支付失败回调`、无 `data`。
 - 测试：`go test ./internal/service/payment ./internal/server` 通过；PHP-Go live 对比两个接口 retcode/errmsg 一致，忽略旧 PHP 游客中间件动态字段。
 
+### `/comment`、`/comment/index`
+
+- PHP: `c.api.comment->index`
+- Go: `handler.EmptyHTML`
+- Auth/DB/External: 无；旧 PHP 方法体为空。
+- 兼容规则：返回 `200 text/html` 空 body；评论发布 `/comment/post` 仍未接管。
+- 测试：`go test ./internal/server` 通过；路由测试覆盖空 body。
+
 ### `/init`
 
 - PHP: `c.api.index->init`
