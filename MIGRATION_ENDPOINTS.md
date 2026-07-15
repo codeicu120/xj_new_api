@@ -319,6 +319,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | `UCPHandler.FeedbackIndex` | 已重构，对比通过；新版反馈初始化页，最近 30 天支付记录，POST 未接管 |
 | `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | `UCPHandler.FeedbackNewListing` | 已重构，对比通过；新版反馈列表，支持 `type=0/1/2` 过滤，POST 未接管 |
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | `UCPHandler.FeedbackDetail` | 已重构，对比通过；新版反馈详情，校验反馈归属，附件图片和关联支付只读，POST 未接管 |
+| `/ucp/feedback/:action?`（除已列 action） | `c.api.ucp.feedback->$action` | 不接管 | PHP `ucp/feedback.php` 仅定义 `index/create/listing/detail`，均已覆盖；图片上传保存和告警通知作为 `create` 外部链路后续增强 |
 | `GET /ucp/msg`、`GET /ucp/msg/index` | `c.api.ucp.msg->index` | `UCPHandler.MsgListing` | 已重构，对比通过；登录只读消息会话列表，写状态 action 未接管 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | `UCPHandler.MsgDetail` | 已重构，对比通过；读取会话详情并复刻 setRead 已读副作用 |
 | `/ucp/msg/send` | `c.api.ucp.msg->send` | `UCPHandler.MsgSend` | 已重构；会话内回复写入 `msgs/msg_maps/msgc/users.newmsg`，未登录分支 live 对比通过；按 PHP 源码变量遮蔽 bug 保持用户名群发不可用 |
@@ -329,8 +330,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/payment`、`/ucp/payment/index` | `c.api.ucp.payment->index/listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；兼容旧动态 action 默认入口 |
 | `/ucp/payment/listing` | `c.api.ucp.payment->listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；登录只读支付记录，支持 GET/POST page |
 | `/ucp/payment/safepaylog` | `c.api.ucp.payment->safepaylog` | `UCPHandler.SafePayLog` | 已重构，对比通过；最近 7 天 safepay 记录 |
+| `/ucp/payment/:action?`（除已列 action） | `c.api.ucp.payment->$action` | 不接管 | PHP `ucp/payment.php` 仅定义 `index/listing/safepaylog`，均已覆盖 |
 | `/ucp/account`、`/ucp/account/index` | `c.api.ucp.account->index` | `UCPHandler.AccountIndex` | 已重构，对比通过；登录只读资产主页 |
 | `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | `UCPHandler.BalanceLog` | 已重构，对比通过；登录只读余额日志分页 |
+| `/ucp/account/:action?`（除已列 action） | `c.api.ucp.account->$action` | 不接管 | PHP `ucp/account.php` 仅定义 `index/balancelog`，均已覆盖 |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
@@ -423,7 +426,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
-| `/ucp/account/:action?`（除 `/ucp/account`、`/ucp/account/index`、`/ucp/account/balancelog`） | `c.api.ucp.account->$action` | 未重构；账户其他 action |
 | `/ucp/bankcard/:action?`（除 `/ucp/bankcard`、`/ucp/bankcard/index`） | `c.api.ucp.bankcard->$action` | 未重构；新增、修改、删除提款地址涉及写库 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
@@ -431,8 +433,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vippkg/:action?` | `c.api.ucp.vippkg->$action` | 未重构；会员套餐/订单 |
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |
-| `/ucp/payment/:action?`（除 `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`） | `c.api.ucp.payment->$action` | 未重构；支付其他 action |
-| `/ucp/feedback/:action?`（除 `GET /ucp/feedback/index`、`GET /ucp/feedback/listing`、`GET /ucp/feedback/detail`、`/ucp/feedback/create`） | `c.api.ucp.feedback->$action` | 未重构；图片上传保存、告警通知等外部链路待补齐 |
 | `/ucp/vodorder/:action?` | `c.api.ucp.vodorder->$action` | 未重构；视频订单 |
 
 ### 活动、邀请、发现页
