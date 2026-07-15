@@ -311,6 +311,10 @@ func (s ucpStore) PackageRows(ctx context.Context, kind string) ([]map[string]in
 	return s.ucp.PackageRows(ctx, kind)
 }
 
+func (s ucpStore) PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error) {
+	return s.ucp.PackageByID(ctx, kind, pkgID)
+}
+
 func (s ucpStore) PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error) {
 	return s.ucp.PaymentChannels(ctx, gameOnly)
 }

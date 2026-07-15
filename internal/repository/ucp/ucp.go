@@ -218,11 +218,7 @@ func (r *Repository) PackageRows(ctx context.Context, kind string) ([]map[string
 	if r.db == nil {
 		return []map[string]interface{}{}, nil
 	}
-	table := map[string]string{
-		"vip":  "trade_vippkgs",
-		"coin": "trade_coinpkgs",
-		"bean": "trade_beanpkgs",
-	}[kind]
+	table := packageTable(kind)
 	if table == "" {
 		return []map[string]interface{}{}, nil
 	}
@@ -232,6 +228,24 @@ func (r *Repository) PackageRows(ctx context.Context, kind string) ([]map[string
 	}
 	defer rows.Close()
 	return scanRows(rows)
+}
+
+func (r *Repository) PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error) {
+	if r.db == nil || pkgID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	table := packageTable(kind)
+	if table == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM "+table+" WHERE pkgid=?", pkgID)
+	if err != nil {
+		return nil, fmt.Errorf("query %s package by id: %w", kind, err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
 }
 
 func (r *Repository) VIPPackageByID(ctx context.Context, pkgID int) (map[string]interface{}, error) {
@@ -246,6 +260,14 @@ func (r *Repository) VIPPackageByID(ctx context.Context, pkgID int) (map[string]
 		return map[string]interface{}{}, nil
 	}
 	return row, nil
+}
+
+func packageTable(kind string) string {
+	return map[string]string{
+		"vip":  "trade_vippkgs",
+		"coin": "trade_coinpkgs",
+		"bean": "trade_beanpkgs",
+	}[kind]
 }
 
 func (r *Repository) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {

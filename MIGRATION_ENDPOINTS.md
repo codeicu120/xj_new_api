@@ -157,11 +157,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
 | `/ucp/coinlog/exchange` | ANY | `UCPHandler.CoinLogExchange` |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | ANY | `UCPHandler.VIPPkgIndex` |
-| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | ANY | `UCPHandler.VIPPkgPlaceOrder/VIPPkgCoinOrder` |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | ANY | `UCPHandler.CoinPkgIndex` |
-| `/ucp/coinpkg/placeorder` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/coinpkg/placeorder` | ANY | `UCPHandler.CoinPkgPlaceOrder` |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | ANY | `UCPHandler.BeanPkgIndex` |
-| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | ANY | `UCPHandler.BeanPkgPlaceOrder/BeanPkgCoinOrder` |
 | `/ucp/vodorder`、`/ucp/vodorder/index` | ANY | `UCPHandler.VODOrderIndex` |
 | `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders` | ANY | `UCPHandler.VODOrderMyOrders/MySupports/HistoryOrders` |
 | `/ucp/vodorder/create`、`/ucp/vodorder/support` | ANY | `UCPHandler.VODOrderCreate/VODOrderSupport` |
@@ -493,11 +493,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币和计算为 0 前置分支已迁移，金币/余额互换事务写入暂未接管 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
-| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，支付下单、金币兑换和会员资产成功分支暂未接管 |
+| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.VIPPkgPlaceOrder/VIPPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，`placeorder` 额外接管 `rmbprice=3800` 仅支持金币兑换分支；支付下单、金币兑换成功和会员资产写入暂未接管 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
-| `/ucp/coinpkg/placeorder` | `c.api.ucp.coinpkg->placeorder` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，金币支付下单成功分支暂未接管 |
+| `/ucp/coinpkg/placeorder` | `c.api.ucp.coinpkg->placeorder` | `UCPHandler.CoinPkgPlaceOrder` | 部分已重构；未登录、套餐不存在/停用前置分支已迁移，金币支付下单成功分支暂未接管 |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | `c.api.ucp.beanpkg->index` | `UCPHandler.BeanPkgIndex` | 已重构，对比通过；登录只读金豆套餐列表和 safepayurl，支付通道通过接口隔离 |
-| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.beanpkg->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，金豆下单和金币兑换成功分支暂未接管 |
+| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.beanpkg->$action` | `UCPHandler.BeanPkgPlaceOrder/BeanPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，金豆支付下单和金币兑换成功分支暂未接管 |
 | `/ucp/vodorder`、`/ucp/vodorder/index` | `c.api.ucp.vodorder->index` | `UCPHandler.VODOrderIndex` | 已重构；登录只读求片榜单，按当前期数返回榜单、top 助力人和本人助力数，不执行求片或助力写入 |
 | `/ucp/vodorder/myorders` | `c.api.ucp.vodorder->myorders` | `UCPHandler.VODOrderMyOrders` | 已重构，对比通过；登录只读我的求片记录、累计消耗和当前冻结金币 |
 | `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
@@ -565,9 +565,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录分支已迁移，提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
-| `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金币兑换和会员资产仍需迁移 |
-| `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录分支已迁移，支付下单和金币资产仍需迁移 |
-| `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金豆和金币兑换仍需迁移 |
+| `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足和 `rmbprice=3800` 前置失败分支已迁移，支付下单、金币兑换成功和会员资产仍需迁移 |
+| `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录和套餐不存在/停用分支已迁移，支付下单和金币资产仍需迁移 |
+| `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用和金币兑换余额不足前置失败分支已迁移，支付下单、金豆和金币兑换成功仍需迁移 |
 | `/ucp/vodorder/:action?`（除 `/ucp/vodorder`、`/ucp/vodorder/index`、`/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`） | `c.api.ucp.vodorder->$action` | 部分未重构；`create/support` 参数、余额、记录和时间窗口失败分支已迁移，求片金币扣减或助力写入仍需迁移 |
 
 ### 活动、邀请、发现页

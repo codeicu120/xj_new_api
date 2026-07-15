@@ -40,6 +40,7 @@ type fakeUserStore struct {
 	settings           map[string]map[string]interface{}
 	calldata           map[string]map[string]interface{}
 	packages           []map[string]interface{}
+	packageRow         map[string]interface{}
 	payments           []map[string]interface{}
 	withdraws          []map[string]interface{}
 	withdrawTotal      int
@@ -637,6 +638,10 @@ func (s fakeUserStore) CalldataByUUID(_ context.Context, uuid string) (map[strin
 
 func (s fakeUserStore) PackageRows(context.Context, string) ([]map[string]interface{}, error) {
 	return s.packages, nil
+}
+
+func (s fakeUserStore) PackageByID(context.Context, string, int) (map[string]interface{}, error) {
+	return s.packageRow, nil
 }
 
 func (s fakeUserStore) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
@@ -1459,6 +1464,90 @@ func TestVIPPackageIndexFormatsRowsAndPayments(t *testing.T) {
 	}
 	if data["safepayurl"] != "https://safe.example" {
 		t.Fatalf("safepayurl = %#v", data["safepayurl"])
+	}
+}
+
+func TestPackageOrderEdges(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.VIPPkgCoinOrderEdge(context.Background(), "token", 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "套餐不存在或未启用" {
+		t.Fatalf("vip missing retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		packageRow: map[string]interface{}{"pkgid": "1", "showtype": "1", "coinprice": "100"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.VIPPkgCoinOrderEdge(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "套餐不存在或未启用" {
+		t.Fatalf("vip stopped retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		quota:      map[string]interface{}{"goldcoin": "99"},
+		packageRow: map[string]interface{}{"pkgid": "1", "showtype": "0", "coinprice": "100"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.VIPPkgCoinOrderEdge(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币不足，快做任务获取金币吧！" {
+		t.Fatalf("vip balance retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		quota:      map[string]interface{}{"goldcoin": "20"},
+		packageRow: map[string]interface{}{"pkgid": "2", "showtype": "0", "rmbprice": "300"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.BeanPkgCoinOrderEdge(context.Background(), "token", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币不足，快做任务获取金币吧！" {
+		t.Fatalf("bean balance retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		quota:      map[string]interface{}{"goldcoin": "30"},
+		packageRow: map[string]interface{}{"pkgid": "2", "showtype": "0", "rmbprice": "300"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.BeanPkgCoinOrderEdge(context.Background(), "token", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币购买成功分支暂未迁移" {
+		t.Fatalf("bean pending retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		packageRow: map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "3800"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "套餐仅支持金币兑换" {
+		t.Fatalf("vip placeorder rmb retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "套餐不存在或未启用" {
+		t.Fatalf("coin placeorder missing retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
 

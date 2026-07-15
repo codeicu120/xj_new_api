@@ -17,6 +17,88 @@ func (s *Service) BeanPkgIndex(ctx context.Context, token string) (map[string]in
 	return s.pkgIndex(ctx, token, "bean", 3, false)
 }
 
+func (s *Service) VIPPkgCoinOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
+	return s.pkgCoinOrderEdge(ctx, token, "vip", pkgID)
+}
+
+func (s *Service) BeanPkgCoinOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
+	return s.pkgCoinOrderEdge(ctx, token, "bean", pkgID)
+}
+
+func (s *Service) VIPPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "vip", pkgID)
+}
+
+func (s *Service) CoinPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "coin", pkgID)
+}
+
+func (s *Service) BeanPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "bean", pkgID)
+}
+
+func (s *Service) pkgPlaceOrderEdge(ctx context.Context, token string, kind string, pkgID int) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	pkg, err := s.store.PackageByID(ctx, kind, pkgID)
+	if err != nil {
+		return -1, "套餐下单失败", err
+	}
+	if len(pkg) == 0 || atoi(pkg["showtype"]) != 0 {
+		return -1, "套餐不存在或未启用", nil
+	}
+	if kind == "vip" && atoi(pkg["rmbprice"]) == 3800 {
+		return -1, "套餐仅支持金币兑换", nil
+	}
+	return -1, "支付下单成功分支暂未迁移", nil
+}
+
+func (s *Service) pkgCoinOrderEdge(ctx context.Context, token string, kind string, pkgID int) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	pkg, err := s.store.PackageByID(ctx, kind, pkgID)
+	if err != nil {
+		return -1, "套餐购买失败", err
+	}
+	if len(pkg) == 0 || atoi(pkg["showtype"]) != 0 {
+		return -1, "套餐不存在或未启用", nil
+	}
+	coinPrice, err := s.coinOrderPrice(ctx, kind, pkg)
+	if err != nil {
+		return -1, "套餐购买失败", err
+	}
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return -1, "套餐购买失败", err
+	}
+	if atoi(quota["goldcoin"]) < coinPrice {
+		return -1, "金币不足，快做任务获取金币吧！", nil
+	}
+	return -1, "金币购买成功分支暂未迁移", nil
+}
+
+func (s *Service) coinOrderPrice(ctx context.Context, kind string, pkg map[string]interface{}) (int, error) {
+	if kind == "vip" {
+		return atoi(pkg["coinprice"]), nil
+	}
+	exrate, err := s.store.SettingExRate(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int(float64(atoi(pkg["rmbprice"])) / 100 * float64(exrate)), nil
+}
+
 func (s *Service) pkgIndex(ctx context.Context, token string, kind string, payType int, gameOnly bool) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {

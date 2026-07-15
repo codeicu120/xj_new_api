@@ -164,6 +164,36 @@ func (h *UCPHandler) VODOrderSupport(c *gin.Context) {
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
+func (h *UCPHandler) VIPPkgCoinOrder(c *gin.Context) {
+	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
+	retcode, errmsg, err := h.service.VIPPkgCoinOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) VIPPkgPlaceOrder(c *gin.Context) {
+	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
+	retcode, errmsg, err := h.service.VIPPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) CoinPkgPlaceOrder(c *gin.Context) {
+	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
+	retcode, errmsg, err := h.service.CoinPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) BeanPkgPlaceOrder(c *gin.Context) {
+	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
+	retcode, errmsg, err := h.service.BeanPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) BeanPkgCoinOrder(c *gin.Context) {
+	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
+	retcode, errmsg, err := h.service.BeanPkgCoinOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) TaskboxOpen(c *gin.Context) {
 	taskID, _ := strconv.Atoi(inputValue(c, "taskid"))
 	retcode, errmsg, err := h.service.TaskboxOpenEdge(c.Request.Context(), authToken(c), taskID)

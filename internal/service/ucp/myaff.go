@@ -78,6 +78,7 @@ type UserStore interface {
 	SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
 	CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
 	PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error)
+	PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error)
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
 	CountVODOrders(ctx context.Context, uid int, status *int) (int, error)
 	VODOrders(ctx context.Context, uid int, status *int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)

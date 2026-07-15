@@ -1614,3 +1614,13 @@
 - PHP: `src/c/api/ucp/vodorder.php::create/support`。
 - Go: `internal/service/ucp.Service.VODOrderCreateEdge/VODOrderSupportEdge`、`internal/repository/ucp.Repository.VODOrderByID`、`internal/handler.UCPHandler.VODOrderSupport`。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### UCP 套餐下单/金币兑换前置失败补齐
+
+- 已迁移：`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` 的套餐不存在或停用分支，均在支付下单、金币/金豆/VIP 写入前返回旧错误壳。
+- 已迁移：`/ucp/vippkg/coinorder`、`/ucp/beanpkg/coinorder` 的金币余额不足分支；VIP 按 `coinprice`，金豆按 `rmbprice/100*settings.exrate` 计算所需金币。
+- 已迁移：`/ucp/vippkg/placeorder` 中 `rmbprice=3800` 的仅支持金币兑换分支；支付通道、订单创建、金币兑换成功、会员资产和金豆资产写入仍未接管。
+- PHP: `src/c/api/ucp/vippkg.php::placeorder/coinorder`、`src/c/api/ucp/coinpkg.php::placeorder`、`src/c/api/ucp/beanpkg.php::placeorder/coinorder`。
+- Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`、`internal/repository/ucp.Repository.PackageByID`。
+- Subagent：`Sartre` 核对 VIP/金币/金豆套餐前置失败顺序，确认这些分支位于支付、资产写入和事务成功路径之前。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。
