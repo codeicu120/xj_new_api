@@ -391,7 +391,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/*-:params`（上述 action） | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构；参数模板 `$cateid-$areaid-$yearid-$tagid-$definition-$duration-$freetype-$mosaic-$langvoice-$orderby-$page` |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | `MiniVODHandler.Show` | 已重构；读取 `showtype=1` 小视频详情、作者、分类层级、相关视频和猜你喜欢；本地旧库缺作者样本的错误分支对比通过，成功分支单测覆盖 |
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | `MiniVODHandler.Up/Down` | 已重构；小视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
-| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，扣金币与任务奖励分支暂不写资产 |
+| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，非扣费成功路径写 `minivod_viewlogs/minivod_guestviewlogs` 与 `vods` 计数；超限扣金币、扣费标记和任务奖励分支暂不写资产 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | `MiniVODHandler.ReqCoin` | 已重构；领取小视频播放任务金币，事务锁定任务日志，登录用户写 `users_quota/user_coinlogs(cointype=25)`，游客更新 `user_guests.goldcoin`；保留旧 PHP 未校验 log 归属行为 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录、视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST 非正数和范围校验分支已迁移，金币打赏事务暂未接管 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已接管可控读取路径；从现有待展示 viewlog 读取小视频并包装作者/收藏状态，拉取推荐、标记已浏览和广告插入副作用暂不执行 |
@@ -539,7 +539,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/minivod/reqlist` 的拉取/标记/广告副作用 | `c.api.minivod->reqlist` | 部分未重构；`pullViewLogs`、`mUpdate(showtype=1)` 和随机广告插入仍需单独迁移 |
-| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
+| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；免费/限免、已观看/下载和权限额度内非扣费成功路径的 viewlog 与 `vods` 计数已迁移；剩余超限扣金币、扣费标记、播放任务、推荐奖励和喜好分析仍需事务化迁移 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录、视频/作者只读校验、GET 初始化和 POST 参数校验已迁移，金币打赏事务仍需迁移 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 部分未重构；记录不存在和播放地址不存在前置失败已迁移，媒体 CDN 拉取和 m3u8 裁剪成功分支仍需迁移 |
 

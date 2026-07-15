@@ -373,6 +373,96 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	return total, nil
 }
 
+func (r *Repository) RecordMiniMedia(ctx context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin minivod media log: %w", err)
+	}
+	defer tx.Rollback()
+	prefix := "playcount"
+	if !play {
+		prefix = "downcount"
+	}
+	if err := incrementMiniVODMediaCounter(ctx, tx, vodID, prefix, now); err != nil {
+		return fmt.Errorf("increment minivod media counter: %w", err)
+	}
+	if uid > 0 {
+		if err := recordMiniViewLog(ctx, tx, "minivod_viewlogs", "uid", uid, vodID, play, deduct, now); err != nil {
+			return fmt.Errorf("record minivod user media: %w", err)
+		}
+	} else if strings.TrimSpace(sid) != "" {
+		if err := recordMiniViewLog(ctx, tx, "minivod_guestviewlogs", "sid", sid, vodID, play, deduct, now); err != nil {
+			return fmt.Errorf("record minivod guest media: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit minivod media log: %w", err)
+	}
+	return nil
+}
+
+func incrementMiniVODMediaCounter(ctx context.Context, tx *sql.Tx, vodID int, prefix string, now int64) error {
+	if prefix != "playcount" && prefix != "downcount" {
+		return fmt.Errorf("invalid minivod media counter %s", prefix)
+	}
+	lastColumn := prefix + "_lasttime"
+	var previous int64
+	if err := tx.QueryRowContext(ctx, "SELECT "+lastColumn+" FROM vods WHERE vodid=?", vodID).Scan(&previous); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	monthValue := prefix + "_month+1"
+	if !sameMonth(previous, now) {
+		monthValue = "1"
+	}
+	dayValue := prefix + "_day+1"
+	if !sameDay(previous, now) {
+		dayValue = "1"
+	}
+	weekValue := prefix + "_week+1"
+	if !sameWeek(previous, now) {
+		weekValue = "1"
+	}
+	_, err := tx.ExecContext(ctx,
+		"UPDATE vods SET "+lastColumn+"=?, "+prefix+"_total="+prefix+"_total+1, "+prefix+"_month="+monthValue+", "+prefix+"_day="+dayValue+", "+prefix+"_week="+weekValue+" WHERE vodid=?",
+		now,
+		vodID,
+	)
+	return err
+}
+
+func recordMiniViewLog[T int | string](ctx context.Context, tx *sql.Tx, table string, actorColumn string, actorID T, vodID int, play bool, deduct int, now int64) error {
+	row, err := queryOneTx(ctx, tx, "SELECT * FROM "+table+" WHERE "+actorColumn+"=? AND vodid=? LIMIT 1 FOR UPDATE", actorID, vodID)
+	if err != nil {
+		return err
+	}
+	if play {
+		if len(row) == 0 {
+			_, err = tx.ExecContext(ctx, "INSERT INTO "+table+"("+actorColumn+", vodid, playtime, deduct, reqtime, showtype) VALUES(?, ?, ?, ?, ?, 1)", actorID, vodID, now, deduct, now)
+			return err
+		}
+		if atoi(row["playtime"]) == 0 {
+			_, err = tx.ExecContext(ctx, "UPDATE "+table+" SET playtime=?, deduct=? WHERE logid=?", now, deduct, row["logid"])
+			return err
+		}
+		return nil
+	}
+	if len(row) == 0 {
+		_, err = tx.ExecContext(ctx, "INSERT INTO "+table+"("+actorColumn+", vodid, downtime, downdeduct) VALUES(?, ?, ?, ?)", actorID, vodID, now, deduct)
+		return err
+	}
+	if atoi(row["downtime"]) == 0 {
+		_, err = tx.ExecContext(ctx, "UPDATE "+table+" SET downtime=?, downdeduct=? WHERE logid=?", now, deduct, row["logid"])
+		return err
+	}
+	return nil
+}
+
 func (r *Repository) ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
 	if r.db == nil || logid <= 0 {
 		return -1, "记录不存在或已被删除", nil
@@ -613,6 +703,26 @@ func normalizeSQLValue(value interface{}) interface{} {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func sameMonth(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	return at.Year() == bt.Year() && at.Month() == bt.Month()
+}
+
+func sameDay(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	return at.Year() == bt.Year() && at.YearDay() == bt.YearDay()
+}
+
+func sameWeek(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	ay, aw := at.ISOWeek()
+	by, bw := bt.ISOWeek()
+	return ay == by && aw == bw
 }
 
 func atoi(value interface{}) int {

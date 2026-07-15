@@ -378,10 +378,11 @@
 - Service: `internal/service/minivod.Service`
 - Repository: `internal/repository/minivod.Repository`
 - Auth: 登录用户通过 `x-cookie-auth`/`xxx_api_auth` 读取用户和权限；游客必须有 sid，否则保持旧 PHP `客户端游客请先携带信息`。
-- DB: 读取 `vods(showtype=1)`、`vod_servers`、`minivod_favorites`、`vod_updowns`、`minivod_viewlogs/minivod_guestviewlogs`；只读判断已播放/已下载和当日额度。
-- 兼容规则：已接管记录不存在、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全。
-- 风险边界：本批不执行金币扣减、播放/下载日志写入、播放任务金币、每 10 部奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
-- 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝和免费下载；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
+- DB: 读取 `vods(showtype=1)`、`vod_servers`、`minivod_favorites`、`vod_updowns`、`minivod_viewlogs/minivod_guestviewlogs`；判断已播放/已下载和当日额度；免费/限免、已观看/下载和权限额度内非扣费成功路径写 `minivod_viewlogs/minivod_guestviewlogs`，并递增 `vods.playcount_*`/`vods.downcount_*`。
+- 兼容规则：已接管记录不存在、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全；小视频 PHP `incPlay/incDown` 的 `updatetime` 参数实际未使用，Go 对齐为已有 `playtime/downtime>0` 时不覆盖日志时间、但仍递增 `vods` 计数。
+- 风险边界：本批不执行超限金币扣减、扣费标记、播放任务金币、每 10 部奖励、三级分销奖励和 `sublog/guestsublog` 喜好分析；这些资产/奖励/画像副作用仍保留在未重构清单，后续需要事务化迁移。
+- Subagent：`Laplace` 只读核对 PHP `incPlay/incDown`，确认非扣费成功路径均应写 viewlog 并递增 `vods` 计数；扣金币、奖励和喜好分析可继续暂缓。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝、免费下载和权限额度内播放记录；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
 ### `/minivod/reqcoin`
 

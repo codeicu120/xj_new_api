@@ -28,6 +28,16 @@ type fakeStore struct {
 	reqCoin    map[string]interface{}
 	quota      map[string]interface{}
 	settings   map[string]string
+	recorded   *miniMediaRecord
+}
+
+type miniMediaRecord struct {
+	uid    int
+	sid    string
+	vodID  int
+	play   bool
+	deduct int
+	now    int64
 }
 
 func (s *fakeStore) Categories(context.Context) ([]map[string]interface{}, error) {
@@ -170,6 +180,11 @@ func (s *fakeStore) MiniViewLog(context.Context, int, string, int) (map[string]i
 
 func (s *fakeStore) CountMiniViewLogsSince(context.Context, int, string, int64, int) (int, error) {
 	return s.daycount, nil
+}
+
+func (s *fakeStore) RecordMiniMedia(_ context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error {
+	s.recorded = &miniMediaRecord{uid: uid, sid: sid, vodID: vodID, play: play, deduct: deduct, now: now}
+	return nil
 }
 
 func (s *fakeStore) ReqTaskCoin(_ context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
@@ -395,6 +410,7 @@ func TestReqPlayFreeMiniVOD(t *testing.T) {
 	}}
 	service := NewService(store, fakeProcessor{}, "https://res.test")
 	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s", "perms": map[string]interface{}{}, "uniqkey": "9"}}
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
 
 	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 9, 0)
 	if err != nil {
@@ -405,6 +421,9 @@ func TestReqPlayFreeMiniVOD(t *testing.T) {
 	}
 	if data["isfavorite"] != 1 || data["iszan"] != 0 {
 		t.Fatalf("flags=%#v", data)
+	}
+	if store.recorded == nil || store.recorded.uid != 7 || store.recorded.sid != "s" || store.recorded.vodID != 9 || !store.recorded.play || store.recorded.deduct != 0 || store.recorded.now != 1770000000 {
+		t.Fatalf("recorded=%#v", store.recorded)
 	}
 }
 
@@ -432,6 +451,7 @@ func TestReqDownFreeMiniVOD(t *testing.T) {
 	}}
 	service := NewService(store, fakeProcessor{}, "https://res.test")
 	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s", "perms": map[string]interface{}{}}}
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
 
 	data, retcode, errmsg, err := service.ReqDown(context.Background(), "token", 9, 0)
 	if err != nil {
@@ -439,6 +459,45 @@ func TestReqDownFreeMiniVOD(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "免费观看提供下载" || data["httpurl"] != "https://cdn.test/d/file.mp4" {
 		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.recorded == nil || store.recorded.uid != 7 || store.recorded.sid != "s" || store.recorded.vodID != 9 || store.recorded.play || store.recorded.deduct != 0 || store.recorded.now != 1770000000 {
+		t.Fatalf("recorded=%#v", store.recorded)
+	}
+}
+
+func TestReqPlayWithinPermissionRecordsMiniViewLog(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{
+		"vodid":      "9",
+		"showtype":   "1",
+		"play_url":   "p/index.m3u8",
+		"play_srvid": "3",
+		"view_price": "10",
+		"isvip":      "0",
+		"islimit":    "0",
+		"islimitv3":  "0",
+		"free_sdate": "0",
+		"free_edate": "0",
+	}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{
+		"uid": "7",
+		"sid": "s",
+		"perms": map[string]interface{}{
+			"max.minivod.play.daynum": "2",
+		},
+		"uniqkey": "9",
+	}}
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 9, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "用户权限范围内免费播放" || data["httpurl"] != "https://cdn.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.recorded == nil || !store.recorded.play || store.recorded.uid != 7 || store.recorded.vodID != 9 {
+		t.Fatalf("recorded=%#v", store.recorded)
 	}
 }
 

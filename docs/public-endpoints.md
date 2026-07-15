@@ -78,7 +78,7 @@
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | 本轮完成 | 小视频赞踩；登录用户写 `vod_updowns`，游客用进程内 limiter，无效视频分支 live 对比通过。 |
-| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | 本轮完成 | 小视频播放/下载地址请求的可控路径；记录/权限/地址错误、免费/限免、已观看和权限额度内提供地址已接管，扣金币和任务奖励分支后续事务化迁移。 |
+| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | 本轮完成 | 小视频播放/下载地址请求的可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址已接管，非扣费成功路径写 viewlog 与 `vods` 计数；超限扣金币、扣费标记和任务奖励分支后续事务化迁移。 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | 本轮完成 | 小视频请求列表的现有 viewlog 读取路径；返回 `rows[].vodrow/user`，拉取推荐、标记已浏览和广告插入副作用后续迁移。 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 本轮完成 | 长视频转小视频播放地址；成功直接返回 `text/html` URL，错误分支 live 对比通过。 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 本轮完成 | 接管媒体 CDN 请求前的记录不存在和播放地址不存在错误分支；m3u8 拉取与裁剪成功分支未接管。 |
@@ -171,6 +171,6 @@
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数和 topup 余额不足前置失败已迁；剩余游戏资产、外部平台调用需要登录、事务、灰度和回滚策略。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
-| `/minivod/throwcoin` 成功路径、`/minivod/parselong` 成功路径，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支、长视频地址转换和 parselong 前置错误已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
+| `/minivod/throwcoin` 成功路径、`/minivod/parselong` 成功路径，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、非扣费 viewlog/计数、任务金币领取、投币前置/GET 分支、长视频地址转换和 parselong 前置错误已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余涉及超限扣金币、扣费日志和奖励。 |
 | `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询、未登录失败和 delete 空记录 OK 分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、删除外部资源和金豆扣减。 |

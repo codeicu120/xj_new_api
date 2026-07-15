@@ -51,6 +51,7 @@ type Store interface {
 	FavoriteCount(ctx context.Context, uid int, vodID int) (int, error)
 	MiniViewLog(ctx context.Context, uid int, sid string, vodID int) (map[string]interface{}, error)
 	CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error)
+	RecordMiniMedia(ctx context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error
 	ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error)
 }
 
@@ -533,6 +534,9 @@ func (s *Service) reqMedia(ctx context.Context, token string, vodID int, playInd
 	}
 	if atoi(viewrow[viewedField]) > 0 {
 		data["httpurl"] = httpURL
+		if err := s.recordMiniMedia(ctx, user, vodID, play, 0, s.now().Unix()); err != nil {
+			return nil, -1, mediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			data["jumpId"] = 0
@@ -544,6 +548,9 @@ func (s *Service) reqMedia(ctx context.Context, token string, vodID int, playInd
 	now := s.now().Unix()
 	if price == 0 || (atoi64(row["free_sdate"]) < now && now < atoi64(row["free_edate"])) {
 		data["httpurl"] = httpURL
+		if err := s.recordMiniMedia(ctx, user, vodID, play, 0, now); err != nil {
+			return nil, -1, mediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			data["jumpId"] = 0
@@ -570,6 +577,9 @@ func (s *Service) reqMedia(ctx context.Context, token string, vodID int, playInd
 	}
 	if daycount < getMiniPermInt(user["perms"], daynumKey) {
 		data["httpurl"] = httpURL
+		if err := s.recordMiniMedia(ctx, user, vodID, play, 0, now); err != nil {
+			return nil, -1, mediaFailMessage(play), err
+		}
 		if play {
 			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
 			data["jumpId"] = 0
@@ -595,6 +605,10 @@ func (s *Service) reqMedia(ctx context.Context, token string, vodID int, playInd
 		return data, 4, "今日下载次数已用完，是否去免费增加次数？", nil
 	}
 	return data, 3, "今日下载次数已用完，请点击免费注册会员获取更多影片下载次数。", nil
+}
+
+func (s *Service) recordMiniMedia(ctx context.Context, user map[string]interface{}, vodID int, play bool, deduct int, now int64) error {
+	return s.store.RecordMiniMedia(ctx, atoi(user["uid"]), str(user["sid"]), vodID, play, deduct, now)
 }
 
 func (s *Service) voteGuest(ctx context.Context, vodID string, up bool) (int, string, error) {
