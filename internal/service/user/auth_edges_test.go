@@ -3,17 +3,25 @@ package user
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 type fakeAuthEdgeStore struct {
-	user    map[string]interface{}
-	byMobi  map[string]interface{}
-	byEmail map[string]interface{}
-	byUser  map[string]interface{}
+	user      map[string]interface{}
+	byID      map[string]interface{}
+	byMobi    map[string]interface{}
+	byEmail   map[string]interface{}
+	byUser    map[string]interface{}
+	settings  map[string]map[string]interface{}
+	keyCounts map[string]int
 }
 
 func (s fakeAuthEdgeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
 	return s.user, nil
+}
+
+func (s fakeAuthEdgeStore) UserByID(context.Context, int) (map[string]interface{}, error) {
+	return s.byID, nil
 }
 
 func (s fakeAuthEdgeStore) UserByMobi(context.Context, string) (map[string]interface{}, error) {
@@ -26,6 +34,20 @@ func (s fakeAuthEdgeStore) UserByEmail(context.Context, string) (map[string]inte
 
 func (s fakeAuthEdgeStore) UserByUsername(context.Context, string) (map[string]interface{}, error) {
 	return s.byUser, nil
+}
+
+func (s fakeAuthEdgeStore) SettingByUUID(_ context.Context, uuid string) (map[string]interface{}, error) {
+	if s.settings != nil {
+		return s.settings[uuid], nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeAuthEdgeStore) KeylimitCountSince(_ context.Context, key string, _ int64) (int, error) {
+	if s.keyCounts != nil {
+		return s.keyCounts[key], nil
+	}
+	return 0, nil
 }
 
 func TestRegisterEdgeBranches(t *testing.T) {
@@ -129,6 +151,42 @@ func TestRegisterReadOnlyValidationBranches(t *testing.T) {
 	}
 }
 
+func TestRegisterPolicyBranches(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{settings: map[string]map[string]interface{}{
+		"user.regopt": {"value": `a:1:{s:9:"regclosed";i:1;}`},
+	}})
+	retcode, errmsg, err := service.Register(context.Background(), AuthEdgeRequest{AUP: 1, Mobi: "13800138000"}, false)
+	if err != nil {
+		t.Fatalf("register closed: %v", err)
+	}
+	if retcode != -1 || errmsg != "已暂时关闭了注册" {
+		t.Fatalf("unexpected register closed response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{keyCounts: map[string]int{"user.regiser.ip.127.0.0.1": 1}})
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, Mobi: "13800138000", ClientIP: "127.0.0.1"}, false)
+	if err != nil {
+		t.Fatalf("register ip limited: %v", err)
+	}
+	if retcode != -1 || errmsg != "注册过于频繁，请稍后再试" {
+		t.Fatalf("unexpected ip limit response %d %q", retcode, errmsg)
+	}
+}
+
+func TestLoginPasswordClosed(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{settings: map[string]map[string]interface{}{
+		"setting": {"value": `a:1:{s:15:"pswdLoginStatus";i:0;}`},
+	}})
+	retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{}, false)
+	if err != nil {
+		t.Fatalf("login closed: %v", err)
+	}
+	if retcode != -1 || errmsg != "系统已关闭密码登录" {
+		t.Fatalf("unexpected login closed response %d %q", retcode, errmsg)
+	}
+}
+
 func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{})
 
@@ -207,6 +265,21 @@ func TestDeleteAndChangePhoneRequireLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "请登录后操作" {
 		t.Fatalf("unexpected change phone response %d %q", retcode, errmsg)
+	}
+}
+
+func TestDeleteGuestAccountBranch(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{
+		user: map[string]interface{}{"uid": "7"},
+		byID: map[string]interface{}{"uid": "7", "mobi": "~86.abc", "email": "~abc"},
+	})
+
+	retcode, errmsg, err := service.Delete(context.Background(), "250f790ba71ec2b9d3855f424db2259e")
+	if err != nil {
+		t.Fatalf("delete guest: %v", err)
+	}
+	if retcode != -1 || errmsg != "游客账号无需注销" {
+		t.Fatalf("unexpected guest delete response %d %q", retcode, errmsg)
 	}
 }
 

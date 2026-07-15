@@ -1643,3 +1643,15 @@
 - 未迁移：注册关闭、IP 频控和注销重复申请等分支需要 settings/keylimit/Redis 只读接口；`explore/signtask/sign` 的已签到分支在 PHP begin/lock 之后，本批不接。
 - Subagent：`Fermat` 梳理账号可迁前置校验，主线采纳无需新增基础设施的格式/查重分支。
 - 测试：`go test ./internal/service/user` 通过。
+
+### 账号配置/频控与注销只读失败分支
+
+- 已迁移：`/register`、`/v2/register` 的注册关闭分支，读取 `settings.uuid=user.regopt` 中 `regclosed=1` 后返回 `已暂时关闭了注册`。
+- 已迁移：`/register`、`/v2/register` 的 IP 频控分支，按 PHP key `user.regiser.ip.<ip>` 与 `keylimits.md5(keyid)` 语义读取 30 分钟 `>=1` 或 24 小时 `>=2`，返回 `注册过于频繁，请稍后再试`。
+- 已迁移：v1 `/login` 普通密码登录关闭分支，读取 `settings.uuid=setting` 中 `pswdLoginStatus!=1` 后返回 `系统已关闭密码登录`；v2 PHP 没有该开关，不迁移到 v2。
+- 已迁移：`/delete` 的游客账号无需注销分支，登录后只读 `users.mobi/email`，两者均以 `~` 开头时返回 `游客账号无需注销`。
+- PHP: `src/c/api/user.php::register/login`、`src/c/apiv2/user.php::register`、`src/c/api/user2.php::delAccount`、`src/m/keylimit.php::get_slave`。
+- Go: `internal/service/user.AuthEdgeService`、`internal/repository/user.Repository.SettingByUUID/KeylimitCountSince/UserByID`、`internal/handler.UserHandler`。
+- 未迁移：`/delete` 的 Redis hash `delAccountList` 重复注销判断、验证码校验、Redis 注销申请写入和退出登录仍需 Redis/client 设计。
+- Subagent：`Mencius` 核对账号剩余配置、keylimit 和注销分支；主线采纳 settings/keylimit/UserByID 只读分支，暂缓 Redis。
+- 测试：`go test ./internal/service/user ./internal/server` 通过。

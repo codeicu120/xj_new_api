@@ -85,6 +85,7 @@ func authEdgeRequest(c *gin.Context) userService.AuthEdgeRequest {
 		MobiPrefix: inputValue(c, "mobiprefix"),
 		RegType:    regType,
 		LoginType:  loginType,
+		ClientIP:   c.ClientIP(),
 	}
 }
 

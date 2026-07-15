@@ -117,6 +117,34 @@ func (r *Repository) UserByUsername(ctx context.Context, username string) (map[s
 	return row, nil
 }
 
+func (r *Repository) SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(uuid) == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT uuid,value,type FROM settings WHERE uuid=?", uuid)
+	if err != nil {
+		return nil, fmt.Errorf("query setting %s: %w", uuid, err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) KeylimitCountSince(ctx context.Context, key string, since int64) (int, error) {
+	if r.db == nil || strings.TrimSpace(key) == "" {
+		return 0, nil
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, "SELECT SUM(keynum) FROM keylimits WHERE keyid=? AND ctimestamp>?", md5Hex(key), since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("query keylimit %s: %w", key, err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
+}
+
 func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil
@@ -195,6 +223,11 @@ func validSID(sid string) bool {
 		}
 	}
 	return true
+}
+
+func md5Hex(value string) string {
+	sum := md5.Sum([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {

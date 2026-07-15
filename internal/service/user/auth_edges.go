@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	userRepo "xj_comp/internal/repository/user"
@@ -15,13 +16,20 @@ type AuthEdgeStore interface {
 }
 
 type AuthEdgeLookupStore interface {
+	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error)
 	UserByEmail(ctx context.Context, email string) (map[string]interface{}, error)
 	UserByUsername(ctx context.Context, username string) (map[string]interface{}, error)
 }
 
+type AuthEdgePolicyStore interface {
+	SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
+	KeylimitCountSince(ctx context.Context, key string, since int64) (int, error)
+}
+
 type AuthEdgeService struct {
 	store AuthEdgeStore
+	now   func() time.Time
 }
 
 var usernamePattern = regexp.MustCompile(`^[\p{Han}a-z0-9_]+$`)
@@ -37,10 +45,11 @@ type AuthEdgeRequest struct {
 	MobiPrefix string
 	RegType    int
 	LoginType  int
+	ClientIP   string
 }
 
 func NewAuthEdgeService(store AuthEdgeStore) *AuthEdgeService {
-	return &AuthEdgeService{store: store}
+	return &AuthEdgeService{store: store, now: time.Now}
 }
 
 func (s *AuthEdgeService) Register(ctx context.Context, req AuthEdgeRequest, v2 bool) (int, string, error) {
@@ -53,6 +62,16 @@ func (s *AuthEdgeService) Register(ctx context.Context, req AuthEdgeRequest, v2 
 	}
 	if req.AUP != 1 {
 		return -1, "请同意用户协议", nil
+	}
+	if closed, err := s.registrationClosed(ctx); err != nil {
+		return -1, "注册失败", err
+	} else if closed {
+		return -1, "已暂时关闭了注册", nil
+	}
+	if limited, err := s.registrationIPLimited(ctx, req.ClientIP); err != nil {
+		return -1, "注册失败", err
+	} else if limited {
+		return -1, "注册过于频繁，请稍后再试", nil
 	}
 	if !v2 {
 		if !validMainlandMobile(req.MobiPrefix, req.Mobi) {
@@ -104,6 +123,13 @@ func (s *AuthEdgeService) Login(ctx context.Context, req AuthEdgeRequest, v2 boo
 	}
 	if atoi(user["uid"]) > 0 {
 		return -1, "用户已登录", nil
+	}
+	if !v2 && req.LoginType != 1 {
+		if closed, err := s.passwordLoginClosed(ctx); err != nil {
+			return -1, "登录失败", err
+		} else if closed {
+			return -1, "系统已关闭密码登录", nil
+		}
 	}
 	if v2 && strings.TrimSpace(req.Mobi) == "" && strings.TrimSpace(req.Email) == "" && strings.TrimSpace(req.Username) == "" {
 		return -1, "用户名未注册", nil
@@ -167,6 +193,13 @@ func (s *AuthEdgeService) Delete(ctx context.Context, token string) (int, string
 	if atoi(user["uid"]) == 0 {
 		return -9999, "您还没有登录", nil
 	}
+	row, err := s.lookupUserByID(ctx, atoi(user["uid"]))
+	if err != nil {
+		return -1, "账号注销失败", err
+	}
+	if isGuestAccount(row) {
+		return -1, "游客账号无需注销", nil
+	}
 	return -1, "账号注销成功分支暂未迁移", nil
 }
 
@@ -210,6 +243,98 @@ func (s *AuthEdgeService) lookupLoginUser(ctx context.Context, req AuthEdgeReque
 	default:
 		return s.lookupUsername(ctx, strings.TrimSpace(req.Username))
 	}
+}
+
+func (s *AuthEdgeService) lookupUserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
+	lookup, ok := s.store.(AuthEdgeLookupStore)
+	if !ok || lookup == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := lookup.UserByID(ctx, uid)
+	if row == nil {
+		row = map[string]interface{}{}
+	}
+	return row, err
+}
+
+func (s *AuthEdgeService) registrationClosed(ctx context.Context) (bool, error) {
+	setting, err := s.settingMap(ctx, "user.regopt")
+	if err != nil {
+		return false, err
+	}
+	return atoi(setting["regclosed"]) == 1, nil
+}
+
+func (s *AuthEdgeService) registrationIPLimited(ctx context.Context, ip string) (bool, error) {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return false, nil
+	}
+	key := "user.regiser.ip." + ip
+	count30m, err := s.keylimitCount(ctx, key, 1800)
+	if err != nil {
+		return false, err
+	}
+	if count30m >= 1 {
+		return true, nil
+	}
+	count24h, err := s.keylimitCount(ctx, key, 86400)
+	if err != nil {
+		return false, err
+	}
+	return count24h >= 2, nil
+}
+
+func (s *AuthEdgeService) passwordLoginClosed(ctx context.Context) (bool, error) {
+	setting, err := s.settingMap(ctx, "setting")
+	if err != nil {
+		return false, err
+	}
+	value, ok := setting["pswdLoginStatus"]
+	if !ok {
+		return false, nil
+	}
+	return atoi(value) != 1, nil
+}
+
+func (s *AuthEdgeService) settingMap(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	policy, ok := s.store.(AuthEdgePolicyStore)
+	if !ok || policy == nil {
+		return map[string]interface{}{}, nil
+	}
+	row, err := policy.SettingByUUID(ctx, uuid)
+	if err != nil {
+		return nil, err
+	}
+	return parsePHPSerializedMap(str(row["value"])), nil
+}
+
+func (s *AuthEdgeService) keylimitCount(ctx context.Context, key string, seconds int64) (int, error) {
+	policy, ok := s.store.(AuthEdgePolicyStore)
+	if !ok || policy == nil {
+		return 0, nil
+	}
+	since := s.now().Unix() - seconds
+	return policy.KeylimitCountSince(ctx, key, since)
+}
+
+func parsePHPSerializedMap(value string) map[string]interface{} {
+	out := map[string]interface{}{}
+	re := regexp.MustCompile(`s:\d+:"([^"]+)";(?:s:\d+:"([^"]*)"|i:(-?\d+)|d:([0-9.]+)|N;)`)
+	for _, match := range re.FindAllStringSubmatch(value, -1) {
+		key := match[1]
+		switch {
+		case match[2] != "":
+			out[key] = match[2]
+		case match[3] != "":
+			out[key] = atoi(match[3])
+		case match[4] != "":
+			out[key] = match[4]
+		default:
+			out[key] = nil
+		}
+	}
+	return out
 }
 
 func (s *AuthEdgeService) checkMobiRegistration(ctx context.Context, mobi string) (string, error) {
@@ -272,6 +397,12 @@ func isDigits(value string) bool {
 		}
 	}
 	return true
+}
+
+func isGuestAccount(row map[string]interface{}) bool {
+	mobi := str(row["mobi"])
+	email := str(row["email"])
+	return strings.HasPrefix(mobi, "~") && strings.HasPrefix(email, "~")
 }
 
 func (s *AuthEdgeService) lookupForgotUser(ctx context.Context, req AuthEdgeRequest, v2 bool) (map[string]interface{}, error) {
@@ -379,4 +510,11 @@ func atoi(value interface{}) int {
 	var n int
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+func str(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }
