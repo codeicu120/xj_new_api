@@ -90,6 +90,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/explore/notification/clean` | ANY | `ExploreHandler.CleanNotification` |
 | `/explore/signtask`、`/explore/signtask/index` | ANY | `ExploreHandler.EmptyOK` |
 | `/explore/vodtask`、`/explore/vodtask/index` | ANY | `ExploreHandler.EmptyOK` |
+| `/explore/vodtask/show/:vid` | ANY | `ExploreHandler.VodTaskShow` |
+| `/explore/vodtask/reqcoin` | ANY | `ExploreHandler.VodTaskReqCoin` |
 | `/aiundress`、`/aiundress/listing` | ANY | `AIUndressHandler.Listing` |
 | `/aiundress/index` | ANY | `handler.EmptyHTML` |
 | `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
@@ -214,8 +216,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
 | `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 不接管 | PHP `notification` 仅定义 `index/clean`，未发现其他稳定 action |
 | `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，签到写入 action 未接管 |
-| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，reqcoin 未接管 |
-| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | `ExploreHandler.VodTaskShow` | 已重构；激励视频展示并创建/复用当日领取日志，错误分支 live 对比通过，成功分支 fake 覆盖；`reqcoin` 资产发放仍未接管 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK |
+| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | `ExploreHandler.VodTaskShow` | 已重构；激励视频展示并创建/复用当日领取日志，错误分支 live 对比通过，成功分支 fake 覆盖 |
+| `/explore/vodtask/reqcoin` | `c.api.explore.vodtask->reqcoin` | `ExploreHandler.VodTaskReqCoin` | 已重构；领取激励视频金币，事务锁定日志，登录用户写 `users_quota/user_coinlogs`，游客更新 `user_guests.goldcoin` |
 | `/explore/index` | `c.api.explore.index->index` | `ExploreHandler.Index` | 已重构，对比通过；发现页 tab、7 日签到奖励和签到状态只读聚合 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | `ExploreHandler.CleanNotification` | 已重构，对比通过；清理发现页红点，仅更新 `notification_all` |
 
@@ -499,7 +502,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 未重构；剩余 `bind` 涉及绑定关系、VIP/金币奖励写入 |
 | `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`） | `c.api.explore.signtask->$action` | 未重构；签到任务 |
-| `/explore/vodtask/:action?`（除 `/explore/vodtask`、`/explore/vodtask/index`、`/explore/vodtask/show/:vid`） | `c.api.explore.vodtask->$action` | 未重构；剩余 `reqcoin` 涉及金币发放和日志加锁 |
 
 ### 游戏、直播、一元购
 

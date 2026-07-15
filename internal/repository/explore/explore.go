@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const coinTypeExploreVODTask = 23
+
 type Repository struct {
 	db *sql.DB
 }
@@ -116,12 +118,149 @@ func (r *Repository) CreateGuestVodTaskLog(ctx context.Context, sid string, vid 
 	return int(id), nil
 }
 
+func (r *Repository) ReqVodTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
+	if r.db == nil || logid <= 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return -1, "", fmt.Errorf("begin req vodtask coin: %w", err)
+	}
+	defer tx.Rollback()
+	if uid > 0 {
+		return r.reqUserVodTaskCoin(ctx, tx, uid, logid, now)
+	}
+	return r.reqGuestVodTaskCoin(ctx, tx, sid, logid, now)
+}
+
+func (r *Repository) reqUserVodTaskCoin(ctx context.Context, tx *sql.Tx, uid int, logid int, now int64) (int, string, error) {
+	logrow, err := queryOneTx(ctx, tx, "SELECT * FROM explore_vodlogs WHERE logid=? FOR UPDATE", logid)
+	if err != nil {
+		return -1, "", fmt.Errorf("lock explore vod log: %w", err)
+	}
+	if len(logrow) == 0 || atoi(logrow["uid"]) != uid {
+		return -1, "记录不存在或已被删除", nil
+	}
+	if atoi(logrow["reqtime"]) > 0 {
+		return -1, "您已经领取过金币了", nil
+	}
+	reqcoin := atoi(logrow["reqcoin"])
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		if err == sql.ErrNoRows {
+			return -1, "记录写入失败，请重试", nil
+		}
+		return -1, "", fmt.Errorf("lock user quota: %w", err)
+	}
+	newBalance := balance + reqcoin
+	if newBalance != balance {
+		result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+		if err != nil {
+			return -1, "", fmt.Errorf("update user quota: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return -1, "记录写入失败，请重试", nil
+		}
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, '')", coinTypeExploreVODTask, uid, reqcoin, newBalance, now)
+	if err != nil {
+		return -1, "", fmt.Errorf("insert user coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return -1, "记录写入失败，请重试", nil
+	}
+	if err := updateReqTime(ctx, tx, "explore_vodlogs", logid, now); err != nil {
+		return -1, "记录更新失败，请重试", err
+	}
+	if err := tx.Commit(); err != nil {
+		return -1, "", fmt.Errorf("commit req vodtask coin: %w", err)
+	}
+	return 0, "领取成功", nil
+}
+
+func (r *Repository) reqGuestVodTaskCoin(ctx context.Context, tx *sql.Tx, sid string, logid int, now int64) (int, string, error) {
+	logrow, err := queryOneTx(ctx, tx, "SELECT * FROM explore_guestvodlogs WHERE logid=? FOR UPDATE", logid)
+	if err != nil {
+		return -1, "", fmt.Errorf("lock explore guest vod log: %w", err)
+	}
+	if len(logrow) == 0 || str(logrow["sid"]) != sid {
+		return -1, "记录不存在或已被删除", nil
+	}
+	if atoi(logrow["reqtime"]) > 0 {
+		return -1, "您已经领取过金币了", nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE user_guests SET goldcoin=goldcoin+? WHERE sid=?", atoi(logrow["reqcoin"]), sid); err != nil {
+		return -1, "", fmt.Errorf("update guest goldcoin: %w", err)
+	}
+	if err := updateReqTime(ctx, tx, "explore_guestvodlogs", logid, now); err != nil {
+		return -1, "记录更新失败，请重试", err
+	}
+	if err := tx.Commit(); err != nil {
+		return -1, "", fmt.Errorf("commit req guest vodtask coin: %w", err)
+	}
+	return 0, "领取成功", nil
+}
+
+func updateReqTime(ctx context.Context, tx *sql.Tx, table string, logid int, now int64) error {
+	result, err := tx.ExecContext(ctx, fmt.Sprintf("UPDATE %s SET reqtime=? WHERE logid=?", table), now, logid)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update reqtime affected %d rows", affected)
+	}
+	return nil
+}
+
+func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("read columns: %w", err)
+	}
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		scanArgs := make([]interface{}, len(columns))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+		if err := rows.Scan(scanArgs...); err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+		row := make(map[string]interface{}, len(columns))
+		for i, column := range columns {
+			row[column] = normalizeSQLValue(values[i])
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
+	return result, nil
+}
+
+func scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("read columns: %w", err)
@@ -171,4 +310,17 @@ func DecodeJSON(value interface{}) interface{} {
 		return nil
 	}
 	return decoded
+}
+
+func atoi(value interface{}) int {
+	var n int
+	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
+	return n
+}
+
+func str(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }

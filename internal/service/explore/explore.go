@@ -27,6 +27,7 @@ type Store interface {
 	GuestVodTaskLog(ctx context.Context, sid string, today int64, vid int) (map[string]interface{}, error)
 	CreateUserVodTaskLog(ctx context.Context, uid int, vid int, addtime int64, reqcoin int) (int, error)
 	CreateGuestVodTaskLog(ctx context.Context, sid string, vid int, addtime int64, reqcoin int) (int, error)
+	ReqVodTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error)
 }
 
 type Service struct {
@@ -179,6 +180,18 @@ func (s *Service) VodTaskShow(ctx context.Context, token string, vid int) (map[s
 		"reqtime": reqtime,
 		"vodrow":  processVodTaskRow(vodrow, s.resourceBaseURL),
 	}, 0, "", nil
+}
+
+func (s *Service) VodTaskReqCoin(ctx context.Context, token string, logid int) (int, string, error) {
+	user, err := s.userWithPerms(ctx, token)
+	if err != nil {
+		return -1, "领取奖励失败", err
+	}
+	retcode, errmsg, err := s.store.ReqVodTaskCoin(ctx, atoi(user["uid"]), str(user["sid"]), logid, s.now().Unix())
+	if err != nil {
+		return -1, "领取奖励失败", err
+	}
+	return retcode, errmsg, nil
 }
 
 func (s *Service) userWithPerms(ctx context.Context, token string) (map[string]interface{}, error) {

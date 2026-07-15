@@ -17,6 +17,9 @@ type fakeStore struct {
 	guestLog      map[string]interface{}
 	createdUser   map[string]interface{}
 	createdGuest  map[string]interface{}
+	reqCoinCall   map[string]interface{}
+	reqCoinRet    int
+	reqCoinMsg    string
 }
 
 func (s fakeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -70,6 +73,11 @@ func (s *fakeStore) CreateUserVodTaskLog(_ context.Context, uid int, vid int, ad
 func (s *fakeStore) CreateGuestVodTaskLog(_ context.Context, sid string, vid int, addtime int64, reqcoin int) (int, error) {
 	s.createdGuest = map[string]interface{}{"sid": sid, "vid": vid, "addtime": addtime, "reqcoin": reqcoin}
 	return 88, nil
+}
+
+func (s *fakeStore) ReqVodTaskCoin(_ context.Context, uid int, sid string, logid int, now int64) (int, string, error) {
+	s.reqCoinCall = map[string]interface{}{"uid": uid, "sid": sid, "logid": logid, "now": now}
+	return s.reqCoinRet, s.reqCoinMsg, nil
 }
 
 func TestIndexGuest(t *testing.T) {
@@ -236,6 +244,44 @@ func TestVodTaskShowCreatesGuestLog(t *testing.T) {
 	}
 	if store.createdGuest["sid"] != "guest" || store.createdGuest["reqcoin"] != 5 {
 		t.Fatalf("created=%#v", store.createdGuest)
+	}
+}
+
+func TestVodTaskReqCoinUser(t *testing.T) {
+	store := &fakeStore{
+		user:       map[string]interface{}{"uid": "5", "sid": "s", "gid": "0"},
+		groups:     []map[string]interface{}{},
+		reqCoinMsg: "领取成功",
+	}
+	service := NewService(store, store, "")
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	retcode, errmsg, err := service.VodTaskReqCoin(context.Background(), "token", 9)
+	if err != nil {
+		t.Fatalf("reqcoin: %v", err)
+	}
+	if retcode != 0 || errmsg != "领取成功" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+	if store.reqCoinCall["uid"] != 5 || store.reqCoinCall["logid"] != 9 || store.reqCoinCall["now"] != int64(1700000000) {
+		t.Fatalf("call=%#v", store.reqCoinCall)
+	}
+}
+
+func TestVodTaskReqCoinPassesStoreError(t *testing.T) {
+	store := &fakeStore{
+		user:       map[string]interface{}{"uid": "0", "sid": "guest"},
+		reqCoinRet: -1,
+		reqCoinMsg: "您已经领取过金币了",
+	}
+	service := NewService(store, store, "")
+
+	retcode, errmsg, err := service.VodTaskReqCoin(context.Background(), "", 9)
+	if err != nil {
+		t.Fatalf("reqcoin: %v", err)
+	}
+	if retcode != -1 || errmsg != "您已经领取过金币了" || store.reqCoinCall["sid"] != "guest" {
+		t.Fatalf("response=%d %q call=%#v", retcode, errmsg, store.reqCoinCall)
 	}
 }
 

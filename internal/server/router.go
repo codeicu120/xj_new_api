@@ -245,6 +245,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/explore/vodtask", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask/index", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask/show/:vid", exploreHandler.VodTaskShow)
+	router.Any("/explore/vodtask/reqcoin", exploreHandler.VodTaskReqCoin)
 	router.Any("/aiundress", aiundressHandler.Listing)
 	router.Any("/aiundress/listing", aiundressHandler.Listing)
 	router.Any("/aiundress/index", handler.EmptyHTML)

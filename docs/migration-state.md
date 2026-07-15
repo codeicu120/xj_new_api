@@ -929,7 +929,7 @@
 - Go: `internal/handler.ExploreHandler.EmptyOK`
 - Service: `internal/service/explore.Service`
 - Auth: 公共接口，不要求登录；旧 PHP 会带动态游客 token，Go 不生成该字段。
-- 兼容规则：仅接管默认 `index` 空入口，包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`signtask/sign`、`vodtask/reqcoin` 仍未接管。
+- 兼容规则：默认 `index` 空入口包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`signtask/sign` 仍未接管。
 - 测试：聚焦 `go test ./internal/server` 通过；PHP-Go 对比 `/explore/notification`、`/explore/signtask`、`/explore/vodtask` 忽略动态 `xxx_api_auth` 后一致。
 
 ### `/explore/vodtask/show/:vid`
@@ -940,8 +940,18 @@
 - Repository: `internal/repository/explore.Repository`
 - DB: 读取 `explore_vods`；按登录用户或游客读取/创建 `explore_vodlogs`、`explore_guestvodlogs` 当日日志。
 - 兼容规则：视频不存在或 `showtype!=0` 返回 `记录不存在或已被删除`；无当日日志时按 `mincoin/maxcoin` 随机 `reqcoin` 并创建日志；已有日志复用 `logid/reqcoin/reqtime`；返回 `vodrow` 字段对齐 `vodmgr->procRow2`。
-- 风险说明：本接口只创建领取日志，不发放金币；剩余 `reqcoin` 涉及金币/游客金币更新和事务锁，仍留在未重构高风险清单。
+- 风险说明：本接口只创建领取日志，不发放金币；金币领取已由 `/explore/vodtask/reqcoin` 接管。
 - 测试：`go test ./internal/service/explore ./internal/repository/explore ./internal/server` 通过；PHP-Go live 对比 `/explore/vodtask/show/0` 错误分支一致；成功和日志复用分支由 service fake 覆盖。
+
+### `/explore/vodtask/reqcoin`
+
+- PHP: `c.api.explore.vodtask->reqcoin`
+- Go: `internal/handler.ExploreHandler.VodTaskReqCoin`
+- Service: `internal/service/explore.Service`
+- Repository: `internal/repository/explore.Repository`
+- DB/Transaction: 登录用户锁 `explore_vodlogs` 和 `users_quota`，更新金币余额，写 `user_coinlogs(cointype=23)`，再更新 `reqtime`；游客锁 `explore_guestvodlogs`，更新 `user_guests.goldcoin` 和 `reqtime`。
+- 兼容规则：`logid` 不存在、归属不匹配返回 `记录不存在或已被删除`；已领取返回 `您已经领取过金币了`；成功返回 `retcode=0`、`errmsg=领取成功`。
+- 测试：`go test ./internal/service/explore ./internal/server` 通过；service fake 覆盖登录成功和重复领取错误传递，repository 事务逻辑按 PHP 锁表顺序迁移。
 
 ### `/explore/index`
 

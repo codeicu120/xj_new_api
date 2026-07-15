@@ -41,8 +41,9 @@
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
 | `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；签到写入 action 未接管。 |
-| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；激励视频 `reqcoin` 未接管。 |
-| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 本轮完成 | 激励视频展示和当日领取日志创建/复用；错误分支 live 对比通过，金币发放接口仍未迁移。 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口。 |
+| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 本轮完成 | 激励视频展示和当日领取日志创建/复用；错误分支 live 对比通过。 |
+| `/explore/vodtask/reqcoin` | `c.api.explore.vodtask->reqcoin` | 本轮完成 | 激励视频金币领取；登录用户写金币日志，游客更新游客金币，重复领取和越权错误对齐。 |
 | `/explore/index` | `c.api.explore.index->index` | 本轮完成 | 发现页入口，读取可见 tab，按用户/游客权限计算未来 7 天签到奖励和当前签到状态，对比通过。 |
 | `/game/platforms` | `c.api.game.index->index` | 本轮完成 | 读 `game_platform`，保留 PHP 字段和值类型并剔除 `json`。 |
 | `/game/categories` | `c.api.game.index->categories` | 本轮完成 | 读 `game_category`，保留 PHP 字段和值类型并拼接资源 URL。 |
