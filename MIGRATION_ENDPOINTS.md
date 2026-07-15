@@ -446,6 +446,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
+| `/v2/captcha/req` | `c.apiv2.captcha->req` | PHP 路由存在，Go 未注册；v2 验证码申请，返回 base64 图片和 captcha key |
+| `/v2/captcha/pic`、`/v2/captcha/picx` | `c.apiv2.captcha->pic/picx` | PHP 路由存在，Go 未注册；v2 图片验证码输出 |
+| `/v2/captcha/verify` | `c.apiv2.captcha->verify` | PHP 路由存在，Go 未注册；验证码校验，可能调用 Google/Tencent/自建验证码 |
+| `/v2/captcha/test` | `c.apiv2.captcha->test` | PHP 路由存在，Go 未注册；测试验证码图片 |
 
 ### 非 v2 视频接口
 
@@ -462,6 +466,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 未重构；金币打赏 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
+| `/v2/minifavorite`、`/v2/minifavorite/index` | `c.apiv2.minifavorite->index` | PHP 路由存在，Go 未注册；旧方法为空，需对比空响应 |
+| `/v2/minifavorite/listing` | `c.apiv2.minifavorite->listing` | PHP 路由存在，Go 未注册；v2 小视频收藏列表 |
+| `/v2/minifavorite/add` | `c.apiv2.minifavorite->add` | PHP 路由存在，Go 未注册；v2 小视频收藏，含收藏任务金币奖励 |
+| `/v2/minifavorite/remove` | `c.apiv2.minifavorite->remove` | PHP 路由存在，Go 未注册；v2 小视频取消收藏 |
 
 ### 用户账号
 
@@ -477,10 +485,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/payment/:action`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`） | `c.api.payment->$action` | 未重构；剩余 `reqpay` 等涉及下单或平台请求；裸 `/payment` 旧 PHP 为 404 |
-| `/respond/:action` | `c.respond.*` | 未重构；支付平台回调 |
-| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay5` | `c.respond.*` | 未重构 |
-| `/respond/hawpay`、`/respond/easypay`、`/respond/chan1`、`/respond/pay6`、`/respond/pay7` | `c.respond.*` | 未重构 |
+| `/payment/:action`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`） | `c.api.payment->$action` | 未重构；PHP 实际剩余 action 包含 `reqpay`、`shangfu`、`wappay1..5`、`wappay4a`、`hawpay`、`easypay`、`pay6..12/pay12req`、`gpay1/gpay2`、大量 `newpay*` 等，涉及下单、平台请求或跳转；裸 `/payment` 旧 PHP 为 404 |
+| `/respond/:action` | `c.respond.*` | 未重构；支付平台回调动态路由，PHP 会调用 `c.respond.<action>->index` |
+| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay4a`、`/respond/wappay5` | `c.respond.*` | 未重构；支付回调 |
+| `/respond/hawpay`、`/respond/easypay`、`/respond/chan1`、`/respond/pay6`、`/respond/pay7`、`/respond/pay8`、`/respond/pay9`、`/respond/pay10`、`/respond/pay10a`、`/respond/pay10b`、`/respond/pay11`、`/respond/pay12` | `c.respond.*` | 未重构；支付回调 |
+| `/respond/gpay1`、`/respond/gpay2`、`/respond/newpay*` | `c.respond.*` | 未重构；PHP `src/c/respond` 下存在多组 `newpay` 回调文件，均走通用回调初始化和支付处理 |
 
 ### 个人中心
 
@@ -488,8 +497,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
-| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；剩余 `sign/share/saveqrcode/qrcode/adviewclick` 涉及任务奖励、二维码图片生成或 keylimit 写入 |
-| `/ucp/withdraw/:action?`（除 `/ucp/withdraw`、`/ucp/withdraw/index`） | `c.api.ucp.withdraw->$action` | 未重构；剩余 `create` 为提现写入，涉及账户余额、银行卡、风控和事务 |
+| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；PHP 实际剩余 `sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick/invite`，涉及任务奖励、二维码图片生成或 keylimit 写入 |
+| `/ucp/withdraw/:action?`（除 `/ucp/withdraw`、`/ucp/withdraw/index`） | `c.api.ucp.withdraw->$action` | 未重构；PHP 实际剩余 `create/listing/rule`，其中 `create` 涉及账户余额、银行卡、风控和事务 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/qrcode` 涉及奖励写入或图片生成 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金币兑换和会员资产 |
@@ -519,6 +528,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
+| `/community/categories` | `c.api.topic->categories` | PHP 动态路由存在，Go 未注册；社区分类列表 |
+| `/community/slides` | `c.api.topic->slides` | PHP 动态路由存在，Go 未注册；社区轮播/广告位 |
+| `/community/search` | `c.api.topic->search` | PHP 动态路由存在，Go 未注册；社区搜索和热词 |
 | `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源

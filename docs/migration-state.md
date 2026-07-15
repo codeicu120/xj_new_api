@@ -1385,3 +1385,12 @@
 - DB/Transaction: 读取 `vods`、`user_bought`、`users_goldbean`；购买扣费时 `BeginTx`，用 `SELECT ... FOR UPDATE` 锁 `users_goldbean`，更新金豆余额，写 `user_beanlogs(bean_type=113)`，再 `REPLACE INTO user_bought`。
 - 兼容规则：影片不存在或 `showtype>0` 返回 `记录不存在或已被删除`；已购买直接成功；余额不足返回 `retcode=4`、`errmsg=金豆余额不足`；VIP 用户按 `VIPDiscount` 折扣计算 `view_price`；`view_price=0` 时兼容旧 PHP，只返回成功，不写已购记录。
 - 测试：`go test ./internal/service/bought ./internal/server` 通过；单测覆盖未登录、影片不存在、已购买、余额不足、VIP 折扣、0 价格兼容和成功扣费写入参数。
+
+### PHP 路由核对补充
+
+- 核对来源：`/Users/canavs/xjProj/XJBackend/api/api.php`、`src/c/api/topic.php`、`src/c/apiv2/minifavorite.php`、`src/c/apiv2/captcha.php`、`src/c/api/payment.php`、`src/c/respond/*`、`src/c/api/ucp/*`。
+- 补充到未重构清单：`/community/categories`、`/community/slides`、`/community/search`。
+- 补充到未重构清单：`/v2/minifavorite`、`/v2/minifavorite/index`、`/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove`。
+- 补充到未重构清单：`/v2/captcha/req`、`/v2/captcha/pic`、`/v2/captcha/picx`、`/v2/captcha/verify`、`/v2/captcha/test`。
+- 修正备注：`/payment/:action` 实际包含 `reqpay`、多组 `pay*`、`gpay*`、`newpay*` 等；`/respond/:action` 实际存在多组回调文件；`/ucp/task` 剩余 action 为 `sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick/invite`；`/ucp/withdraw` 剩余 action 为 `create/listing/rule`。
+- 未发现新增遗漏：`hgame` 仅稳定定义 `index`；`bought/listing/delete/buy` 已迁；`special`、`art`、`game/wali/balance`、`game/lottery/gameList` 均已在已重构区覆盖。
