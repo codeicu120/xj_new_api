@@ -68,6 +68,7 @@ type UserStore interface {
 	CountBalanceLogs(ctx context.Context, uid int) (int, error)
 	BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	CountWithdraws(ctx context.Context, uid int) (int, error)
+	CountWithdrawsSince(ctx context.Context, uid int, since int64) (int, error)
 	Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	SumWithdrawAmount(ctx context.Context, uid int) (int, error)
 	CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)

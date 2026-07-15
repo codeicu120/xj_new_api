@@ -1141,6 +1141,17 @@ func (r *Repository) CountWithdraws(ctx context.Context, uid int) (int, error) {
 	return total, nil
 }
 
+func (r *Repository) CountWithdrawsSince(ctx context.Context, uid int, since int64) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_withdraws WHERE uid=? AND createtime>? AND wdstatus>0", uid, since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count withdraws since: %w", err)
+	}
+	return total, nil
+}
+
 func (r *Repository) Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return []map[string]interface{}{}, nil

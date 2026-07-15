@@ -170,6 +170,31 @@ func (s *Service) WithdrawCreateEdge(ctx context.Context, token string, cardID i
 	if len(cardrow) == 0 {
 		return -1, "请选择一个收款账号", nil
 	}
+	withdrawLimit := atoi(setting["withdraw_limit"])
+	if withdrawLimit <= 0 {
+		withdrawLimit = 100
+	}
+	withdrawCount, err := s.store.CountWithdrawsSince(ctx, uid, dayStartUnix(s.now()))
+	if err != nil {
+		return -1, "提现申请失败", err
+	}
+	if withdrawCount >= withdrawLimit {
+		return -1, fmt.Sprintf("当天提现次数不能超过%d次", withdrawLimit), nil
+	}
+	switch atoi(cardrow["type"]) {
+	case 0, 1:
+		minAmount := atoi(setting["alipay_withdraw_min"])
+		maxAmount := atoi(setting["alipay_withdraw_max"])
+		if withdrawAmount < minAmount || withdrawAmount > maxAmount {
+			return -1, "支付宝提现范围为 ¥" + formatRMB(minAmount) + "~" + formatRMB(maxAmount), nil
+		}
+	case 2:
+		minAmount := atoi(setting["bankcard_withdraw_min"])
+		maxAmount := atoi(setting["bankcard_withdraw_max"])
+		if withdrawAmount < minAmount || withdrawAmount > maxAmount {
+			return -1, "银行卡提现范围为 ¥" + formatRMB(minAmount) + "~" + formatRMB(maxAmount), nil
+		}
+	}
 	return -1, "提现申请成功分支暂未迁移", nil
 }
 

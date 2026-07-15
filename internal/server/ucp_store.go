@@ -267,6 +267,10 @@ func (s ucpStore) CountWithdraws(ctx context.Context, uid int) (int, error) {
 	return s.ucp.CountWithdraws(ctx, uid)
 }
 
+func (s ucpStore) CountWithdrawsSince(ctx context.Context, uid int, since int64) (int, error) {
+	return s.ucp.CountWithdrawsSince(ctx, uid, since)
+}
+
 func (s ucpStore) Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.Withdraws(ctx, uid, page, pageSize)
 }

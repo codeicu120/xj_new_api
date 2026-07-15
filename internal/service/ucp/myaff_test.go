@@ -44,6 +44,7 @@ type fakeUserStore struct {
 	payments           []map[string]interface{}
 	withdraws          []map[string]interface{}
 	withdrawTotal      int
+	withdrawSinceCount *int
 	exrate             *int
 	vodOrders          []map[string]interface{}
 	vodOrderRow        map[string]interface{}
@@ -591,6 +592,13 @@ func (s fakeUserStore) CountWithdraws(context.Context, int) (int, error) {
 		return len(s.withdraws), nil
 	}
 	return 1, nil
+}
+
+func (s fakeUserStore) CountWithdrawsSince(context.Context, int, int64) (int, error) {
+	if s.withdrawSinceCount != nil {
+		return *s.withdrawSinceCount, nil
+	}
+	return 0, nil
 }
 
 func (s fakeUserStore) Withdraws(context.Context, int, int, int) ([]map[string]interface{}, error) {
@@ -2520,7 +2528,7 @@ func TestWithdrawListingFormatsRows(t *testing.T) {
 func TestWithdrawCreateEdgePrechecks(t *testing.T) {
 	baseSettings := map[string]map[string]interface{}{
 		"setting": {
-			"value": `a:6:{s:8:"topupmin";i:5000;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:200000;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:500000;}`,
+			"value": `a:7:{s:8:"topupmin";i:5000;s:14:"withdraw_limit";i:2;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:200000;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:500000;}`,
 		},
 		"game.setting": {
 			"value": `a:1:{s:11:"withdrawmin";i:6000;}`,
@@ -2597,6 +2605,47 @@ func TestWithdrawCreateEdgePrechecks(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "请选择一个收款账号" {
 		t.Fatalf("card retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	two := 2
+	service = NewService(fakeUserStore{
+		user:               map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:           baseSettings,
+		bankcardRow:        map[string]interface{}{"cardid": "7", "type": "1"},
+		withdrawSinceCount: &two,
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "当天提现次数不能超过2次" {
+		t.Fatalf("limit retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    baseSettings,
+		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 250000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "支付宝提现范围为 ¥10.00~2000.00" {
+		t.Fatalf("alipay range retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    baseSettings,
+		bankcardRow: map[string]interface{}{"cardid": "8", "type": "2"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 8, 0, 600000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "银行卡提现范围为 ¥30.00~5000.00" {
+		t.Fatalf("bankcard range retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
 	service = NewService(fakeUserStore{

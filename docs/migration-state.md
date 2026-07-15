@@ -1682,3 +1682,12 @@
 - 未迁移：保存二维码赠送金币、`coinlog->change()`、`taskdone()`、keylimit/任务奖励写入和事务成功路径。
 - Subagent：`Planck` 只读复核该分支位于 `db->begin()` 和 coinlog 写入之前；主线采纳为纯读失败分支。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### UCP 提现创建次数和渠道范围前置失败分支
+
+- 已迁移：`/ucp/withdraw/create` 的当天提现次数限制，以及支付宝/银行卡提现金额范围分支；次数按 `uid + createtime>dayStart + wdstatus>0` 统计，`withdraw_limit<=0` 时按 PHP 默认 100。
+- PHP: `src/c/api/ucp/withdraw.php::create`。
+- Go: `internal/handler.UCPHandler.WithdrawCreate`、`internal/service/ucp.Service.WithdrawCreateEdge`、`internal/repository/ucp.Repository.CountWithdrawsSince`。
+- 未迁移：账户余额、游戏余额、金币兑换、提现申请写入、冻结余额事务和 Telegram 通知。
+- Subagent：`Planck` 先前只读复核这些分支位于账户读取、兑换和冻结事务之前；`Pauli` 正在做提交前 CR 复核。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过。
