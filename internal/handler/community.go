@@ -116,6 +116,18 @@ func (h *CommunityHandler) UpComment(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 }
 
+func (h *CommunityHandler) Comment(c *gin.Context) {
+	tid, _ := strconv.Atoi(inputValue(c, "tid"))
+	parentID, _ := strconv.Atoi(inputValue(c, "parentid"))
+	retcode, errmsg, err := h.service.Comment(c.Request.Context(), authToken(c), tid, parentID, inputValue(c, "content"), c.ClientIP())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func communityAction(path string) string {
 	path = strings.TrimPrefix(path, "/community/")
 	if index := strings.Index(path, "-"); index >= 0 {

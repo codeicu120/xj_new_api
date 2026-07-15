@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"xj_comp/internal/domain"
 	communityRepo "xj_comp/internal/repository/community"
 )
 
@@ -20,6 +21,10 @@ type fakeStore struct {
 	commentUp     bool
 	topicDelta    int
 	commentDelta  int
+	recentByUID   []map[string]interface{}
+	recentByIP    []map[string]interface{}
+	created       *domain.CommunityCommentCreateInput
+	commentCount  int
 }
 
 func (s *fakeStore) CountTopics(_ context.Context, filter communityRepo.TopicFilter) (int, error) {
@@ -107,6 +112,20 @@ func (s *fakeStore) SetCommentUp(_ context.Context, _ int, _ int, up bool, _ int
 }
 func (s *fakeStore) IncrementCommentUp(_ context.Context, _ int, delta int) error {
 	s.commentDelta += delta
+	return nil
+}
+func (s *fakeStore) RecentCommentsByUID(context.Context, int, int64) ([]map[string]interface{}, error) {
+	return s.recentByUID, nil
+}
+func (s *fakeStore) RecentCommentsByIP(context.Context, string, int64) ([]map[string]interface{}, error) {
+	return s.recentByIP, nil
+}
+func (s *fakeStore) CreateComment(_ context.Context, input domain.CommunityCommentCreateInput, _ map[string]interface{}) (int, error) {
+	s.created = &input
+	return 99, nil
+}
+func (s *fakeStore) IncrementTopicCommentCount(context.Context, int) error {
+	s.commentCount++
 	return nil
 }
 
@@ -260,5 +279,62 @@ func TestUpCommentCancelsExisting(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "取消赞成功" || store.commentUp || store.commentDelta != -1 {
 		t.Fatalf("response=%d %q up=%v delta=%d", retcode, errmsg, store.commentUp, store.commentDelta)
+	}
+}
+
+func TestCommentRequiresLogin(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.Comment(context.Background(), "", 9, 0, "hello", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("comment: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请登录后操作" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestCommentRejectsInvalidContent(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7", "nickname": "nick", "perms": map[string]interface{}{}}}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.Comment(context.Background(), "abc", 9, 0, "", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("comment: %v", err)
+	}
+	if retcode != 4 || errmsg != "评论允许1-30字之间" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestCommentRejectsDuplicateContent(t *testing.T) {
+	store := &fakeStore{recentByUID: []map[string]interface{}{{"content": "这是一条社区评论"}}}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7", "nickname": "nick", "perms": map[string]interface{}{}}}, store, "https://res.test")
+
+	retcode, errmsg, err := service.Comment(context.Background(), "abc", 9, 0, "这是一条社区评论", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("comment: %v", err)
+	}
+	if retcode != 10 || errmsg != "请勿发布重复内容1" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestCommentCreatesPendingComment(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7", "nickname": "nick", "perms": map[string]interface{}{}}}, store, "https://res.test")
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	retcode, errmsg, err := service.Comment(context.Background(), "abc", 9, 0, "不错", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("comment: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+	if store.created == nil || store.created.TID != 9 || store.created.UID != 7 || store.created.ShowType != 4 || store.created.Content != "不错" {
+		t.Fatalf("created=%#v", store.created)
+	}
+	if store.commentCount != 1 {
+		t.Fatalf("comment count=%d", store.commentCount)
 	}
 }

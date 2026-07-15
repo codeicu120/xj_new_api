@@ -16,3 +16,17 @@ type CommunityCommentListingData struct {
 	Rows         []map[string]interface{} `json:"rows"`
 	PageInfo     map[string]interface{}   `json:"pageinfo"`
 }
+
+type CommunityCommentCreateInput struct {
+	RootID   int
+	ParentID int
+	Left     int
+	Right    int
+	Depth    int
+	TID      int
+	UID      int
+	Content  string
+	AddTime  int64
+	IP       string
+	ShowType int
+}

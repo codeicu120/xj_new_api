@@ -82,6 +82,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/clisting`、`/community/clisting-:params` | ANY | `CommunityHandler.CommentListing` |
 | `/community/attention` | ANY | `CommunityHandler.Attention` |
 | `/community/up`、`/community/up_comment` | ANY | `CommunityHandler.Up/UpComment` |
+| `/community/comment` | ANY | `CommunityHandler.Comment` |
 | `/explore/index` | ANY | `ExploreHandler.Index` |
 | `/explore/notification`、`/explore/notification/index` | ANY | `ExploreHandler.EmptyOK` |
 | `/explore/notification/clean` | ANY | `ExploreHandler.CleanNotification` |
@@ -325,6 +326,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | `CommunityHandler.CommentListing` | 已重构，对比通过；评论树列表，`tid` 不存在分支一致 |
 | `/community/attention` | `c.api.topic->attention` | `CommunityHandler.Attention` | 已重构；登录收藏/取消收藏帖子，支持 `tids` 批量取消收藏并按实际删除更新 `fav_count`；未登录分支 live 对比通过 |
 | `/community/up`、`/community/up_comment` | `c.api.topic->up/up_comment` | `CommunityHandler.Up/UpComment` | 已重构；登录点赞/取消点赞帖子或评论，更新去重表和 `upnum` 计数；未登录分支 live 对比通过 |
+| `/community/comment` | `c.api.topic->comment` | `CommunityHandler.Comment` | 已重构；登录评论发布，保留权限、内容、回复、重复校验和评论树写入，成功评论进入待审核状态 |
 
 ### 搜索、专题、公告
 
@@ -506,7 +508,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/community/:action?`（除已列 list/recommend/hot/latest/favorite/show/clisting/attention/up/up_comment） | `c.api.topic->$action` | 未重构；剩余发帖和评论发布等写入 |
+| `/community/:action?`（除已列 list/recommend/hot/latest/favorite/show/clisting/attention/up/up_comment/comment） | `c.api.topic->$action` | 未重构；剩余发帖等写入 |
 | `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源

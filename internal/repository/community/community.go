@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"xj_comp/internal/domain"
 )
 
 type TopicFilter struct {
@@ -251,6 +253,73 @@ func (r *Repository) IncrementCommentUp(ctx context.Context, cid int, delta int)
 	}
 	if _, err := r.db.ExecContext(ctx, "UPDATE topic_comments SET upnum=upnum+? WHERE id=?", delta, cid); err != nil {
 		return fmt.Errorf("increment topic comment up: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) RecentCommentsByUID(ctx context.Context, uid int, since int64) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT content FROM topic_comments WHERE uid=? AND addtime>?", uid, since)
+}
+
+func (r *Repository) RecentCommentsByIP(ctx context.Context, ip string, since int64) ([]map[string]interface{}, error) {
+	if r.db == nil || ip == "" {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT content FROM topic_comments WHERE addtime>? AND ip=?", since, ip)
+}
+
+func (r *Repository) CreateComment(ctx context.Context, input domain.CommunityCommentCreateInput, parent map[string]interface{}) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin topic comment tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if len(parent) > 0 {
+		rootID := input.RootID
+		rgt := atoi(parent["rgt"])
+		if _, err := tx.ExecContext(ctx, "UPDATE topic_comments SET rgt=rgt+2 WHERE rootid=? AND rgt>=?", rootID, rgt); err != nil {
+			return 0, fmt.Errorf("shift topic comment rgt: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE topic_comments SET lft=lft+2 WHERE rootid=? AND lft>?", rootID, rgt); err != nil {
+			return 0, fmt.Errorf("shift topic comment lft: %w", err)
+		}
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO topic_comments
+		(rootid,parentid,lft,rgt,depth,tid,uid,content,addtime,ip,showtype)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		input.RootID, input.ParentID, input.Left, input.Right, input.Depth, input.TID, input.UID, input.Content, input.AddTime, input.IP, input.ShowType,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert topic comment: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert topic comment id: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit topic comment tx: %w", err)
+	}
+	committed = true
+	return int(id), nil
+}
+
+func (r *Repository) IncrementTopicCommentCount(ctx context.Context, tid int) error {
+	if r.db == nil || tid <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE topics SET comment_count=comment_count+1 WHERE tid=?", tid); err != nil {
+		return fmt.Errorf("increment topic comment count: %w", err)
 	}
 	return nil
 }

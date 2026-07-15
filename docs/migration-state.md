@@ -1043,6 +1043,17 @@
 - 兼容规则：记录不存在返回 `记录不存在或已删除`；已收藏时取消并返回 `取消收藏成功`；未收藏时插入收藏记录并返回 `收藏成功`；批量取消返回 `批量取消收藏成功`。
 - 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、单个收藏和批量取消收藏，路由测试覆盖未登录错误壳；PHP-Go live 对比 `/community/attention?tid=9` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
 
+### `/community/comment`
+
+- PHP: `c.api.topic->comment`
+- Go: `internal/handler.CommunityHandler.Comment`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 必须登录，未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。
+- DB: 读取 `topics`、`topic_comments`；成功时写入 `topic_comments`，回复评论按 nested-set 右值移动树节点，并更新 `topics.comment_count=comment_count+1`。
+- 兼容规则：保留 PHP 的禁言、昵称数字异常、1-30 字长度、字符/标点/空白/换行数量、父评论、深度和 10 分钟相似评论校验；成功评论 `showtype=4` 等待后台审核，返回 `retcode=0`、`errmsg=""`。
+- 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、内容长度、重复内容和成功写入字段，路由测试覆盖未登录错误壳；PHP-Go live 对比 `/community/comment?tid=9&content=hello` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/getGlobalData`
 
 - PHP: `c.api.index->getGlobalData`

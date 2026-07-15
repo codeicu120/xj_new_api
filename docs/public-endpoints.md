@@ -75,6 +75,7 @@
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 本轮完成 | 社区评论列表；`tid` 不存在分支和空评论分页 live 对比通过。 |
 | `/community/attention` | `c.api.topic->attention` | 本轮完成 | 登录收藏/取消收藏帖子，支持 `tids` 批量取消；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
 | `/community/up`、`/community/up_comment` | `c.api.topic->up/up_comment` | 本轮完成 | 登录点赞/取消点赞帖子或评论；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
+| `/community/comment` | `c.api.topic->comment` | 本轮完成 | 登录社区评论发布；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
 | `/game/games` | `c.api.game.index->games` | 本轮完成 | 读 `game`，支持 `platform_id/category_id`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | 本轮完成 | 复用 VOD 行处理，按旧 PHP 固定返回 6 条随机猜你喜欢。 |
@@ -131,5 +132,5 @@
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
-| `/community/:action?` 剩余 action | 社区列表、详情、评论列表、收藏和点赞已完成；发帖、评论发布等写入 action 仍待高风险迁移。 |
+| `/community/:action?` 剩余 action | 社区列表、详情、评论列表、收藏、点赞和评论发布已完成；发帖等写入 action 仍待高风险迁移。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |
