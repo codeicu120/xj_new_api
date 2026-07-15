@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -21,6 +22,11 @@ type Store interface {
 	Tabs(ctx context.Context) ([]map[string]interface{}, error)
 	UpdateUserNotificationAll(ctx context.Context, uid int, value string) error
 	UpdateGuestNotificationAll(ctx context.Context, sid string, value string) error
+	VodTaskByID(ctx context.Context, vid int) (map[string]interface{}, error)
+	UserVodTaskLog(ctx context.Context, uid int, today int64, vid int) (map[string]interface{}, error)
+	GuestVodTaskLog(ctx context.Context, sid string, today int64, vid int) (map[string]interface{}, error)
+	CreateUserVodTaskLog(ctx context.Context, uid int, vid int, addtime int64, reqcoin int) (int, error)
+	CreateGuestVodTaskLog(ctx context.Context, sid string, vid int, addtime int64, reqcoin int) (int, error)
 }
 
 type Service struct {
@@ -28,6 +34,7 @@ type Service struct {
 	store           Store
 	resourceBaseURL string
 	now             func() time.Time
+	randIntn        func(int) int
 }
 
 func NewService(auth AuthStore, store Store, resourceBaseURL string) *Service {
@@ -36,6 +43,7 @@ func NewService(auth AuthStore, store Store, resourceBaseURL string) *Service {
 		store:           store,
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		now:             time.Now,
+		randIntn:        rand.Intn,
 	}
 }
 
@@ -117,6 +125,62 @@ func (s *Service) CleanNotification(ctx context.Context, token string, tabKey st
 	return map[string]interface{}{"notification_all": dataValue}, 0, "", nil
 }
 
+func (s *Service) VodTaskShow(ctx context.Context, token string, vid int) (map[string]interface{}, int, string, error) {
+	user, err := s.userWithPerms(ctx, token)
+	if err != nil {
+		return nil, -1, "获取激励视频失败", err
+	}
+	vodrow, err := s.store.VodTaskByID(ctx, vid)
+	if err != nil {
+		return nil, -1, "获取激励视频失败", err
+	}
+	if len(vodrow) == 0 || atoi(vodrow["showtype"]) != 0 {
+		return nil, -1, "记录不存在或已被删除", nil
+	}
+	now := s.now().Unix()
+	today := dayStartUnix(s.now())
+	uid := atoi(user["uid"])
+	var logrow map[string]interface{}
+	if uid > 0 {
+		logrow, err = s.store.UserVodTaskLog(ctx, uid, today, atoi(vodrow["vid"]))
+	} else {
+		logrow, err = s.store.GuestVodTaskLog(ctx, str(user["sid"]), today, atoi(vodrow["vid"]))
+	}
+	if err != nil {
+		return nil, -1, "获取激励视频失败", err
+	}
+	logid := 0
+	reqcoin := 0
+	reqtime := 0
+	if len(logrow) == 0 {
+		reqcoin = randomCoin(atoi(vodrow["mincoin"]), atoi(vodrow["maxcoin"]), s.randIntn)
+		if uid > 0 {
+			logid, err = s.store.CreateUserVodTaskLog(ctx, uid, atoi(vodrow["vid"]), now, reqcoin)
+		} else {
+			logid, err = s.store.CreateGuestVodTaskLog(ctx, str(user["sid"]), atoi(vodrow["vid"]), now, reqcoin)
+		}
+		if err != nil {
+			return nil, -1, "获取激励视频失败", err
+		}
+		if logid == 0 {
+			return nil, -1, "记录写入失败，请重试", nil
+		}
+	} else {
+		logid = atoi(logrow["logid"])
+		reqcoin = atoi(logrow["reqcoin"])
+		reqtime = atoi(logrow["reqtime"])
+	}
+	if reqcoin <= 0 {
+		return nil, -1, "领取的金币不可以是0", nil
+	}
+	return map[string]interface{}{
+		"logid":   logid,
+		"reqcoin": reqcoin,
+		"reqtime": reqtime,
+		"vodrow":  processVodTaskRow(vodrow, s.resourceBaseURL),
+	}, 0, "", nil
+}
+
 func (s *Service) userWithPerms(ctx context.Context, token string) (map[string]interface{}, error) {
 	groups, err := s.auth.Groups(ctx)
 	if err != nil {
@@ -151,6 +215,35 @@ func processTabs(rows []map[string]interface{}, resourceBaseURL string) []map[st
 		})
 	}
 	return result
+}
+
+func processVodTaskRow(row map[string]interface{}, resourceBaseURL string) map[string]interface{} {
+	if len(row) == 0 {
+		return map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"vid":       atoi(row["vid"]),
+		"title":     str(row["title"]),
+		"intro":     str(row["intro"]),
+		"coverpic":  resourceURL(resourceBaseURL, str(row["coverpic"])),
+		"playurl":   str(row["playurl"]),
+		"portrait":  atoi(row["portrait"]),
+		"countdown": atoi(row["countdown"]),
+		"pname":     str(row["pname"]),
+		"pdscr":     str(row["pdscr"]),
+		"picon":     resourceURL(resourceBaseURL, str(row["picon"])),
+		"purl":      str(row["purl"]),
+	}
+}
+
+func randomCoin(minCoin int, maxCoin int, randIntn func(int) int) int {
+	if maxCoin < minCoin {
+		maxCoin = minCoin
+	}
+	if minCoin < 0 {
+		minCoin = 0
+	}
+	return minCoin + randIntn(maxCoin-minCoin+1)
 }
 
 func initGids(user map[string]interface{}, now func() time.Time) []int {

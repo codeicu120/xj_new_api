@@ -15,6 +15,9 @@ type fakeStore struct {
 	total   int
 	rows    []map[string]interface{}
 	removed []int
+	vodrow  map[string]interface{}
+	count   int
+	added   []int
 }
 
 func (s *fakeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -36,6 +39,29 @@ func (s *fakeStore) Remove(_ context.Context, kind favoriteRepo.Kind, uid int, v
 		return 0, nil
 	}
 	return 1, nil
+}
+
+func (s *fakeStore) VODByID(_ context.Context, vodid int) (map[string]interface{}, error) {
+	if vodid <= 0 || s.vodrow == nil {
+		return map[string]interface{}{}, nil
+	}
+	return s.vodrow, nil
+}
+
+func (s *fakeStore) Count(_ context.Context, kind favoriteRepo.Kind, uid int, vodid int, _ int64) (int, error) {
+	s.kind = kind
+	s.uid = uid
+	if vodid > 0 {
+		return s.count, nil
+	}
+	return 0, nil
+}
+
+func (s *fakeStore) Add(_ context.Context, kind favoriteRepo.Kind, uid int, vodid int, _ int64) error {
+	s.kind = kind
+	s.uid = uid
+	s.added = append(s.added, vodid)
+	return nil
 }
 
 type fakeVODProcessor struct{}
@@ -153,5 +179,73 @@ func TestRemoveCountsRows(t *testing.T) {
 	}
 	if store.kind != favoriteRepo.KindMini || len(store.removed) != 3 {
 		t.Fatalf("store = kind:%s removed:%#v", store.kind, store.removed)
+	}
+}
+
+func TestAddRequiresLogin(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, store, nil)
+
+	_, retcode, errmsg, err := service.Add(context.Background(), "", favoriteRepo.KindVOD, 9)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请登录后操作" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestAddValidatesVOD(t *testing.T) {
+	store := &fakeStore{user: map[string]interface{}{"uid": "5"}, vodrow: map[string]interface{}{"vodid": "9", "showtype": "1"}}
+	service := NewService(store, store, nil)
+
+	_, retcode, errmsg, err := service.Add(context.Background(), "token", favoriteRepo.KindVOD, 9)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestMiniAddRequiresMiniVOD(t *testing.T) {
+	store := &fakeStore{user: map[string]interface{}{"uid": "5"}, vodrow: map[string]interface{}{"vodid": "9", "showtype": "0"}}
+	service := NewService(store, store, nil)
+
+	_, retcode, errmsg, err := service.Add(context.Background(), "token", favoriteRepo.KindMini, 9)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestAddDuplicate(t *testing.T) {
+	store := &fakeStore{user: map[string]interface{}{"uid": "5"}, vodrow: map[string]interface{}{"vodid": "9", "showtype": "0"}, count: 1}
+	service := NewService(store, store, nil)
+
+	_, retcode, errmsg, err := service.Add(context.Background(), "token", favoriteRepo.KindVOD, 9)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if retcode != -1 || errmsg != "您已经收藏过了" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestAddSuccess(t *testing.T) {
+	store := &fakeStore{user: map[string]interface{}{"uid": "5"}, vodrow: map[string]interface{}{"vodid": "9", "showtype": "0"}}
+	service := NewService(store, store, nil)
+
+	data, retcode, errmsg, err := service.Add(context.Background(), "token", favoriteRepo.KindVOD, 9)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if retcode != 0 || errmsg != "已收藏" || data == nil {
+		t.Fatalf("response = %d %q %#v", retcode, errmsg, data)
+	}
+	if len(store.added) != 1 || store.added[0] != 9 {
+		t.Fatalf("added = %#v", store.added)
 	}
 }

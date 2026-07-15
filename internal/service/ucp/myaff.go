@@ -40,6 +40,8 @@ type UserStore interface {
 	CountFeedbacksByType(ctx context.Context, uid int, feedbackType int) (int, error)
 	FeedbacksByType(ctx context.Context, uid int, feedbackType int, page int, pageSize int) ([]map[string]interface{}, error)
 	FeedbackByID(ctx context.Context, id int) (map[string]interface{}, error)
+	CountFeedbacksSince(ctx context.Context, uid int, since int64) (int, error)
+	CreateFeedback(ctx context.Context, input domain.FeedbackCreateInput) (int, error)
 	PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error)
 	AttachByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
 	CountMsgConversations(ctx context.Context, uid int) (int, error)

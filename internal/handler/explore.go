@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,6 +35,21 @@ func (h *ExploreHandler) EmptyOK(c *gin.Context) {
 
 func (h *ExploreHandler) CleanNotification(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.CleanNotification(c.Request.Context(), authToken(c), inputValue(c, "tabkey"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *ExploreHandler) VodTaskShow(c *gin.Context) {
+	vid, _ := strconv.Atoi(c.Param("vid"))
+	data, retcode, errmsg, err := h.service.VodTaskShow(c.Request.Context(), authToken(c), vid)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

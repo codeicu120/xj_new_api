@@ -8,9 +8,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"xj_comp/internal/domain"
+	userRepo "xj_comp/internal/repository/user"
 )
 
 const sampleParams = "$vodid:0-$orderby:0-$page:1"
@@ -24,10 +26,23 @@ type Store interface {
 	UserGroups(ctx context.Context) ([]map[string]interface{}, error)
 	CountRoots(ctx context.Context, vodID int) (int, error)
 	RootComments(ctx context.Context, vodID int, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
+	CommentByID(ctx context.Context, id int) (map[string]interface{}, error)
+	IncrementVote(ctx context.Context, id int, field string) error
+}
+
+type AuthStore interface {
+	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
+}
+
+type VoteLimiter interface {
+	Seen(ctx context.Context, key string) (bool, error)
+	Mark(ctx context.Context, key string) error
 }
 
 type Service struct {
 	store           Store
+	auth            AuthStore
+	limiter         VoteLimiter
 	resourceBaseURL string
 	now             func() time.Time
 }
@@ -37,9 +52,24 @@ type ListingRequest struct {
 	QueryPage  string
 }
 
-func NewService(store Store, resourceBaseURL string) *Service {
+func NewService(store Store, resourceBaseURL string, opts ...interface{}) *Service {
+	var auth AuthStore
+	var limiter VoteLimiter
+	for _, opt := range opts {
+		switch typed := opt.(type) {
+		case AuthStore:
+			auth = typed
+		case VoteLimiter:
+			limiter = typed
+		}
+	}
+	if limiter == nil {
+		limiter = newMemoryVoteLimiter()
+	}
 	return &Service{
 		store:           store,
+		auth:            auth,
+		limiter:         limiter,
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		now:             time.Now,
 	}
@@ -83,6 +113,69 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.Comme
 		Rows:     s.processRows(rows, groups),
 		PageInfo: pageInfo(total, pageSize, page, pageURL),
 	}, nil
+}
+
+func (s *Service) Vote(ctx context.Context, token string, id int, up bool) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "评论操作失败", err
+	}
+	uid := atoi(str(user["uid"]))
+	sid := str(user["sid"])
+	if uid == 0 && sid == "" {
+		sid = "guest"
+	}
+	row, err := s.store.CommentByID(ctx, id)
+	if err != nil {
+		return -1, "评论操作失败", err
+	}
+	if len(row) == 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	actor := sid
+	if uid > 0 {
+		actor = fmt.Sprint(uid)
+	}
+	key := fmt.Sprintf("comment.updown.check.%s.%s", actor, str(row["id"]))
+	if seen, err := s.limiter.Seen(ctx, key); err != nil {
+		return -1, "评论操作失败", err
+	} else if seen {
+		return -1, "您已经赞/踩过了", nil
+	}
+	field := "downnum"
+	message := "已踩"
+	if up {
+		field = "upnum"
+		message = "已赞"
+	}
+	if err := s.store.IncrementVote(ctx, atoi(str(row["id"])), field); err != nil {
+		return -1, "评论操作失败", err
+	}
+	if err := s.limiter.Mark(ctx, key); err != nil {
+		return -1, "评论操作失败", err
+	}
+	return 0, message, nil
+}
+
+func (s *Service) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	sid := userRepo.CleanToken(token)
+	if sid == "" {
+		return map[string]interface{}{"uid": "0"}, nil
+	}
+	if s.auth == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	user, err := s.auth.UserBySession(ctx, sid)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	if str(user["sid"]) == "" {
+		user["sid"] = sid
+	}
+	return user, nil
 }
 
 func (s *Service) processRows(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
@@ -392,4 +485,27 @@ func ternary[T any](ok bool, yes T, no T) T {
 		return yes
 	}
 	return no
+}
+
+type memoryVoteLimiter struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+func newMemoryVoteLimiter() *memoryVoteLimiter {
+	return &memoryVoteLimiter{seen: map[string]struct{}{}}
+}
+
+func (l *memoryVoteLimiter) Seen(_ context.Context, key string) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.seen[key]
+	return ok, nil
+}
+
+func (l *memoryVoteLimiter) Mark(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen[key] = struct{}{}
+	return nil
 }

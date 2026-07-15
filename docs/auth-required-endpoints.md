@@ -23,6 +23,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/index` | `c.api.ucp.index->index` | 本轮完成 | 登录/游客个人中心只读聚合；登录返回 `user/uinfo/signed/groups`，游客返回 `user/uinfo/signed`；旧 PHP 本地请求超时，已按源码契约和 Go 输出验证。 |
 | `/ucp/affcenter` | `c.api.ucp.index->affcenter` | 本轮完成 | 登录只读推广中心，读取金币、金豆、播放/下载当日计数和用户组权限，用户与 `uinfo` 字段和 PHP 一致。 |
 | `GET /ucp/feedback` | `c.api.ucp.index->feedback` | 本轮完成 | 登录只读历史反馈列表，读取 `feedbacks`，分页和 `procRow2` 字段映射与 PHP 一致；POST 写入未接管。 |
+| `POST /ucp/feedback`、`/ucp/feedback/create` | `c.api.ucp.index->feedback`、`c.api.ucp.feedback->create` | 本轮完成 | 登录反馈创建；未登录分支 live 对比通过，内容、订单归属、每日次数和写入由 fake 覆盖；图片上传保存和告警通知暂未接管。 |
 | `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | 本轮完成 | 新版反馈初始化页，读取最近 30 天最多 100 条 `trade_payments`，支付行映射与 PHP 一致；POST 未接管。 |
 | `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | 本轮完成 | 新版反馈列表，读取 `feedbacks`，支持 `type=0/1/2` 过滤，分页和字段映射与 PHP 一致；POST 未接管。 |
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | 本轮完成 | 新版反馈详情，读取单条 `feedbacks`、按 `aids` 顺序读取 `attachs`、按 `payid` 读取关联 `trade_payments`；POST 未接管。 |
@@ -39,6 +40,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/playlog/listing`、`/downlog/listing` | `c.api.playlog/downlog->listing` | 本轮完成 | 登录用户读取用户播放/下载记录；未登录按游客 sid 返回空或游客记录，不强制登录。 |
 | `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 登录用户软删除自己的播放/下载记录；未登录按游客 sid 软删除，不强制登录。 |
 | `/favorite/listing`、`/minifavorite/listing` | `c.api.favorite/minifavorite->listing` | 本轮完成 | 登录只读收藏列表；普通视频支持 `wd` 搜索，小视频补 `isfavorite=1`。 |
+| `/favorite/add`、`/minifavorite/add` | `c.api.favorite/minifavorite->add` | 本轮完成 | 登录新增收藏；未登录、视频不存在、重复收藏分支 live 对比通过，成功写入由 fake 覆盖；金币奖励默认不改资产，保留后续 rewarder 接入点。 |
 | `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读随机推广海报；奖励/签到 task action 未接管。 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读任务宝箱状态；开启宝箱奖励写入未接管。 |
@@ -51,7 +53,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 
 | 接口 | 原因 |
 | --- | --- |
-| `POST /ucp/feedback`、`/ucp/feedback/create`、`/ucp/msg/send`、`/ucp/task/*`（除 `/ucp/task/sharepic`）、`/favorite/add`、`/minifavorite/add` | 涉及写库、奖励或状态变更，需要单独测试和回滚策略；收藏 index/listing/remove 已迁移。 |
+| `/ucp/msg/send`、`/ucp/task/*`（除 `/ucp/task/sharepic`） | 涉及写库、奖励或状态变更，需要单独测试和回滚策略。 |
 | `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用。 |
 | `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

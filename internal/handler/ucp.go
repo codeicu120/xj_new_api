@@ -148,6 +148,10 @@ func (h *UCPHandler) BankcardIndex(c *gin.Context) {
 }
 
 func (h *UCPHandler) FeedbackListing(c *gin.Context) {
+	if c.Request.Method == http.MethodPost {
+		h.FeedbackCreateLegacy(c)
+		return
+	}
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	data, retcode, errmsg, err := h.service.FeedbackListing(c.Request.Context(), authToken(c), page)
 	c.Header("X-Served-By", "newbie")
@@ -209,6 +213,39 @@ func (h *UCPHandler) FeedbackDetail(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) FeedbackCreate(c *gin.Context) {
+	h.feedbackCreate(c, false)
+}
+
+func (h *UCPHandler) FeedbackCreateLegacy(c *gin.Context) {
+	h.feedbackCreate(c, true)
+}
+
+func (h *UCPHandler) feedbackCreate(c *gin.Context, legacy bool) {
+	cid, _ := strconv.Atoi(inputValue(c, "cid"))
+	payid, _ := strconv.Atoi(inputValue(c, "payid"))
+	fileCount := multipartFileCount(c, "upfiles")
+	retcode, errmsg, err := h.service.FeedbackCreate(c.Request.Context(), authToken(c), ucpService.FeedbackCreateRequest{
+		CID:        cid,
+		Content:    inputValue(c, "content"),
+		PayID:      payid,
+		PayName:    inputValue(c, "payname"),
+		PayAccount: inputValue(c, "payaccount"),
+		Device:     inputValue(c, "device"),
+		LongIDs:    inputValue(c, "longids"),
+		ShortIDs:   inputValue(c, "shortids"),
+		IP:         c.ClientIP(),
+		FileCount:  fileCount,
+		Legacy:     legacy,
+	})
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 }
 
 func (h *UCPHandler) MsgListing(c *gin.Context) {
@@ -396,6 +433,14 @@ func inputValue(c *gin.Context, key string) string {
 		return value
 	}
 	return c.PostForm(key)
+}
+
+func multipartFileCount(c *gin.Context, key string) int {
+	form, err := c.MultipartForm()
+	if err != nil || form == nil || form.File == nil {
+		return 0
+	}
+	return len(form.File[key])
 }
 
 func intArrayValue(c *gin.Context, key string) []int {

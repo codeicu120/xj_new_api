@@ -4,9 +4,25 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"xj_comp/internal/domain"
 )
+
+type FeedbackCreateRequest struct {
+	CID        int
+	Content    string
+	PayID      int
+	PayName    string
+	PayAccount string
+	Device     string
+	LongIDs    string
+	ShortIDs   string
+	IP         string
+	FileCount  int
+	Legacy     bool
+}
 
 func (s *Service) FeedbackIndex(ctx context.Context, token string) (domain.UCPFeedbackIndexData, int, string, error) {
 	user, err := s.authenticatedPaymentUser(ctx, token)
@@ -117,6 +133,65 @@ func (s *Service) FeedbackDetail(ctx context.Context, token string, id int) (dom
 		Row:     processFeedbackRow(row, payrow),
 		PicURLs: pics,
 	}, 0, "", nil
+}
+
+func (s *Service) FeedbackCreate(ctx context.Context, token string, req FeedbackCreateRequest) (int, string, error) {
+	user, err := s.authenticatedPaymentUser(ctx, token)
+	if err != nil {
+		return -1, "提交反馈失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	content := strings.TrimRightFunc(req.Content, unicode.IsSpace)
+	if content == "" || utf8.RuneCountInString(content) > 250 {
+		return -1, "内容最多250个字符", nil
+	}
+	if req.PayID > 0 {
+		payrow, err := s.store.PaymentByID(ctx, req.PayID)
+		if err != nil {
+			return -1, "提交反馈失败", err
+		}
+		if len(payrow) == 0 || atoi(payrow["uid"]) != uid {
+			return -1, "请选择订单信息", nil
+		}
+	}
+	if !req.Legacy && req.CID == 5 && req.PayID <= 0 {
+		return -1, "请选择订单信息", nil
+	}
+	if req.FileCount > 5 {
+		return -1, "最多不允许上传超过5张图片", nil
+	}
+	if !req.Legacy {
+		total, err := s.store.CountFeedbacksSince(ctx, uid, dayStartUnix(s.now()))
+		if err != nil {
+			return -1, "提交反馈失败", err
+		}
+		if total > 10 {
+			return -1, "当日反馈内容过多", nil
+		}
+	}
+	id, err := s.store.CreateFeedback(ctx, domain.FeedbackCreateInput{
+		UID:        uid,
+		CID:        req.CID,
+		Content:    content,
+		PayID:      req.PayID,
+		PayName:    strings.TrimSpace(req.PayName),
+		PayAccount: strings.TrimSpace(req.PayAccount),
+		CreatedAt:  s.now().Unix(),
+		IP:         req.IP,
+		Device:     strings.TrimSpace(req.Device),
+		LongIDs:    strings.TrimSpace(req.LongIDs),
+		ShortIDs:   strings.TrimSpace(req.ShortIDs),
+	})
+	if err != nil {
+		return -1, "提交反馈失败", err
+	}
+	if id == 0 {
+		return -1, "提交失败，请重试", nil
+	}
+	return 0, "信息已反馈", nil
 }
 
 func normalizeFeedbackType(feedbackType int) int {

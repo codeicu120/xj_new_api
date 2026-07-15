@@ -3,6 +3,7 @@ package favorite
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"xj_comp/internal/domain"
 	favoriteRepo "xj_comp/internal/repository/favorite"
@@ -17,6 +18,9 @@ type AuthStore interface {
 type Store interface {
 	Items(ctx context.Context, kind favoriteRepo.Kind, uid int, page int, pageSize int, keyword string) (int, []map[string]interface{}, error)
 	Remove(ctx context.Context, kind favoriteRepo.Kind, uid int, vodid int) (int, error)
+	VODByID(ctx context.Context, vodid int) (map[string]interface{}, error)
+	Count(ctx context.Context, kind favoriteRepo.Kind, uid int, vodid int, since int64) (int, error)
+	Add(ctx context.Context, kind favoriteRepo.Kind, uid int, vodid int, now int64) error
 }
 
 type VODProcessor interface {
@@ -30,10 +34,11 @@ type Service struct {
 	auth         AuthStore
 	store        Store
 	vodProcessor VODProcessor
+	now          func() time.Time
 }
 
 func NewService(auth AuthStore, store Store, vodProcessor VODProcessor) *Service {
-	return &Service{auth: auth, store: store, vodProcessor: vodProcessor}
+	return &Service{auth: auth, store: store, vodProcessor: vodProcessor, now: time.Now}
 }
 
 func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool) (domain.HistoryListingData, int, string, error) {
@@ -93,6 +98,36 @@ func (s *Service) Remove(ctx context.Context, token string, kind favoriteRepo.Ki
 		rowCount += count
 	}
 	return 0, fmt.Sprintf("已删除%d项", rowCount), nil
+}
+
+func (s *Service) Add(ctx context.Context, token string, kind favoriteRepo.Kind, vodid int) (map[string]interface{}, int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return nil, -1, "添加收藏失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "请登录后操作", nil
+	}
+	row, err := s.store.VODByID(ctx, vodid)
+	if err != nil {
+		return nil, -1, "添加收藏失败", err
+	}
+	showtype := atoi(row["showtype"])
+	if len(row) == 0 || (kind == favoriteRepo.KindVOD && showtype > 0) || (kind == favoriteRepo.KindMini && showtype != 1) {
+		return nil, -1, "记录不存在或已被删除", nil
+	}
+	count, err := s.store.Count(ctx, kind, uid, vodid, 0)
+	if err != nil {
+		return nil, -1, "添加收藏失败", err
+	}
+	if count > 0 {
+		return nil, -1, "您已经收藏过了", nil
+	}
+	if err := s.store.Add(ctx, kind, uid, vodid, s.now().Unix()); err != nil {
+		return nil, -1, "添加收藏失败", err
+	}
+	return map[string]interface{}{}, 0, "已收藏", nil
 }
 
 func (s *Service) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {

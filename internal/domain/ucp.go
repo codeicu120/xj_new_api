@@ -35,6 +35,21 @@ type UCPFeedbackDetailData struct {
 	PicURLs interface{}            `json:"picurls"`
 }
 
+type FeedbackCreateInput struct {
+	UID        int
+	CID        int
+	Content    string
+	PayID      int
+	PayName    string
+	PayAccount string
+	AIDs       string
+	CreatedAt  int64
+	IP         string
+	Device     string
+	LongIDs    string
+	ShortIDs   string
+}
+
 type UCPMsgListingData struct {
 	Rows     []map[string]interface{} `json:"rows"`
 	PageInfo map[string]interface{}   `json:"pageinfo"`

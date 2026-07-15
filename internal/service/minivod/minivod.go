@@ -2,14 +2,19 @@ package minivod
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"xj_comp/internal/domain"
 	minivodRepo "xj_comp/internal/repository/minivod"
+	userRepo "xj_comp/internal/repository/user"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -34,11 +39,26 @@ type Store interface {
 	RandomVODsExcept(ctx context.Context, pageSize int, excludeID int, cateID int) ([]map[string]interface{}, error)
 	Setting(ctx context.Context, key string) (string, error)
 	UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
+	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
+	DeleteUpDown(ctx context.Context, uid int, vodID int) error
+	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
+	IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error
+	RecountUpDown(ctx context.Context, vodID int) error
 }
 
 type VODProcessor interface {
 	ProcessRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error)
 	ProcessMiniRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error)
+}
+
+type AuthStore interface {
+	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
+}
+
+type VoteLimiter interface {
+	Seen(ctx context.Context, key string) (bool, error)
+	Mark(ctx context.Context, key string) error
+	Delete(ctx context.Context, key string) error
 }
 
 var (
@@ -49,6 +69,8 @@ var (
 type Service struct {
 	store           Store
 	vodProcessor    VODProcessor
+	auth            AuthStore
+	limiter         VoteLimiter
 	now             func() time.Time
 	resourceBaseURL string
 }
@@ -61,7 +83,12 @@ type ListingRequest struct {
 }
 
 func NewService(store Store, vodProcessor VODProcessor, resourceBaseURL string) *Service {
-	return &Service{store: store, vodProcessor: vodProcessor, now: time.Now, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/")}
+	return &Service{store: store, vodProcessor: vodProcessor, limiter: newMemoryVoteLimiter(), now: time.Now, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/")}
+}
+
+func (s *Service) WithAuth(auth AuthStore) *Service {
+	s.auth = auth
+	return s
 }
 
 func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.MiniVODListingData, error) {
@@ -245,6 +272,150 @@ func (s *Service) AuthorListing(ctx context.Context, authorID int, page int, isH
 		PageInfo: vodService.PageInfo(total, pageSize, page, ""),
 		Orders:   optionRows([][2]interface{}{{1, "最多好评"}, {2, "最多播放"}, {3, "最高评分"}}),
 	}, nil
+}
+
+func (s *Service) Vote(ctx context.Context, token string, vodID int, up bool) (int, string, error) {
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return -1, "小视频操作失败", err
+	}
+	if len(row) == 0 || atoi(row["showtype"]) != 1 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "小视频操作失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return s.voteGuest(ctx, str(row["vodid"]), up)
+	}
+	return s.voteUser(ctx, uid, atoi(row["vodid"]), up)
+}
+
+func (s *Service) ReqLong(ctx context.Context, token string, vodID int) (string, int, string, error) {
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return "", -1, "请求小视频长片地址失败", err
+	}
+	if len(row) == 0 || atoi(row["showtype"]) > 0 {
+		return "", 1, "记录不存在或已被删除", nil
+	}
+	httpURL := sanitizePlayURL(str(row["play_url"]))
+	if httpURL == "" {
+		return "", 2, "播放地址不存在", nil
+	}
+	servers, err := s.store.Servers(ctx)
+	if err != nil {
+		return "", -1, "请求小视频长片地址失败", err
+	}
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return "", -1, "请求小视频长片地址失败", err
+	}
+	httpURL = signCDNURL(httpURL, row, servers, user, s.now().Unix())
+	if !hasURLScheme(httpURL) {
+		host := serverHost(servers, atoi(row["play_srvid"]))
+		httpURL = strings.TrimRight(host, "/") + "/" + strings.TrimLeft(httpURL, "/")
+	}
+	return httpURL, 0, "", nil
+}
+
+func (s *Service) voteGuest(ctx context.Context, vodID string, up bool) (int, string, error) {
+	key := "vod.updown." + vodID + ".guest"
+	seen, err := s.limiter.Seen(ctx, key)
+	if err != nil {
+		return -1, "小视频操作失败", err
+	}
+	if up {
+		if seen {
+			if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "upnum", -1); err != nil {
+				return -1, "小视频操作失败", err
+			}
+			_ = s.store.RecountUpDown(ctx, atoi(vodID))
+			_ = s.limiter.Delete(ctx, key)
+			return 0, "已取消赞", nil
+		}
+		if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "upnum", 1); err != nil {
+			return -1, "小视频操作失败", err
+		}
+		_ = s.store.RecountUpDown(ctx, atoi(vodID))
+		_ = s.limiter.Mark(ctx, key)
+		return 0, "已赞", nil
+	}
+	if seen {
+		return -1, "您已经赞/踩过了", nil
+	}
+	if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "downnum", 1); err != nil {
+		return -1, "小视频操作失败", err
+	}
+	_ = s.store.RecountUpDown(ctx, atoi(vodID))
+	_ = s.limiter.Mark(ctx, key)
+	return 0, "已踩", nil
+}
+
+func (s *Service) voteUser(ctx context.Context, uid int, vodID int, up bool) (int, string, error) {
+	target := 2
+	message := "已踩"
+	counter := "downnum"
+	if up {
+		target = 1
+		message = "已赞"
+		counter = "upnum"
+	}
+	item, err := s.store.UpDownByUser(ctx, uid, vodID)
+	if err != nil {
+		return -1, "小视频操作失败", err
+	}
+	if len(item) > 0 {
+		if err := s.store.DeleteUpDown(ctx, uid, vodID); err != nil {
+			return -1, "小视频操作失败", err
+		}
+		current := atoi(item["updown"])
+		if current == target {
+			if err := s.store.IncrementVODCounter(ctx, vodID, counter, -1); err != nil {
+				return -1, "小视频操作失败", err
+			}
+			_ = s.store.RecountUpDown(ctx, vodID)
+			if up {
+				return 0, "已取消赞", nil
+			}
+			return 0, "已取消踩", nil
+		}
+	}
+	id, err := s.store.SaveUpDown(ctx, uid, vodID, target, s.now().Unix())
+	if err != nil {
+		return -1, "小视频操作失败", err
+	}
+	if id == 0 {
+		if up {
+			return -1, "您已经赞过了", nil
+		}
+		return -1, "您已经踩过了", nil
+	}
+	if err := s.store.IncrementVODCounter(ctx, vodID, counter, 1); err != nil {
+		return -1, "小视频操作失败", err
+	}
+	if !up {
+		_ = s.store.IncrementVODCounter(ctx, vodID, "upnum", -1)
+	}
+	_ = s.store.RecountUpDown(ctx, vodID)
+	return 0, message, nil
+}
+
+func (s *Service) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	sid := userRepo.CleanToken(token)
+	if sid == "" || s.auth == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	user, err := s.auth.UserBySession(ctx, sid)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	return user, nil
 }
 
 func (s *Service) filter(ctx context.Context, action string, params map[string]string, categories []map[string]interface{}, now int64) (minivodRepo.Filter, string, error) {
@@ -529,6 +700,51 @@ func tagIDs(rows []map[string]interface{}) []int {
 	return ids
 }
 
+func sanitizePlayURL(value string) string {
+	return strings.NewReplacer("\n", "", "\r", "", "\t", "", "'", "", `"`, "").Replace(value)
+}
+
+func signCDNURL(httpURL string, row map[string]interface{}, servers []map[string]interface{}, user map[string]interface{}, now int64) string {
+	playServerID := atoi(row["play_srvid"])
+	for _, server := range servers {
+		if playServerID != atoi(server["srvid"]) || str(server["cdnkey"]) == "" || str(server["cdnparam"]) == "" {
+			continue
+		}
+		if !strings.HasPrefix(httpURL, "/") && !hasURLScheme(httpURL) {
+			httpURL = "/" + httpURL
+		}
+		actor := str(user["uid"])
+		if atoi(actor) == 0 {
+			actor = str(user["sid"])
+		}
+		if strings.Contains(str(server["cdnparam"]), "tx") {
+			sign := fmt.Sprintf("%d-%s-0-", now, actor)
+			sum := md5.Sum([]byte(httpURL + "-" + sign + str(server["cdnkey"])))
+			return httpURL + "?" + str(server["cdnparam"]) + "=" + sign + hex.EncodeToString(sum[:])
+		}
+		sign := fmt.Sprintf("%d-0-%s-", now, actor)
+		sum := sha256.Sum256([]byte(httpURL + "-" + sign + str(server["cdnkey"])))
+		return httpURL + "?" + str(server["cdnparam"]) + "=" + sign + hex.EncodeToString(sum[:])
+	}
+	return httpURL
+}
+
+func serverHost(servers []map[string]interface{}, serverID int) string {
+	for _, server := range servers {
+		if atoi(server["srvid"]) == serverID {
+			return str(server["srvhost"])
+		}
+	}
+	return ""
+}
+
+func hasURLScheme(value string) bool {
+	if index := strings.Index(value, "://"); index > 1 && index <= 5 {
+		return true
+	}
+	return false
+}
+
 func categoryParents(categories []map[string]interface{}, cateID int) []map[string]interface{} {
 	byID := map[int]map[string]interface{}{}
 	for _, row := range categories {
@@ -567,4 +783,34 @@ func atoi64(value interface{}) int64 {
 	var n int64
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+type memoryVoteLimiter struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+func newMemoryVoteLimiter() *memoryVoteLimiter {
+	return &memoryVoteLimiter{seen: map[string]struct{}{}}
+}
+
+func (l *memoryVoteLimiter) Seen(_ context.Context, key string) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.seen[key]
+	return ok, nil
+}
+
+func (l *memoryVoteLimiter) Mark(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen[key] = struct{}{}
+	return nil
+}
+
+func (l *memoryVoteLimiter) Delete(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.seen, key)
+	return nil
 }

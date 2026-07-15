@@ -211,6 +211,72 @@ func (r *Repository) UsersByIDs(ctx context.Context, ids []int) ([]map[string]in
 	return r.queryRows(ctx, "SELECT * FROM users WHERE uid IN("+idList+")")
 }
 
+func (r *Repository) UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_updowns WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
+	if err != nil {
+		return nil, fmt.Errorf("query updown: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) DeleteUpDown(ctx context.Context, uid int, vodID int) error {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "DELETE FROM vod_updowns WHERE uid=? AND vodid=?", uid, vodID); err != nil {
+		return fmt.Errorf("delete updown: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 || (updown != 1 && updown != 2) {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO vod_updowns(vodid, uid, updown, addtime) VALUES(?, ?, ?, ?)", vodID, uid, updown, now)
+	if err != nil {
+		return 0, fmt.Errorf("save updown: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("save updown rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
+func (r *Repository) IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	if field != "upnum" && field != "downnum" {
+		return fmt.Errorf("unsupported vod counter %q", field)
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vods SET "+field+"=GREATEST("+field+"+?,0) WHERE vodid=?", delta, vodID); err != nil {
+		return fmt.Errorf("increment vod %s: %w", field, err)
+	}
+	return nil
+}
+
+func (r *Repository) RecountUpDown(ctx context.Context, vodID int) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	query := `UPDATE vods SET
+		upnum=(SELECT COUNT(*) FROM vod_updowns WHERE vodid=? AND updown=1),
+		downnum=(SELECT COUNT(*) FROM vod_updowns WHERE vodid=? AND updown=2)
+		WHERE vodid=?`
+	if _, err := r.db.ExecContext(ctx, query, vodID, vodID, vodID); err != nil {
+		return fmt.Errorf("recount updown: %w", err)
+	}
+	return nil
+}
+
 func buildWhere(filter Filter, now int64) (string, []interface{}) {
 	where := " AND showtype=1"
 	args := []interface{}{}

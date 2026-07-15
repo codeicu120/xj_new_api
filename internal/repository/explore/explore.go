@@ -44,6 +44,78 @@ func (r *Repository) UpdateGuestNotificationAll(ctx context.Context, sid string,
 	return nil
 }
 
+func (r *Repository) VodTaskByID(ctx context.Context, vid int) (map[string]interface{}, error) {
+	if r.db == nil || vid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM explore_vods WHERE vid=?", vid)
+	if err != nil {
+		return nil, fmt.Errorf("query explore vod: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) UserVodTaskLog(ctx context.Context, uid int, today int64, vid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || vid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM explore_vodlogs WHERE uid=? AND addtime>? AND vid=? LIMIT 1", uid, today, vid)
+	if err != nil {
+		return nil, fmt.Errorf("query explore vod log: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) GuestVodTaskLog(ctx context.Context, sid string, today int64, vid int) (map[string]interface{}, error) {
+	if r.db == nil || sid == "" || vid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM explore_guestvodlogs WHERE sid=? AND addtime>=? AND vid=? LIMIT 1", sid, today, vid)
+	if err != nil {
+		return nil, fmt.Errorf("query explore guest vod log: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) CreateUserVodTaskLog(ctx context.Context, uid int, vid int, addtime int64, reqcoin int) (int, error) {
+	if r.db == nil || uid <= 0 || vid <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO explore_vodlogs(uid, vid, addtime, reqcoin) VALUES(?, ?, ?, ?)", uid, vid, addtime, reqcoin)
+	if err != nil {
+		return 0, fmt.Errorf("insert explore vod log: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert explore vod log id: %w", err)
+	}
+	return int(id), nil
+}
+
+func (r *Repository) CreateGuestVodTaskLog(ctx context.Context, sid string, vid int, addtime int64, reqcoin int) (int, error) {
+	if r.db == nil || sid == "" || vid <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO explore_guestvodlogs(sid, vid, addtime, reqcoin) VALUES(?, ?, ?, ?)", sid, vid, addtime, reqcoin)
+	if err != nil {
+		return 0, fmt.Errorf("insert explore guest vod log: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert explore guest vod log id: %w", err)
+	}
+	return int(id), nil
+}
+
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

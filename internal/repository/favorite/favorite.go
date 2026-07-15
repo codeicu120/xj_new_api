@@ -81,6 +81,59 @@ func (r *Repository) Remove(ctx context.Context, kind Kind, uid int, vodid int) 
 	return int(count), nil
 }
 
+func (r *Repository) VODByID(ctx context.Context, vodid int) (map[string]interface{}, error) {
+	if r.db == nil || vodid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vods WHERE vodid=?", vodid)
+	if err != nil {
+		return nil, fmt.Errorf("query favorite vod: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) Count(ctx context.Context, kind Kind, uid int, vodid int, since int64) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	table, _ := tableSpec(kind)
+	if table == "" {
+		return 0, nil
+	}
+	where := "uid=?"
+	args := []interface{}{uid}
+	if vodid > 0 {
+		where += " AND vodid=?"
+		args = append(args, vodid)
+	}
+	if since > 0 {
+		where += " AND favtime>=?"
+		args = append(args, since)
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE "+where, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count favorite rows: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) Add(ctx context.Context, kind Kind, uid int, vodid int, now int64) error {
+	if r.db == nil || uid <= 0 || vodid <= 0 {
+		return nil
+	}
+	table, _ := tableSpec(kind)
+	if table == "" {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "INSERT INTO "+table+"(uid, vodid, favtime) VALUES(?, ?, ?)", uid, vodid, now); err != nil {
+		return fmt.Errorf("insert favorite: %w", err)
+	}
+	return nil
+}
+
 func tableSpec(kind Kind) (string, int) {
 	if kind == KindMini {
 		return "minivod_favorites", 1

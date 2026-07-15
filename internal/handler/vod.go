@@ -113,6 +113,25 @@ func (h *VODHandler) Preview(c *gin.Context) {
 	c.Data(http.StatusOK, "vnd.apple.mpegurl", []byte(body))
 }
 
+func (h *VODHandler) Up(c *gin.Context) {
+	h.vote(c, true)
+}
+
+func (h *VODHandler) Down(c *gin.Context) {
+	h.vote(c, false)
+}
+
+func (h *VODHandler) vote(c *gin.Context, up bool) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	retcode, errmsg, err := h.listingService.Vote(c.Request.Context(), authToken(c), vodID, up)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func vodAction(path string) string {
 	path = strings.TrimPrefix(path, "/v2/vod/")
 	path = strings.TrimPrefix(path, "/vod/")

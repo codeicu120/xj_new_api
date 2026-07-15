@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type fakeUserStore struct {
@@ -17,6 +19,8 @@ type fakeUserStore struct {
 	countCoinLogResult int
 	coinBonusStats     map[string]interface{}
 	feedbackRow        map[string]interface{}
+	feedbackSinceCount int
+	createdFeedback    *domain.FeedbackCreateInput
 	paymentRow         map[string]interface{}
 	attachRows         []map[string]interface{}
 	posters            []map[string]interface{}
@@ -276,6 +280,17 @@ func (s fakeUserStore) FeedbackByID(_ context.Context, id int) (map[string]inter
 		"payaccount": "",
 		"aids":       "",
 	}, nil
+}
+
+func (s fakeUserStore) CountFeedbacksSince(context.Context, int, int64) (int, error) {
+	return s.feedbackSinceCount, nil
+}
+
+func (s fakeUserStore) CreateFeedback(_ context.Context, input domain.FeedbackCreateInput) (int, error) {
+	if s.createdFeedback != nil {
+		*s.createdFeedback = input
+	}
+	return 123, nil
 }
 
 func (s fakeUserStore) PaymentByID(context.Context, int) (map[string]interface{}, error) {
@@ -1050,6 +1065,70 @@ func TestFeedbackDetailEmptyPicURLsAreNil(t *testing.T) {
 	}
 	if data.Row["itemname"] != nil || data.Row["paidtime"] != "" {
 		t.Fatalf("unexpected empty payment fields %#v", data.Row)
+	}
+}
+
+func TestFeedbackCreateRequiresLogin(t *testing.T) {
+	service := NewService(&fakeUserStore{}, "")
+
+	retcode, errmsg, err := service.FeedbackCreate(context.Background(), "", FeedbackCreateRequest{Content: "hello"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestFeedbackCreateValidatesContent(t *testing.T) {
+	service := NewService(&fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "")
+
+	retcode, errmsg, err := service.FeedbackCreate(context.Background(), "token", FeedbackCreateRequest{Content: ""})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if retcode != -1 || errmsg != "内容最多250个字符" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestFeedbackCreateValidatesPaymentOwner(t *testing.T) {
+	service := NewService(&fakeUserStore{user: map[string]interface{}{"uid": "5"}, paymentRow: map[string]interface{}{"payid": "9", "uid": "6"}}, "")
+
+	retcode, errmsg, err := service.FeedbackCreate(context.Background(), "token", FeedbackCreateRequest{CID: 5, Content: "hello", PayID: 9})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if retcode != -1 || errmsg != "请选择订单信息" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestFeedbackCreateSuccess(t *testing.T) {
+	created := domain.FeedbackCreateInput{}
+	store := &fakeUserStore{user: map[string]interface{}{"uid": "5"}, paymentRow: map[string]interface{}{"payid": "9", "uid": "5"}, createdFeedback: &created}
+	service := NewService(store, "")
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	retcode, errmsg, err := service.FeedbackCreate(context.Background(), "token", FeedbackCreateRequest{
+		CID:        5,
+		Content:    "hello\n",
+		PayID:      9,
+		PayName:    " ali ",
+		PayAccount: " acc ",
+		Device:     " ios ",
+		LongIDs:    " 1 ",
+		ShortIDs:   " 2 ",
+		IP:         "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if retcode != 0 || errmsg != "信息已反馈" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+	if created.UID != 5 || created.Content != "hello" || created.PayID != 9 || created.CreatedAt != 1700000000 {
+		t.Fatalf("created=%#v", created)
 	}
 }
 

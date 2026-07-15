@@ -9,6 +9,8 @@ import (
 type fakeStore struct {
 	lastOrder string
 	vod       map[string]interface{}
+	comment   map[string]interface{}
+	voted     []string
 }
 
 func (s *fakeStore) VODByID(context.Context, int) (map[string]interface{}, error) {
@@ -57,6 +59,18 @@ func (s *fakeStore) RootComments(_ context.Context, _ int, _ int, _ int, _ int, 
 	}, nil
 }
 
+func (s *fakeStore) CommentByID(context.Context, int) (map[string]interface{}, error) {
+	if s.comment != nil {
+		return s.comment, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeStore) IncrementVote(_ context.Context, id int, field string) error {
+	s.voted = append(s.voted, field)
+	return nil
+}
+
 func TestListingProcessesCommentRows(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, "https://res.example.test")
@@ -93,5 +107,50 @@ func TestListingMissingVOD(t *testing.T) {
 	_, err := service.Listing(context.Background(), ListingRequest{PathParams: "999999-0-1"})
 	if err != ErrVODNotFound {
 		t.Fatalf("expected ErrVODNotFound, got %v", err)
+	}
+}
+
+func TestVoteWithoutTokenUsesGuestActor(t *testing.T) {
+	service := NewService(&fakeStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.Vote(context.Background(), "", 1, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestVoteMissingComment(t *testing.T) {
+	service := NewService(&fakeStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.Vote(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestVoteSuccessAndDuplicate(t *testing.T) {
+	store := &fakeStore{comment: map[string]interface{}{"id": "8"}}
+	service := NewService(store, "https://res.example.test")
+	token := "3235306637393062613731656332623964333835356634323464623232353965"
+
+	retcode, errmsg, err := service.Vote(context.Background(), token, 8, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != 0 || errmsg != "已赞" || len(store.voted) != 1 || store.voted[0] != "upnum" {
+		t.Fatalf("response = %d %q voted=%#v", retcode, errmsg, store.voted)
+	}
+	retcode, errmsg, err = service.Vote(context.Background(), token, 8, false)
+	if err != nil {
+		t.Fatalf("vote duplicate: %v", err)
+	}
+	if retcode != -1 || errmsg != "您已经赞/踩过了" {
+		t.Fatalf("duplicate response = %d %q", retcode, errmsg)
 	}
 }

@@ -197,6 +197,17 @@
 - 兼容规则：返回 `data.vodrow`、`data.categories`、`data.similarrows`、`data.likerows`；主视频行复用 `procRow2` 兼容字段；父级分类按 PHP `Category::getP()` 返回；相似视频按 tag + 90 天窗口随机，数量不足时随机补足；猜你喜欢按同分类随机 5 条。
 - 测试：聚焦 `go test ./internal/service/vod ./internal/server` 通过；PHP-Go 对比 `/vod/show/1`、`/vod/show/10` 的 status、retcode、主视频关键字段、父级分类、相似/喜欢数量通过；`/vod/show/100` 错误分支完全一致。随机列表不做逐条完全相等。
 
+### `/vod/up/:vodid`、`/vod/down/:vodid`、`/v2/vod/up/:vodid`、`/v2/vod/down/:vodid`
+
+- PHP: `c.api.vod->up/down`、`c.apiv2.vod->up/down`
+- Go: `internal/handler.VODHandler.Up/Down`
+- Service: `internal/service/vod.ListingService`
+- Repository: `internal/repository/vod.ListingRepository`
+- Auth: 旧 PHP 支持游客赞踩；Go 登录用户通过 `x-cookie-auth`/`xxx_api_auth` 查询 session，游客用稳定进程内 limiter key。
+- DB: 成功时登录用户写 `vod_updowns`，并更新 `vods.upnum/downnum` 后按 `vod_updowns` 重新统计；游客分支只更新 `vods` 计数并使用 limiter 防重复。
+- 兼容规则：视频不存在或 `showtype>0` 返回 `记录不存在或已被删除`；赞/踩/取消赞/取消踩返回 PHP 同款 `errmsg`。
+- 测试：`go test ./internal/service/vod ./internal/server` 通过；PHP-Go live 对比 `/vod/up/0`、`/v2/vod/down/0` 无效视频分支一致；状态切换成功/重复分支由 service fake 覆盖。
+
 ### `/vod/preView/:vodid/index.m3u8`
 
 - PHP: `c.api.vod->preView`
@@ -226,6 +237,17 @@
 - 兼容规则：返回 `data.rows` 和 `data.pageinfo`；评论行对齐 `id/rootid/parentid/lft/rgt/depth/vodid/uid/sid/username/nickname/gender/gicon/isvip/content/upnum/downnum/avatar_url/addtime/__closenum__/subrows`；`orderby=1` 使用 `a.upnum DESC`，默认 `a.addtime DESC`。
 - 测试：聚焦 `go test ./internal/service/comment ./internal/server` 通过；PHP-Go 对比 `/comment/listing-1-0-1`、`/comment/listing-61494-0-1`、`/comment/listing-61494-1-1`、`/comment/listing-999999-0-1` 忽略动态 `data.xxx_api_auth` 后完全一致。
 
+### `/comment/up`、`/comment/down`
+
+- PHP: `c.api.comment->up/down`
+- Go: `internal/handler.CommentHandler.Up/Down`
+- Service: `internal/service/comment.Service`
+- Repository: `internal/repository/comment.Repository`
+- Auth: 旧 PHP 允许游客赞踩，中间件通常会创建游客 sid；Go 无 token 时使用稳定游客 actor 仅做重复限制 key，不写游客表。
+- DB: 读取 `vod_comments`，成功时更新 `upnum=upnum+1` 或 `downnum=downnum+1`。
+- 兼容规则：评论不存在返回 `记录不存在或已被删除`；同一 actor 对同一评论重复赞/踩返回 `您已经赞/踩过了`；成功返回 `errmsg=已赞/已踩`。
+- 测试：`go test ./internal/service/comment ./internal/server` 通过；PHP-Go live 对比 `/comment/up?id=0` 和登录态 `/comment/down?id=0` 错误分支一致；成功和重复分支由 service fake 覆盖。
+
 ### `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index`
 
 - PHP: `c.api.playlog->index`、`c.api.downlog->index`
@@ -246,29 +268,29 @@
 - 写入规则：`remove` 读取 `vodid` 或 `vodids`，`vodid>0` 时覆盖 `vodids`；登录用户按 `uid` 软删除，游客按 sid 软删除；播放记录用户态同时更新 `vod_playlogs` 和 `vod_playlogs_week`；返回 `errmsg=已删除N项`。
 - 测试：聚焦 `go test ./internal/service/history ./internal/repository/history ./internal/server` 通过；repository 单测锁定 timeline 过滤，service 单测覆盖游客 sid、分页 URL、相对时间、VOD 行处理和 remove 计数。
 
-### `/favorite`、`/favorite/index`、`/favorite/listing`、`/favorite/remove`
+### `/favorite`、`/favorite/index`、`/favorite/listing`、`/favorite/add`、`/favorite/remove`
 
-- PHP: `c.api.favorite->index/listing/remove`
+- PHP: `c.api.favorite->index/listing/add/remove`
 - Go: `internal/handler.FavoriteHandler`
 - Service: `internal/service/favorite.Service`
 - Repository: `internal/repository/favorite.Repository`
-- Auth: `listing/remove` 要求登录；未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。`index` 是旧 PHP 空方法。
-- DB: `listing` 读取 `vod_favorites LEFT JOIN vods(showtype=0)`，`wd` 非空时按 `title LIKE` 搜索；`remove` 删除 `vod_favorites WHERE uid=? AND vodid=?`。
-- 兼容规则：`listing` 返回 `rows/pageinfo`，复用 VOD `ProcessRows`；分页 URL 为 `/favorite/listing?page=[?]` 或 `/favorite/listing?page=[?]&wd=$wd`；`remove` 返回 `errmsg=已删除N项`。
-- 未接管：`add` 会写收藏并可能触发金币奖励和 `user_coinlogs`，保留高风险清单。
-- 测试：聚焦 `go test ./internal/service/favorite ./internal/server ./internal/service/vod` 通过；service 覆盖未登录、关键词分页、行处理和删除计数。
+- Auth: `listing/add/remove` 要求登录；未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。`index` 是旧 PHP 空方法。
+- DB: `listing` 读取 `vod_favorites LEFT JOIN vods(showtype=0)`，`wd` 非空时按 `title LIKE` 搜索；`add` 校验 `vods.showtype=0` 后写入 `vod_favorites(uid,vodid,favtime)`；`remove` 删除 `vod_favorites WHERE uid=? AND vodid=?`。
+- 兼容规则：`listing` 返回 `rows/pageinfo`，复用 VOD `ProcessRows`；分页 URL 为 `/favorite/listing?page=[?]` 或 `/favorite/listing?page=[?]&wd=$wd`；`add` 返回 `errmsg=已收藏`，重复收藏返回 `您已经收藏过了`；`remove` 返回 `errmsg=已删除N项`。
+- 资产说明：旧 PHP `add` 可能按收藏任务写 `user_coinlogs` 奖励金币；Go 本轮只迁移收藏写入本身，金币奖励保留后续 rewarder/事务接入点，默认不改用户资产。
+- 测试：聚焦 `go test ./internal/service/favorite ./internal/server ./internal/service/vod` 通过；service 覆盖未登录、关键词分页、行处理、add 不存在/重复/成功、删除计数；live 对比 add 未登录和无效 vodid 分支通过。
 
-### `/minifavorite`、`/minifavorite/index`、`/minifavorite/listing`、`/minifavorite/remove`
+### `/minifavorite`、`/minifavorite/index`、`/minifavorite/listing`、`/minifavorite/add`、`/minifavorite/remove`
 
-- PHP: `c.api.minifavorite->index/listing/remove`
+- PHP: `c.api.minifavorite->index/listing/add/remove`
 - Go: `internal/handler.FavoriteHandler`
 - Service: `internal/service/favorite.Service`
 - Repository: `internal/repository/favorite.Repository`
-- Auth: `listing/remove` 要求登录；`index` 是旧 PHP 空方法。
-- DB: `listing` 读取 `minivod_favorites LEFT JOIN vods(showtype=1)`；`remove` 删除 `minivod_favorites WHERE uid=? AND vodid=?`。
-- 兼容规则：`listing` 复用 VOD `ProcessMiniRows`，并按 PHP 补 `isfavorite=1`；分页 URL 为 `/minifavorite/listing?page=[?]`；`remove` 返回 `errmsg=已删除N项`。
-- 未接管：`add` 会写收藏并可能触发金币奖励和 `user_coinlogs`，保留高风险清单。
-- 测试：聚焦 `go test ./internal/service/favorite ./internal/server ./internal/service/vod` 通过。
+- Auth: `listing/add/remove` 要求登录；`index` 是旧 PHP 空方法。
+- DB: `listing` 读取 `minivod_favorites LEFT JOIN vods(showtype=1)`；`add` 校验 `vods.showtype=1` 后写入 `minivod_favorites(uid,vodid,favtime)`；`remove` 删除 `minivod_favorites WHERE uid=? AND vodid=?`。
+- 兼容规则：`listing` 复用 VOD `ProcessMiniRows`，并按 PHP 补 `isfavorite=1`；分页 URL 为 `/minifavorite/listing?page=[?]`；`add` 返回 `errmsg=已收藏`，重复收藏返回 `您已经收藏过了`；`remove` 返回 `errmsg=已删除N项`。
+- 资产说明：同 `/favorite/add`，旧 PHP 可能发放收藏奖励金币；Go 本轮默认不改用户资产。
+- 测试：聚焦 `go test ./internal/service/favorite ./internal/server ./internal/service/vod` 通过；live 对比 add 未登录分支通过。
 
 ### `/minivod/{listing,recommend,hot,latest,topzan,topcomment,topplay,topcoin,topnew,topday,topweek,topmonth}`
 
@@ -292,6 +314,27 @@
 - DB: 读取 `vods` 中 `showtype=1` 的小视频详情、`users` 作者、`vod_categories` 分类层级、`vod_tags/vod_tagmaps` 相关视频、随机猜你喜欢。
 - 兼容规则：小视频不存在或 `showtype!=1` 返回 `记录不存在或已删除`；作者不存在返回 `作者不存在或已被删除`；成功返回 `vodrow/categories/similarrows/likerows/voduser`。PHP 详情未传 `minivod=true` 给 `procRow2`，Go 保持普通 `/vod` 播放/下载/预览 URL 前缀。
 - 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；PHP-Go live 对比 `/minivod/show/0` 不存在分支和本地样本 `/minivod/show/56914`、`/minivod/show/76989` 作者缺失分支通过。本地导入库未找到作者存在的小视频样本，成功分支由 service 单测覆盖。
+
+### `/minivod/up/:vodid`、`/minivod/down/:vodid`
+
+- PHP: `c.api.minivod->up/down`
+- Go: `internal/handler.MiniVODHandler.Up/Down`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 旧 PHP 支持游客赞踩但依赖 `user_guests/keylimit`；Go 登录用户通过 `x-cookie-auth`/`xxx_api_auth` 查询 session，游客分支先用进程内 limiter 保持重复限制。
+- DB: 登录用户写 `vod_updowns` 并更新 `vods.upnum/downnum` 后按 `vod_updowns` 重新统计；游客分支只更新 `vods` 计数并用 limiter 防重复。
+- 兼容规则：视频不存在或 `showtype!=1` 返回 `记录不存在或已被删除`；赞/踩/取消赞/取消踩返回 PHP 同款 `errmsg`。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；PHP-Go live 对比 `/minivod/up/0`、`/minivod/down/0` 无效视频分支一致；状态切换成功/重复分支由 service fake 覆盖。
+
+### `/minivod/reqlong/:vodid`
+
+- PHP: `c.api.minivod->getLong2Mini`
+- Go: `internal/handler.MiniVODHandler.ReqLong`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- DB: 读取 `vods` 和播放服务器 `vod_servers`。
+- 兼容规则：只接受普通长视频 `showtype=0`；不存在返回 JSON `retcode=1`、播放地址为空返回 `retcode=2`；成功直接返回 `text/html` URL。保留旧 PHP 的播放地址清洗、腾讯云/华为云 CDN 签名和相对地址播放服务器 host 补全。
+- 测试：`go test ./internal/service/minivod ./internal/server` 通过；PHP-Go live 对比 `/minivod/reqlong/0` 错误分支一致，`/minivod/reqlong/1` 本地样本返回同一播放 URL。
 
 ### `/miniplaylog/listing`、`/miniplaylog/remove`
 
@@ -544,9 +587,21 @@
 - Repository: `internal/repository/ucp.Repository`
 - Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
 - DB: 读取 `feedbacks`；查询条件 `uid=当前用户 uid`；按 `id DESC`；`pagesize=20`；`pageinfo` URL 为 `/ucp/feedback?page=[?]`。
-- 兼容规则：只接管 GET，`POST /ucp/feedback` 本轮不注册新 handler；返回 `data.rows/pageinfo`；行字段对齐 PHP `misc.feedback->procRow2`，其中本旧入口未传 `payrow`，所以 `itemname=null`、`paidtime=""`；`ctimestamp/replytime` 使用 `Y-m-d H:i`。
+- 兼容规则：GET 返回 `data.rows/pageinfo`；行字段对齐 PHP `misc.feedback->procRow2`，其中本旧入口未传 `payrow`，所以 `itemname=null`、`paidtime=""`；`ctimestamp/replytime` 使用 `Y-m-d H:i`。POST 已迁移到 `UCPHandler.FeedbackCreateLegacy`。
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
-- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback?page=1`、`page=0`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致；Go `POST /ucp/feedback` 返回 404，未接管写入。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback?page=1`、`page=0`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
+
+### `POST /ucp/feedback`、`/ucp/feedback/create`
+
+- PHP: `c.api.ucp.index->feedback`、`c.api.ucp.feedback->create`
+- Go: `internal/handler.UCPHandler.FeedbackCreate`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 必须登录；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 新版创建校验最近一日反馈数量，读取 `trade_payments` 校验订单归属，并写入 `feedbacks`。
+- 兼容规则：内容为空或超过 250 字符返回 `内容最多250个字符`；`cid=5` 必须提供本人订单；每日反馈超过限制返回 `当日反馈内容过多`；成功返回 `errmsg=信息已反馈`。
+- 风险说明：本轮不落盘上传图片、不写 `attachs.ownerkey`、不发送 Telegram/外部告警；这些外部链路保留后续补齐。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比两个创建入口未登录分支一致；成功、订单归属和内容校验由 service fake 覆盖。
 
 ### `GET /ucp/msg`、`GET /ucp/msg/index`
 
@@ -785,8 +840,19 @@
 - Go: `internal/handler.ExploreHandler.EmptyOK`
 - Service: `internal/service/explore.Service`
 - Auth: 公共接口，不要求登录；旧 PHP 会带动态游客 token，Go 不生成该字段。
-- 兼容规则：仅接管默认 `index` 空入口，包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`notification/clean`、`signtask/sign`、`vodtask/show/reqcoin` 仍未接管。
+- 兼容规则：仅接管默认 `index` 空入口，包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`signtask/sign`、`vodtask/reqcoin` 仍未接管。
 - 测试：聚焦 `go test ./internal/server` 通过；PHP-Go 对比 `/explore/notification`、`/explore/signtask`、`/explore/vodtask` 忽略动态 `xxx_api_auth` 后一致。
+
+### `/explore/vodtask/show/:vid`
+
+- PHP: `c.api.explore.vodtask->show`
+- Go: `internal/handler.ExploreHandler.VodTaskShow`
+- Service: `internal/service/explore.Service`
+- Repository: `internal/repository/explore.Repository`
+- DB: 读取 `explore_vods`；按登录用户或游客读取/创建 `explore_vodlogs`、`explore_guestvodlogs` 当日日志。
+- 兼容规则：视频不存在或 `showtype!=0` 返回 `记录不存在或已被删除`；无当日日志时按 `mincoin/maxcoin` 随机 `reqcoin` 并创建日志；已有日志复用 `logid/reqcoin/reqtime`；返回 `vodrow` 字段对齐 `vodmgr->procRow2`。
+- 风险说明：本接口只创建领取日志，不发放金币；剩余 `reqcoin` 涉及金币/游客金币更新和事务锁，仍留在未重构高风险清单。
+- 测试：`go test ./internal/service/explore ./internal/repository/explore ./internal/server` 通过；PHP-Go live 对比 `/explore/vodtask/show/0` 错误分支一致；成功和日志复用分支由 service fake 覆盖。
 
 ### `/explore/index`
 
@@ -819,7 +885,7 @@
 - Auth: 公共接口，不要求登录；旧 PHP 会在响应中追加动态游客 `data.xxx_api_auth`，Go 不生成该字段。
 - DB: 先统计 `hgame` 总数，若为 0 返回 `暂未开放`；列表读取 `status=0 AND show_type!=1 ORDER BY sort ASC`，幻灯片读取 `status=0 AND show_type!=0 ORDER BY sort ASC`，`pagesize=20`。
 - 兼容规则：返回 `data.data.list` 和 `data.data.slide`；行字段复刻 `hgame.procRow2`，`remark` 能 JSON 解码时返回数组/对象，否则保留原字符串；资源字段复用 `RESOURCE_BASE_URL` 拼接。
-- 测试：聚焦 `go test ./internal/service/hgame ./internal/server` 通过；PHP-Go 对比 `/hgame/index` 成功分支，忽略旧 PHP 动态 `data.xxx_api_auth` 后核心字段一致；旧 PHP `/hgame` 为 404，Go 未注册该路径。
+- 测试：聚焦 `go test ./internal/service/hgame ./internal/server` 通过；PHP-Go 对比 `/hgame/index` 成功分支，忽略旧 PHP 动态 `data.xxx_api_auth` 后核心字段一致；旧 PHP `/hgame` 为 404，Go 未注册该路径。PHP `c.api.hgame` 仅定义 `index`，其他动态 action 不伪造业务响应。
 
 ### `/ucp/task/sharepic`
 

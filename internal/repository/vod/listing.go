@@ -368,6 +368,80 @@ func (r *ListingRepository) UpsertMiniSearchLog(ctx context.Context, keyword str
 	return nil
 }
 
+func (r *ListingRepository) UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_updowns WHERE uid=? AND vodid=?", uid, vodID)
+	if err != nil {
+		return nil, fmt.Errorf("query vod updown: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) DeleteUpDown(ctx context.Context, uid int, vodID int) error {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "DELETE FROM vod_updowns WHERE uid=? AND vodid=?", uid, vodID); err != nil {
+		return fmt.Errorf("delete vod updown: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO vod_updowns(vodid, uid, updown, addtime) VALUES(?, ?, ?, ?)", vodID, uid, updown, now)
+	if err != nil {
+		return 0, fmt.Errorf("insert vod updown: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("vod updown rows affected: %w", err)
+	}
+	if affected == 0 {
+		return 0, nil
+	}
+	id, _ := result.LastInsertId()
+	return int(id), nil
+}
+
+func (r *ListingRepository) IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error {
+	if r.db == nil || vodID <= 0 || delta == 0 {
+		return nil
+	}
+	if field != "upnum" && field != "downnum" {
+		return fmt.Errorf("invalid vod counter %s", field)
+	}
+	expr := field + "+?"
+	if delta < 0 {
+		expr = "GREATEST(" + field + "+?,0)"
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vods SET "+field+"="+expr+" WHERE vodid=?", delta, vodID); err != nil {
+		return fmt.Errorf("increment vod counter: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) RecountUpDown(ctx context.Context, vodID int) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, `
+UPDATE vods SET
+	upnum=(SELECT COUNT(*) FROM vod_updowns WHERE vodid=? AND updown=1),
+	downnum=(SELECT COUNT(*) FROM vod_updowns WHERE vodid=? AND updown=2)
+WHERE vodid=?`, vodID, vodID, vodID); err != nil {
+		return fmt.Errorf("recount vod updown: %w", err)
+	}
+	return nil
+}
+
 func (r *ListingRepository) IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error {
 	if r.db == nil || strings.TrimSpace(keyword) == "" {
 		return nil

@@ -87,10 +87,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/index` | ANY | `UCPHandler.Index` |
 | `/ucp/user`、`/ucp/user/index` | ANY | `UCPHandler.UserIndex` |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | ANY | `UCPHandler.BankcardIndex` |
-| `/ucp/feedback` | GET | `UCPHandler.FeedbackListing` |
+| `/ucp/feedback` | ANY | `UCPHandler.FeedbackListing/FeedbackCreateLegacy` |
 | `/ucp/feedback/index` | GET | `UCPHandler.FeedbackIndex` |
 | `/ucp/feedback/listing` | GET | `UCPHandler.FeedbackNewListing` |
 | `/ucp/feedback/detail` | GET | `UCPHandler.FeedbackDetail` |
+| `/ucp/feedback/create` | ANY | `UCPHandler.FeedbackCreate` |
 | `/ucp/msg`、`/ucp/msg/index` | GET | `UCPHandler.MsgListing` |
 | `/ucp/msg/show` | ANY | `UCPHandler.MsgDetail` |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | ANY | `UCPHandler.MsgSetRead/CleanRead/Delete` |
@@ -107,9 +108,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
 | `/vod/show/:vodid` | ANY | `VODHandler.Show` |
+| `/vod/up/:vodid`、`/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
 | `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
+| `/comment/up`、`/comment/down` | ANY | `CommentHandler.Up/Down` |
 | `/special/index` | ANY | `SpecialHandler.Index` |
 | `/special/listing`、`/special/listing-:params` | ANY | `SpecialHandler.Listing` |
 | `/special/detail/:spid`、`/special/detail/:spid-:params` | ANY | `SpecialHandler.Detail` |
@@ -124,6 +127,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` | ANY | `VODHandler.Listing` |
 | `/v2/vod/listing-:params`、`/v2/vod/recommend-:params`、`/v2/vod/hot-:params`、`/v2/vod/latest-:params` | ANY | `VODHandler.Listing` |
 | `/v2/vod/show/:vodid` | ANY | `VODHandler.Show` |
+| `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 
 ### 已注册占位
 
@@ -132,7 +136,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | ANY | `notImplemented("c.apiv2.user.register")` |
 | `/v2/login` | ANY | `notImplemented("c.apiv2.user.login")` |
 | `/v2/forgot` | ANY | `notImplemented("c.apiv2.user.forgot")` |
-| `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `notImplemented("c.apiv2.vod.up/down")` |
 | `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `notImplemented("c.apiv2.vod.reqplay/reqdown")` |
 | `/v2/vod/buy/:vodid` | ANY | `notImplemented("c.apiv2.vod.buy")` |
 
@@ -173,8 +176,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
 | `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
+| `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 不接管 | PHP `notification` 仅定义 `index/clean`，未发现其他稳定 action |
 | `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，签到写入 action 未接管 |
-| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，show/reqcoin 未接管 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，reqcoin 未接管 |
+| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | `ExploreHandler.VodTaskShow` | 已重构；激励视频展示并创建/复用当日领取日志，错误分支 live 对比通过，成功分支 fake 覆盖；`reqcoin` 资产发放仍未接管 |
 | `/explore/index` | `c.api.explore.index->index` | `ExploreHandler.Index` | 已重构，对比通过；发现页 tab、7 日签到奖励和签到状态只读聚合 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | `ExploreHandler.CleanNotification` | 已重构，对比通过；清理发现页红点，仅更新 `notification_all` |
 
@@ -190,6 +195,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
+| `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 不接管 | PHP `c.api.hgame` 仅定义 `index`，未发现其他稳定 action；不伪造业务响应 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
 | `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
 | `/onego/history` | `c.api.onego->history` | `OneGoHandler.History` | 已重构，对比通过；登录只读本人投注历史，未登录 `retcode=-9999` |
@@ -234,6 +240,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/latest` | `c.api.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/vod/latest-:params` | `c.api.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/vod/show/:vodid` | `c.api.vod->show` | `VODHandler.Show` | 已重构，详情主字段对比通过；相似/喜欢随机列表按 shape 对比 |
+| `/vod/up/:vodid`、`/vod/down/:vodid`、`/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | `c.api.vod/apiv2.vod->up/down` | `VODHandler.Up/Down` | 已重构；普通视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | `VODHandler.Preview` | 已重构，m3u8 输出对比通过 |
 | `/sendfile/play/:file` | `c.api.sendfile->play` | `SendfileHandler.Play` | 已重构，按旧 PHP 空壳行为对齐 |
 | `/sendfile/down/:file` | `c.api.sendfile->down` | `SendfileHandler.Down` | 已重构，按旧 PHP 空响应对齐 |
@@ -243,6 +250,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | Go 入口 | 状态 |
 | --- | --- | --- | --- |
 | `/comment/listing-:params` | `c.api.comment->listing` | `CommentHandler.Listing` | 已重构，对比通过 |
+| `/comment/up`、`/comment/down` | `c.api.comment->up/down` | `CommentHandler.Up/Down` | 已重构；游客/登录赞踩、重复限制和计数自增；无效评论分支 live 对比通过 |
 | `/playlog`、`/playlog/index` | `c.api.playlog->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/playlog/listing` | `c.api.playlog->listing` | `HistoryHandler.PlayListing` | 已重构；播放记录只读列表，支持登录/游客、timeline、分页和 PHP 相对时间格式；游客 timeline 2/3 保留旧 PHP 边界反序行为 |
 | `/playlog/remove` | `c.api.playlog->remove` | `HistoryHandler.PlayRemove` | 已重构；按登录 uid 或游客 sid 软删除播放记录，空 `vodids` 返回 `已删除0项` |
@@ -251,9 +259,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/downlog/remove` | `c.api.downlog->remove` | `HistoryHandler.DownRemove` | 已重构；按登录 uid 或游客 sid 软删除下载记录，空 `vodids` 返回 `已删除0项` |
 | `/favorite`、`/favorite/index` | `c.api.favorite->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/favorite/listing` | `c.api.favorite->listing` | `FavoriteHandler.Listing` | 已重构；登录只读普通视频收藏，支持 `wd` 搜索和分页，复用 VOD 行处理 |
+| `/favorite/add` | `c.api.favorite->add` | `FavoriteHandler.Add` | 已重构；登录、视频不存在、重复收藏和成功写入分支迁移；金币奖励保留 rewarder 扩展点，默认不改资产 |
 | `/favorite/remove` | `c.api.favorite->remove` | `FavoriteHandler.Remove` | 已重构；登录删除普通视频收藏，空 `vodids` 返回 `已删除0项` |
 | `/minifavorite`、`/minifavorite/index` | `c.api.minifavorite->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/minifavorite/listing` | `c.api.minifavorite->listing` | `FavoriteHandler.MiniListing` | 已重构；登录只读小视频收藏，复用 mini VOD 行处理并补 `isfavorite=1` |
+| `/minifavorite/add` | `c.api.minifavorite->add` | `FavoriteHandler.MiniAdd` | 已重构；登录、视频不存在、重复收藏和成功写入分支迁移；金币奖励保留 rewarder 扩展点，默认不改资产 |
 | `/minifavorite/remove` | `c.api.minifavorite->remove` | `FavoriteHandler.MiniRemove` | 已重构；登录删除小视频收藏，空 `vodids` 返回 `已删除0项` |
 
 ### 小视频、作者页
@@ -264,6 +274,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构，对比通过；setting 序列化排行榜、日/周/月榜和 rows 用户包装 |
 | `/minivod/*-:params`（上述 action） | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构；参数模板 `$cateid-$areaid-$yearid-$tagid-$definition-$duration-$freetype-$mosaic-$langvoice-$orderby-$page` |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | `MiniVODHandler.Show` | 已重构；读取 `showtype=1` 小视频详情、作者、分类层级、相关视频和猜你喜欢；本地旧库缺作者样本的错误分支对比通过，成功分支单测覆盖 |
+| `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | `MiniVODHandler.Up/Down` | 已重构；小视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
+| `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
 | `/miniplaylog/remove` | `c.api.minivod->historyDelete` | `HistoryHandler.MiniPlayRemove` | 已重构；按 PHP 模型语义用输入 `vodid/vodids` 删除 `logid`，空参数 live 对比通过 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | `MiniVODHandler.Author` | 已重构，对比通过；作者主页小视频列表，返回 `now/userrow/vodrows/pageinfo/orders` |
@@ -302,7 +314,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/myaff` | `c.api.ucp.index->myaff` | `UCPHandler.MyAff` | 已重构，对比通过；支持 `x-cookie-auth` header 和 `xxx_api_auth` cookie |
 | `/ucp/index` | `c.api.ucp.index->index` | `UCPHandler.Index` | 已重构；登录/游客只读个人中心聚合，旧 PHP 本地对比超时，已按源码契约和 Go 输出验证 |
 | `/ucp/affcenter` | `c.api.ucp.index->affcenter` | `UCPHandler.AffCenter` | 已重构，对比通过；登录只读推广中心，合并用户组权限后计算播放/下载剩余额度 |
-| `GET /ucp/feedback` | `c.api.ucp.index->feedback` | `UCPHandler.FeedbackListing` | 已重构，对比通过；登录只读历史反馈列表，POST 写入未接管 |
+| `GET /ucp/feedback` | `c.api.ucp.index->feedback` | `UCPHandler.FeedbackListing` | 已重构，对比通过；登录只读历史反馈列表 |
+| `POST /ucp/feedback`、`/ucp/feedback/create` | `c.api.ucp.index->feedback`、`c.api.ucp.feedback->create` | `UCPHandler.FeedbackCreate` | 已重构；登录反馈创建、内容/订单/每日次数校验和写入 `feedbacks`；未登录分支 live 对比通过，图片上传保存和告警通知未接管 |
 | `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | `UCPHandler.FeedbackIndex` | 已重构，对比通过；新版反馈初始化页，最近 30 天支付记录，POST 未接管 |
 | `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | `UCPHandler.FeedbackNewListing` | 已重构，对比通过；新版反馈列表，支持 `type=0/1/2` 过滤，POST 未接管 |
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | `UCPHandler.FeedbackDetail` | 已重构，对比通过；新版反馈详情，校验反馈归属，附件图片和关联支付只读，POST 未接管 |
@@ -347,8 +360,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | `c.apiv2.user->register` |
 | `/v2/login` | `c.apiv2.user->login` |
 | `/v2/forgot` | `c.apiv2.user->forgot` |
-| `/v2/vod/up/:vodid` | `c.apiv2.vod->up` |
-| `/v2/vod/down/:vodid` | `c.apiv2.vod->down` |
 | `/v2/vod/reqplay/:vodid` | `c.apiv2.vod->reqplay` |
 | `/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqdown` |
 | `/v2/vod/buy/:vodid` | `c.apiv2.vod->buy` |
@@ -364,7 +375,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/vod/up/:vodid`、`/vod/down/:vodid` | `c.api.vod->up/down` | 未重构；用户行为/写入 |
 | `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 未重构；播放/下载权限、日志、可能签名 |
 | `/vod/buy/:vodid` | `c.api.vod->buy` | 未重构；购买/金币 |
 | `/vod/:action?` | `c.api.vod->$action` | 未重构；动态 action |
@@ -373,9 +383,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/comment/:action?` | `c.api.comment->$action` | 未重构；评论发布涉及写库和权限 |
-| `/favorite/add` | `c.api.favorite->add` | 未重构；收藏写入且可能触发金币奖励 |
-| `/minifavorite/add` | `c.api.minifavorite->add` | 未重构；收藏写入且可能触发金币奖励 |
+| `/comment/:action?`（除 `/comment/listing-:params`、`/comment/up`、`/comment/down`） | `c.api.comment->$action` | 未重构；剩余 `post` 涉及评论发布、敏感词、树结构、金币奖励和通知 |
 
 ### 小视频、作者页
 
@@ -383,10 +391,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | 未重构 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | 未重构 |
-| `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->$action` | 未重构；用户行为/写入 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->$action` | 未重构；播放/下载权限 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 未重构；金币打赏 |
-| `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 未重构 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
 
 ### 用户账号
@@ -412,7 +418,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `POST /ucp/feedback` | `c.api.ucp.index->feedback` | 未重构；提交反馈写入 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`） | `c.api.ucp.msg->$action` | 未重构；剩余 `send` 涉及站内信发送、每日限额和批量收件人 |
@@ -426,7 +431,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |
 | `/ucp/payment/:action?`（除 `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`） | `c.api.ucp.payment->$action` | 未重构；支付其他 action |
-| `/ucp/feedback/:action?`（除 `GET /ucp/feedback/index`、`GET /ucp/feedback/listing`、`GET /ucp/feedback/detail`） | `c.api.ucp.feedback->$action` | 未重构；新版反馈剩余 `create` 写入待迁 |
+| `/ucp/feedback/:action?`（除 `GET /ucp/feedback/index`、`GET /ucp/feedback/listing`、`GET /ucp/feedback/detail`、`/ucp/feedback/create`） | `c.api.ucp.feedback->$action` | 未重构；图片上传保存、告警通知等外部链路待补齐 |
 | `/ucp/vodorder/:action?` | `c.api.ucp.vodorder->$action` | 未重构；视频订单 |
 
 ### 活动、邀请、发现页
@@ -434,10 +439,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 未重构；剩余 `bind` 涉及绑定关系、VIP/金币奖励写入 |
-| `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 未重构；当前未发现其他 action |
 | `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`） | `c.api.explore.signtask->$action` | 未重构；签到任务 |
-| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 未重构 |
-| `/explore/vodtask/:action?`（除 `/explore/vodtask`、`/explore/vodtask/index`） | `c.api.explore.vodtask->$action` | 未重构 |
+| `/explore/vodtask/:action?`（除 `/explore/vodtask`、`/explore/vodtask/index`、`/explore/vodtask/show/:vid`） | `c.api.explore.vodtask->$action` | 未重构；剩余 `reqcoin` 涉及金币发放和日志加锁 |
 
 ### 游戏、直播、一元购
 
@@ -456,7 +459,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/community/:action?` | `c.api.topic->$action` | 未重构；发帖/评论等写入 |
-| `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 未重构；当前旧 PHP 仅发现 `index`，`/hgame` 本身为 404 |
 | `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源

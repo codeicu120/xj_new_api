@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 
+	"xj_comp/internal/domain"
 	ucpRepo "xj_comp/internal/repository/ucp"
 	userRepo "xj_comp/internal/repository/user"
 )
@@ -146,6 +147,14 @@ func (s ucpStore) FeedbacksByType(ctx context.Context, uid int, feedbackType int
 
 func (s ucpStore) FeedbackByID(ctx context.Context, id int) (map[string]interface{}, error) {
 	return s.ucp.FeedbackByID(ctx, id)
+}
+
+func (s ucpStore) CountFeedbacksSince(ctx context.Context, uid int, since int64) (int, error) {
+	return s.ucp.CountFeedbacksSince(ctx, uid, since)
+}
+
+func (s ucpStore) CreateFeedback(ctx context.Context, input domain.FeedbackCreateInput) (int, error) {
+	return s.ucp.CreateFeedback(ctx, input)
 }
 
 func (s ucpStore) PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error) {

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type Repository struct {
@@ -385,6 +387,36 @@ func (r *Repository) FeedbackByID(ctx context.Context, id int) (map[string]inter
 		return map[string]interface{}{}, nil
 	}
 	return row, nil
+}
+
+func (r *Repository) CountFeedbacksSince(ctx context.Context, uid int, since int64) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM feedbacks WHERE uid=? AND ctimestamp>?", uid, since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count feedbacks since: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) CreateFeedback(ctx context.Context, input domain.FeedbackCreateInput) (int, error) {
+	if r.db == nil || input.UID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, `INSERT INTO feedbacks
+		(uid, cid, content, payid, payname, payaccount, aids, ctimestamp, ip, device, longids, shortids)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.UID, input.CID, input.Content, input.PayID, input.PayName, input.PayAccount, input.AIDs, input.CreatedAt, input.IP, input.Device, input.LongIDs, input.ShortIDs,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert feedback: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert feedback id: %w", err)
+	}
+	return int(id), nil
 }
 
 func (r *Repository) PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error) {

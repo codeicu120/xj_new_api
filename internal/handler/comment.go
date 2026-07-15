@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -35,4 +36,23 @@ func (h *CommentHandler) Listing(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *CommentHandler) Up(c *gin.Context) {
+	h.vote(c, true)
+}
+
+func (h *CommentHandler) Down(c *gin.Context) {
+	h.vote(c, false)
+}
+
+func (h *CommentHandler) vote(c *gin.Context, up bool) {
+	id, _ := strconv.Atoi(inputValue(c, "id"))
+	retcode, errmsg, err := h.service.Vote(c.Request.Context(), authToken(c), id, up)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 }

@@ -3,6 +3,7 @@ package vod
 import (
 	"context"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,9 @@ type fakeListingStore struct {
 	miniCachedListCalls int
 	miniUpsertCalls     int
 	miniIncrementCalls  int
+	updown              map[string]interface{}
+	savedUpdown         int
+	counters            []string
 }
 
 type fakeM3U8Fetcher map[string]string
@@ -182,6 +186,32 @@ func (s *fakeListingStore) IncrementMiniSearchLog(context.Context, string, int64
 
 func (s *fakeListingStore) TopMiniSearchVODIDs(context.Context) (string, error) {
 	return "100", nil
+}
+
+func (s *fakeListingStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
+	if s.updown != nil {
+		return s.updown, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeListingStore) DeleteUpDown(context.Context, int, int) error {
+	s.savedUpdown = 0
+	return nil
+}
+
+func (s *fakeListingStore) SaveUpDown(_ context.Context, _ int, _ int, updown int, _ int64) (int, error) {
+	s.savedUpdown = updown
+	return 1, nil
+}
+
+func (s *fakeListingStore) IncrementVODCounter(_ context.Context, _ int, field string, delta int) error {
+	s.counters = append(s.counters, field+":"+strconv.Itoa(delta))
+	return nil
+}
+
+func (s *fakeListingStore) RecountUpDown(context.Context, int) error {
+	return nil
 }
 
 func TestListingServiceSearchIndex(t *testing.T) {
@@ -507,6 +537,60 @@ func TestListingServiceLikeRowsUsesSixRandomRows(t *testing.T) {
 	if data.LikeRows[0]["coverpic"] != "https://cover.example.test/202501/a.jpg" {
 		t.Fatalf("unexpected coverpic %v", data.LikeRows[0]["coverpic"])
 	}
+}
+
+func TestVoteMissingVOD(t *testing.T) {
+	store := &fakeListingStore{vodByID: map[string]interface{}{}}
+	service := NewListingService(store, "https://res.example.test", 50)
+
+	retcode, errmsg, err := service.Vote(context.Background(), "", 0, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestVoteGuestUpToggle(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+
+	retcode, errmsg, err := service.Vote(context.Background(), "", 100, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != 0 || errmsg != "已赞" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+	retcode, errmsg, err = service.Vote(context.Background(), "", 100, true)
+	if err != nil {
+		t.Fatalf("vote toggle: %v", err)
+	}
+	if retcode != 0 || errmsg != "已取消赞" {
+		t.Fatalf("toggle response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestVoteUserSwitchesState(t *testing.T) {
+	store := &fakeListingStore{updown: map[string]interface{}{"updown": "2"}}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5"}})
+
+	retcode, errmsg, err := service.Vote(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 100, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != 0 || errmsg != "已赞" || store.savedUpdown != 1 {
+		t.Fatalf("response = %d %q saved=%d", retcode, errmsg, store.savedUpdown)
+	}
+}
+
+type fakeVODAuth struct {
+	user map[string]interface{}
+}
+
+func (a fakeVODAuth) UserBySession(context.Context, string) (map[string]interface{}, error) {
+	return a.user, nil
 }
 
 func fixtureVODRows() []map[string]interface{} {

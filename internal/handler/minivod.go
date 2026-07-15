@@ -53,6 +53,40 @@ func (h *MiniVODHandler) Show(c *gin.Context) {
 	}
 }
 
+func (h *MiniVODHandler) Up(c *gin.Context) {
+	h.vote(c, true)
+}
+
+func (h *MiniVODHandler) Down(c *gin.Context) {
+	h.vote(c, false)
+}
+
+func (h *MiniVODHandler) ReqLong(c *gin.Context) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	body, retcode, errmsg, err := h.service.ReqLong(c.Request.Context(), authToken(c), vodID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.Data(http.StatusOK, "text/html", []byte(body))
+}
+
+func (h *MiniVODHandler) vote(c *gin.Context, up bool) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	retcode, errmsg, err := h.service.Vote(c.Request.Context(), authToken(c), vodID, up)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func (h *MiniVODHandler) Author(c *gin.Context) {
 	authorID, _ := strconv.Atoi(c.Param("authorid"))
 	action := strings.TrimPrefix(c.Param("action"), "/")

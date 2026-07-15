@@ -2,6 +2,7 @@ package minivod
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,6 +16,10 @@ type fakeStore struct {
 	actionKey  string
 	user       map[string]interface{}
 	vod        map[string]interface{}
+	updown     map[string]interface{}
+	saved      int
+	deleted    bool
+	counters   []string
 }
 
 func (s *fakeStore) Categories(context.Context) ([]map[string]interface{}, error) {
@@ -30,7 +35,7 @@ func (s *fakeStore) Years(context.Context) ([]map[string]interface{}, error) {
 }
 
 func (s *fakeStore) Servers(context.Context) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{}, nil
+	return []map[string]interface{}{{"srvid": "3", "srvhost": "https://cdn.test", "cdnkey": "", "cdnparam": ""}}, nil
 }
 
 func (s *fakeStore) TagsByNames(context.Context, []string) ([]map[string]interface{}, error) {
@@ -94,6 +99,33 @@ func (s *fakeStore) Setting(_ context.Context, key string) (string, error) {
 
 func (s *fakeStore) UsersByIDs(context.Context, []int) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{{"uid": "7", "username": "u", "nickname": "n", "avatar": "avatar.jpg", "gender": "1"}}, nil
+}
+
+func (s *fakeStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
+	if s.updown != nil {
+		return s.updown, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeStore) DeleteUpDown(context.Context, int, int) error {
+	s.deleted = true
+	s.updown = map[string]interface{}{}
+	return nil
+}
+
+func (s *fakeStore) SaveUpDown(_ context.Context, _ int, _ int, updown int, _ int64) (int, error) {
+	s.saved = updown
+	return 1, nil
+}
+
+func (s *fakeStore) IncrementVODCounter(_ context.Context, _ int, field string, delta int) error {
+	s.counters = append(s.counters, field+":"+strconv.Itoa(delta))
+	return nil
+}
+
+func (s *fakeStore) RecountUpDown(context.Context, int) error {
+	return nil
 }
 
 type fakeProcessor struct{}
@@ -207,5 +239,98 @@ func TestAuthorListingReturnsUserRowsAndMiniVODRows(t *testing.T) {
 	}
 	if len(data.VODRows) != 1 || data.VODRows[0]["processed"] != "1" {
 		t.Fatalf("vodrows=%#v", data.VODRows)
+	}
+}
+
+func TestVoteRejectsNonMiniVOD(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+
+	retcode, errmsg, err := service.Vote(context.Background(), "", 9, true)
+	if err != nil {
+		t.Fatalf("vote: %v", err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestVoteGuestUpToggle(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+
+	retcode, errmsg, err := service.Vote(context.Background(), "", 9, true)
+	if err != nil || retcode != 0 || errmsg != "已赞" {
+		t.Fatalf("first retcode=%d errmsg=%q err=%v", retcode, errmsg, err)
+	}
+	retcode, errmsg, err = service.Vote(context.Background(), "", 9, true)
+	if err != nil || retcode != 0 || errmsg != "已取消赞" {
+		t.Fatalf("second retcode=%d errmsg=%q err=%v", retcode, errmsg, err)
+	}
+	if len(store.counters) < 2 || store.counters[0] != "upnum:1" || store.counters[1] != "upnum:-1" {
+		t.Fatalf("counters=%#v", store.counters)
+	}
+}
+
+type fakeAuth struct {
+	user map[string]interface{}
+}
+
+func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}, error) {
+	return a.user, nil
+}
+
+func TestVoteUserSwitchesState(t *testing.T) {
+	store := &fakeStore{updown: map[string]interface{}{"updown": "1"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithAuth(fakeAuth{user: map[string]interface{}{"uid": "7"}})
+
+	retcode, errmsg, err := service.Vote(context.Background(), "token", 9, false)
+	if err != nil || retcode != 0 || errmsg != "已踩" {
+		t.Fatalf("retcode=%d errmsg=%q err=%v", retcode, errmsg, err)
+	}
+	if !store.deleted || store.saved != 2 {
+		t.Fatalf("deleted=%v saved=%d", store.deleted, store.saved)
+	}
+	if len(store.counters) < 2 || store.counters[0] != "downnum:1" || store.counters[1] != "upnum:-1" {
+		t.Fatalf("counters=%#v", store.counters)
+	}
+}
+
+func TestReqLongRejectsMiniVOD(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "1", "play_url": "x.m3u8"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+
+	_, retcode, errmsg, err := service.ReqLong(context.Background(), "", 9)
+	if err != nil {
+		t.Fatalf("reqlong: %v", err)
+	}
+	if retcode != 1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestReqLongReturnsAbsoluteURL(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "https://cdn.test/a/index.m3u8", "play_srvid": "3"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+
+	body, retcode, errmsg, err := service.ReqLong(context.Background(), "", 9)
+	if err != nil || retcode != 0 || errmsg != "" {
+		t.Fatalf("body=%q retcode=%d errmsg=%q err=%v", body, retcode, errmsg, err)
+	}
+	if body != "https://cdn.test/a/index.m3u8" {
+		t.Fatalf("body=%q", body)
+	}
+}
+
+func TestReqLongAddsServerHostForRelativeURL(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "a/index.m3u8", "play_srvid": "3"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+
+	body, retcode, _, err := service.ReqLong(context.Background(), "", 9)
+	if err != nil || retcode != 0 {
+		t.Fatalf("body=%q retcode=%d err=%v", body, retcode, err)
+	}
+	if body != "https://cdn.test/a/index.m3u8" {
+		t.Fatalf("body=%q", body)
 	}
 }

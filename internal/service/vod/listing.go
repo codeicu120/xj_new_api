@@ -10,9 +10,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"xj_comp/internal/domain"
+	userRepo "xj_comp/internal/repository/user"
 	vodRepo "xj_comp/internal/repository/vod"
 )
 
@@ -49,6 +51,21 @@ type ListingStore interface {
 	IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error
 	TopMiniSearchVODIDs(ctx context.Context) (string, error)
 	MiniVODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error)
+	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
+	DeleteUpDown(ctx context.Context, uid int, vodID int) error
+	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
+	IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error
+	RecountUpDown(ctx context.Context, vodID int) error
+}
+
+type AuthStore interface {
+	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
+}
+
+type VoteLimiter interface {
+	Seen(ctx context.Context, key string) (bool, error)
+	Mark(ctx context.Context, key string) error
+	Delete(ctx context.Context, key string) error
 }
 
 type ListingService struct {
@@ -56,6 +73,8 @@ type ListingService struct {
 	resourceBaseURL string
 	vipDiscount     int
 	fetcher         M3U8Fetcher
+	auth            AuthStore
+	limiter         VoteLimiter
 	now             func() time.Time
 }
 
@@ -75,8 +94,14 @@ func NewListingService(store ListingStore, resourceBaseURL string, vipDiscount i
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		vipDiscount:     vipDiscount,
 		fetcher:         httpM3U8Fetcher{},
+		limiter:         newMemoryVoteLimiter(),
 		now:             time.Now,
 	}
+}
+
+func (s *ListingService) WithAuth(auth AuthStore) *ListingService {
+	s.auth = auth
+	return s
 }
 
 func (s *ListingService) List(ctx context.Context, req ListingRequest) (domain.VODListingData, error) {
@@ -456,6 +481,123 @@ func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) 
 		SimilarRows: s.processRows(similarRows, env, isH5Request, now),
 		LikeRows:    s.processRows(likeRows, env, isH5Request, now),
 	}, nil
+}
+
+func (s *ListingService) Vote(ctx context.Context, token string, vodID int, up bool) (int, string, error) {
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return -1, "视频操作失败", err
+	}
+	if len(row) == 0 || atoi(str(row["showtype"])) > 0 {
+		return -1, "记录不存在或已被删除", nil
+	}
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "视频操作失败", err
+	}
+	uid := atoi(str(user["uid"]))
+	if uid == 0 {
+		return s.voteGuest(ctx, str(row["vodid"]), up)
+	}
+	return s.voteUser(ctx, uid, atoi(str(row["vodid"])), up)
+}
+
+func (s *ListingService) voteGuest(ctx context.Context, vodID string, up bool) (int, string, error) {
+	key := "vod.updown." + vodID + ".guest"
+	seen, err := s.limiter.Seen(ctx, key)
+	if err != nil {
+		return -1, "视频操作失败", err
+	}
+	if up {
+		if seen {
+			if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "upnum", -1); err != nil {
+				return -1, "视频操作失败", err
+			}
+			_ = s.store.RecountUpDown(ctx, atoi(vodID))
+			_ = s.limiter.Delete(ctx, key)
+			return 0, "已取消赞", nil
+		}
+		if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "upnum", 1); err != nil {
+			return -1, "视频操作失败", err
+		}
+		_ = s.store.RecountUpDown(ctx, atoi(vodID))
+		_ = s.limiter.Mark(ctx, key)
+		return 0, "已赞", nil
+	}
+	if seen {
+		return -1, "您已经赞/踩过了", nil
+	}
+	if err := s.store.IncrementVODCounter(ctx, atoi(vodID), "downnum", 1); err != nil {
+		return -1, "视频操作失败", err
+	}
+	_ = s.store.IncrementVODCounter(ctx, atoi(vodID), "upnum", -1)
+	_ = s.store.RecountUpDown(ctx, atoi(vodID))
+	_ = s.limiter.Mark(ctx, key)
+	return 0, "已踩", nil
+}
+
+func (s *ListingService) voteUser(ctx context.Context, uid int, vodID int, up bool) (int, string, error) {
+	target := 2
+	message := "已踩"
+	counter := "downnum"
+	if up {
+		target = 1
+		message = "已赞"
+		counter = "upnum"
+	}
+	item, err := s.store.UpDownByUser(ctx, uid, vodID)
+	if err != nil {
+		return -1, "视频操作失败", err
+	}
+	if len(item) > 0 {
+		if err := s.store.DeleteUpDown(ctx, uid, vodID); err != nil {
+			return -1, "视频操作失败", err
+		}
+		current := atoi(str(item["updown"]))
+		if current == target {
+			if err := s.store.IncrementVODCounter(ctx, vodID, counter, -1); err != nil {
+				return -1, "视频操作失败", err
+			}
+			_ = s.store.RecountUpDown(ctx, vodID)
+			if up {
+				return 0, "已取消赞", nil
+			}
+			return 0, "已取消踩", nil
+		}
+	}
+	id, err := s.store.SaveUpDown(ctx, uid, vodID, target, s.now().Unix())
+	if err != nil {
+		return -1, "视频操作失败", err
+	}
+	if id == 0 {
+		if up {
+			return -1, "您已经赞过了", nil
+		}
+		return -1, "您已经踩过了", nil
+	}
+	if err := s.store.IncrementVODCounter(ctx, vodID, counter, 1); err != nil {
+		return -1, "视频操作失败", err
+	}
+	if !up {
+		_ = s.store.IncrementVODCounter(ctx, vodID, "upnum", -1)
+	}
+	_ = s.store.RecountUpDown(ctx, vodID)
+	return 0, message, nil
+}
+
+func (s *ListingService) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	sid := userRepo.CleanToken(token)
+	if sid == "" || s.auth == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	user, err := s.auth.UserBySession(ctx, sid)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	return user, nil
 }
 
 func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
@@ -1258,4 +1400,34 @@ func ternary[T any](ok bool, yes T, no T) T {
 		return yes
 	}
 	return no
+}
+
+type memoryVoteLimiter struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+func newMemoryVoteLimiter() *memoryVoteLimiter {
+	return &memoryVoteLimiter{seen: map[string]struct{}{}}
+}
+
+func (l *memoryVoteLimiter) Seen(_ context.Context, key string) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.seen[key]
+	return ok, nil
+}
+
+func (l *memoryVoteLimiter) Mark(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen[key] = struct{}{}
+	return nil
+}
+
+func (l *memoryVoteLimiter) Delete(_ context.Context, key string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.seen, key)
+	return nil
 }

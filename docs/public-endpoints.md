@@ -36,7 +36,8 @@
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
 | `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；签到写入 action 未接管。 |
-| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；激励视频 show/reqcoin 未接管。 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；激励视频 `reqcoin` 未接管。 |
+| `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 本轮完成 | 激励视频展示和当日领取日志创建/复用；错误分支 live 对比通过，金币发放接口仍未迁移。 |
 | `/explore/index` | `c.api.explore.index->index` | 本轮完成 | 发现页入口，读取可见 tab，按用户/游客权限计算未来 7 天签到奖励和当前签到状态，对比通过。 |
 | `/game/platforms` | `c.api.game.index->index` | 本轮完成 | 读 `game_platform`，保留 PHP 字段和值类型并剔除 `json`。 |
 | `/game/categories` | `c.api.game.index->categories` | 本轮完成 | 读 `game_category`，保留 PHP 字段和值类型并拼接资源 URL。 |
@@ -58,6 +59,8 @@
 | `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频公共列表，支持筛选、排序、分页、随机推荐和 latest 用户包装 rows。 |
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
+| `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | 本轮完成 | 小视频赞踩；登录用户写 `vod_updowns`，游客用进程内 limiter，无效视频分支 live 对比通过。 |
+| `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 本轮完成 | 长视频转小视频播放地址；成功直接返回 `text/html` URL，错误分支 live 对比通过。 |
 | `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | 本轮完成 | 作者主页小视频列表；`/my/1` 关键字段 live 对比通过，用户不存在分支一致。 |
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` 及 `-params` | `c.api.topic->list` | 本轮完成 | 社区主题列表；`favorite` 未登录分支、列表主结构和媒体字段 live 对比通过。 |
@@ -108,11 +111,10 @@
 | 接口 | 原因 |
 | --- | --- |
 | `/register`、`/login`、`/forgot` | 公共但涉及账号、短信、风控和写库。 |
-| `/favorite/add`、`/minifavorite/add` | 收藏写入会触发金币奖励计算和 `user_coinlogs` 写入，需单独迁移和回滚策略；index/listing/remove 已完成。 |
 | `/payment/*`、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
-| `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/up`、`/minivod/down` | 小视频列表、排行榜、详情、播放记录和作者页已完成；剩余多涉及游客/用户权限、金币、点赞踩写入或媒体解析。 |
+| `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
 | `/community/:action?` 剩余 action | 社区列表和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

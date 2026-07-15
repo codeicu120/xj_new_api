@@ -89,6 +89,33 @@ LIMIT 1000`, row["id"])
 	return rows, nil
 }
 
+func (r *Repository) CommentByID(ctx context.Context, id int) (map[string]interface{}, error) {
+	if r.db == nil || id <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_comments WHERE id=?", id)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) IncrementVote(ctx context.Context, id int, field string) error {
+	if r.db == nil || id <= 0 {
+		return nil
+	}
+	if field != "upnum" && field != "downnum" {
+		return fmt.Errorf("invalid vote field %s", field)
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vod_comments SET "+field+"="+field+"+1 WHERE id=?", id); err != nil {
+		return fmt.Errorf("increment comment vote: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
