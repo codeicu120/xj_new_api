@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type Repository struct {
@@ -112,6 +114,89 @@ func (r *Repository) IncrementVote(ctx context.Context, id int, field string) er
 	}
 	if _, err := r.db.ExecContext(ctx, "UPDATE vod_comments SET "+field+"="+field+"+1 WHERE id=?", id); err != nil {
 		return fmt.Errorf("increment comment vote: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) CountByActorSince(ctx context.Context, actor interface{}, since int64, rewarded bool) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	query := "SELECT COUNT(*) FROM vod_comments WHERE sid=? AND addtime>=?"
+	args := []interface{}{fmt.Sprint(actor), since}
+	if rewarded {
+		query += " AND showtype=0"
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count comments by actor: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) RecentCommentsByUID(ctx context.Context, uid int, since int64) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT content FROM vod_comments WHERE uid=? AND addtime>?", uid, since)
+}
+
+func (r *Repository) RecentCommentsByIP(ctx context.Context, ip string, since int64) ([]map[string]interface{}, error) {
+	if r.db == nil || ip == "" {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT content FROM vod_comments WHERE addtime>? AND ip=?", since, ip)
+}
+
+func (r *Repository) CreateComment(ctx context.Context, input domain.CommentCreateInput, parent map[string]interface{}) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin comment tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if len(parent) > 0 {
+		rootID := input.RootID
+		rgt := atoi(parent["rgt"])
+		if _, err := tx.ExecContext(ctx, "UPDATE vod_comments SET rgt=rgt+2 WHERE rootid=? AND rgt>=?", rootID, rgt); err != nil {
+			return 0, fmt.Errorf("shift comment rgt: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE vod_comments SET lft=lft+2 WHERE rootid=? AND lft>?", rootID, rgt); err != nil {
+			return 0, fmt.Errorf("shift comment lft: %w", err)
+		}
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO vod_comments
+		(rootid,parentid,lft,rgt,depth,vodid,uid,sid,content,addtime,ip,showtype)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		input.RootID, input.ParentID, input.Left, input.Right, input.Depth, input.VODID, input.UID, input.SID, input.Content, input.AddTime, input.IP, input.ShowType,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert comment: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert comment id: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit comment tx: %w", err)
+	}
+	committed = true
+	return int(id), nil
+}
+
+func (r *Repository) IncrementVODCommentCount(ctx context.Context, vodID int) error {
+	if r.db == nil || vodID <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vods SET commentcount=commentcount+1 WHERE vodid=?", vodID); err != nil {
+		return fmt.Errorf("increment vod comment count: %w", err)
 	}
 	return nil
 }

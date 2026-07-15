@@ -237,6 +237,17 @@
 - 兼容规则：返回 `data.rows` 和 `data.pageinfo`；评论行对齐 `id/rootid/parentid/lft/rgt/depth/vodid/uid/sid/username/nickname/gender/gicon/isvip/content/upnum/downnum/avatar_url/addtime/__closenum__/subrows`；`orderby=1` 使用 `a.upnum DESC`，默认 `a.addtime DESC`。
 - 测试：聚焦 `go test ./internal/service/comment ./internal/server` 通过；PHP-Go 对比 `/comment/listing-1-0-1`、`/comment/listing-61494-0-1`、`/comment/listing-61494-1-1`、`/comment/listing-999999-0-1` 忽略动态 `data.xxx_api_auth` 后完全一致。
 
+### `/comment/post`
+
+- PHP: `c.api.comment->post`
+- Go: `internal/handler.CommentHandler.Post`
+- Service: `internal/service/comment.Service`
+- Repository: `internal/repository/comment.Repository`
+- Auth: 必须登录，未登录返回 `retcode=-9999`、`errmsg=请注册会员并登录APP才可以发表评论噢`。
+- DB: 读取 `users/session` 鉴权、`user_groups` 权限、`vods`、`vod_comments`；成功写入 `vod_comments`，回复评论时按 nested-set 右值移动树节点，并更新 `vods.commentcount=commentcount+1`。
+- 兼容规则：保留 PHP 的禁言、昵称数字异常、每日条数、视频存在、1-30 字长度、字符/标点/空白/换行数量、父评论、深度和 10 分钟相似评论校验；成功评论 `showtype=4` 等待后台审核。金币奖励和回复通知暂作为后续 reward/notify 接入点，不在本次直接修改用户资产或发送通知。
+- 测试：`go test ./internal/service/comment ./internal/repository/comment ./internal/server` 通过；单测覆盖未登录、长度、重复内容和成功写入字段，路由测试覆盖未登录错误壳；PHP-Go live 对比 POST `/comment/post` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/comment/up`、`/comment/down`
 
 - PHP: `c.api.comment->up/down`

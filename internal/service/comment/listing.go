@@ -2,9 +2,11 @@ package comment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +30,14 @@ type Store interface {
 	RootComments(ctx context.Context, vodID int, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
 	CommentByID(ctx context.Context, id int) (map[string]interface{}, error)
 	IncrementVote(ctx context.Context, id int, field string) error
+	CountByActorSince(ctx context.Context, actor interface{}, since int64, rewarded bool) (int, error)
+	RecentCommentsByUID(ctx context.Context, uid int, since int64) ([]map[string]interface{}, error)
+	RecentCommentsByIP(ctx context.Context, ip string, since int64) ([]map[string]interface{}, error)
+	CreateComment(ctx context.Context, input domain.CommentCreateInput, parent map[string]interface{}) (int, error)
+	IncrementVODCommentCount(ctx context.Context, vodID int) error
 }
+
+type CommentCreateInput = domain.CommentCreateInput
 
 type AuthStore interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
@@ -157,6 +166,111 @@ func (s *Service) Vote(ctx context.Context, token string, id int, up bool) (int,
 	return 0, message, nil
 }
 
+func (s *Service) Post(ctx context.Context, token string, vodID int, parentID int, content string, ip string) (map[string]interface{}, int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	uid := atoi(str(user["uid"]))
+	if uid == 0 {
+		return nil, -9999, "请注册会员并登录APP才可以发表评论噢", nil
+	}
+	perms, err := s.userPerms(ctx, user)
+	if err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	if getPermInt(perms, "deny.comment.post") == 1 {
+		return nil, 1, "您已被禁止评论", nil
+	}
+	if tooManyByPattern(str(user["nickname"]), `[\pN]`, 5) {
+		return nil, 11, "账号异常，请联系管理员", nil
+	}
+	daytime := dayStart(s.now()).Unix()
+	daycount, err := s.store.CountByActorSince(ctx, uid, daytime, false)
+	if err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	if daycount >= getPermInt(perms, "max.comment.post.daynum") {
+		return nil, 2, "每日发表评论数已满额", nil
+	}
+	vodrow, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	if len(vodrow) == 0 || atoi(str(vodrow["showtype"])) > 1 {
+		return nil, 3, "记录不存在或已被删除", nil
+	}
+	content = strings.TrimRight(content, " \t\r\n")
+	if runeLen(content) < 1 || runeLen(content) > 30 {
+		return nil, 4, "评论允许1-30字之间", nil
+	}
+	if !commentAllowedChars(content) || tooManyByPattern(content, `[\pP]`, 5) || tooManyByPattern(content, `[\pZ]`, 5) || tooManyByPattern(content, `[\n]`, 5) {
+		return nil, 5, "内容含有禁止发布的关键词，请检查！", nil
+	}
+	parent := map[string]interface{}{}
+	if parentID > 0 {
+		parent, err = s.store.CommentByID(ctx, parentID)
+		if err != nil {
+			return nil, -1, "发表评论失败", err
+		}
+		if len(parent) == 0 || atoi(str(parent["vodid"])) != atoi(str(vodrow["vodid"])) {
+			return nil, 7, "回复的评论不正确", nil
+		}
+		if atoi(str(parent["showtype"])) != 0 {
+			return nil, 7, "被回复内容不存在或已删除", nil
+		}
+	}
+	if runeLen(content) > 5 {
+		since := s.now().Add(-10 * time.Minute).Unix()
+		rows, err := s.store.RecentCommentsByUID(ctx, uid, since)
+		if err != nil {
+			return nil, -1, "发表评论失败", err
+		}
+		for _, row := range rows {
+			if similarEnough(content, str(row["content"]), 0.80) {
+				return nil, 10, "请勿发布重复内容1", nil
+			}
+		}
+		rows, err = s.store.RecentCommentsByIP(ctx, cleanIP(ip), since)
+		if err != nil {
+			return nil, -1, "发表评论失败", err
+		}
+		for _, row := range rows {
+			if similarEnough(content, str(row["content"]), 0.80) {
+				return nil, 10, "请勿发布重复内容2", nil
+			}
+		}
+	}
+	input := domain.CommentCreateInput{
+		RootID:   parentRootID(parent),
+		ParentID: atoi(str(parent["id"])),
+		Left:     parentLeft(parent),
+		Right:    parentRight(parent),
+		Depth:    atoi(str(parent["depth"])) + boolInt(len(parent) > 0),
+		VODID:    atoi(str(vodrow["vodid"])),
+		UID:      uid,
+		SID:      fmt.Sprint(uid),
+		Content:  content,
+		AddTime:  s.now().Unix(),
+		IP:       cleanIP(ip),
+		ShowType: 4,
+	}
+	if input.Depth > 10 {
+		return nil, 8, "评论回复深度最深10层", nil
+	}
+	id, err := s.store.CreateComment(ctx, input, parent)
+	if err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	if id == 0 {
+		return nil, 9, "评论发表失败", nil
+	}
+	if err := s.store.IncrementVODCommentCount(ctx, input.VODID); err != nil {
+		return nil, -1, "发表评论失败", err
+	}
+	return map[string]interface{}{}, 0, "发表成功", nil
+}
+
 func (s *Service) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {
 	sid := userRepo.CleanToken(token)
 	if sid == "" {
@@ -176,6 +290,123 @@ func (s *Service) userByToken(ctx context.Context, token string) (map[string]int
 		user["sid"] = sid
 	}
 	return user, nil
+}
+
+func (s *Service) userPerms(ctx context.Context, user map[string]interface{}) (map[string]interface{}, error) {
+	if raw, ok := user["perms"].(map[string]interface{}); ok {
+		return raw, nil
+	}
+	if str(user["perms"]) != "" {
+		return parsePermMap(user["perms"]), nil
+	}
+	groups, err := s.store.UserGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	perms := map[string]interface{}{}
+	for _, group := range groups {
+		for key, value := range parsePermMap(group["perms"]) {
+			if _, exists := perms[key]; !exists {
+				perms[key] = value
+			}
+		}
+	}
+	return perms, nil
+}
+
+func parsePermMap(value interface{}) map[string]interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return typed
+	case string:
+		out := map[string]interface{}{}
+		_ = json.Unmarshal([]byte(typed), &out)
+		return out
+	default:
+		return map[string]interface{}{}
+	}
+}
+
+func getPermInt(perms map[string]interface{}, key string) int {
+	return atoi(str(perms[key]))
+}
+
+func dayStart(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+func runeLen(value string) int {
+	return len([]rune(value))
+}
+
+func commentAllowedChars(content string) bool {
+	return regexp.MustCompile(`^[\p{Han}\pL\pP\pZ0-9\r\n\t１２３４５６７８９０]+$`).MatchString(content)
+}
+
+func tooManyByPattern(value string, pattern string, maxParts int) bool {
+	parts := regexp.MustCompile(pattern).Split(value, -1)
+	return len(parts) > maxParts
+}
+
+func parentRootID(parent map[string]interface{}) int {
+	if len(parent) == 0 {
+		return 0
+	}
+	if atoi(str(parent["rootid"])) == 0 {
+		return atoi(str(parent["id"]))
+	}
+	return atoi(str(parent["rootid"]))
+}
+
+func parentLeft(parent map[string]interface{}) int {
+	if len(parent) == 0 {
+		return 1
+	}
+	return atoi(str(parent["rgt"]))
+}
+
+func parentRight(parent map[string]interface{}) int {
+	if len(parent) == 0 {
+		return 2
+	}
+	return atoi(str(parent["rgt"])) + 1
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func cleanIP(ip string) string {
+	return regexp.MustCompile(`[^a-zA-Z0-9\.:]`).ReplaceAllString(ip, "")
+}
+
+func similarEnough(a string, b string, threshold float64) bool {
+	ar := []rune(a)
+	br := []rune(b)
+	if len(ar) == 0 && len(br) == 0 {
+		return true
+	}
+	dp := make([][]int, len(ar)+1)
+	for i := range dp {
+		dp[i] = make([]int, len(br)+1)
+	}
+	for i := 1; i <= len(ar); i++ {
+		for j := 1; j <= len(br); j++ {
+			if ar[i-1] == br[j-1] {
+				dp[i][j] = dp[i-1][j-1] + 1
+			} else if dp[i-1][j] > dp[i][j-1] {
+				dp[i][j] = dp[i-1][j]
+			} else {
+				dp[i][j] = dp[i][j-1]
+			}
+		}
+	}
+	score := float64(dp[len(ar)][len(br)]*2) / float64(len(ar)+len(br))
+	return score > threshold
 }
 
 func (s *Service) processRows(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {

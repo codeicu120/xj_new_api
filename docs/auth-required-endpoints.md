@@ -44,6 +44,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/favorite/listing`、`/minifavorite/listing` | `c.api.favorite/minifavorite->listing` | 本轮完成 | 登录只读收藏列表；普通视频支持 `wd` 搜索，小视频补 `isfavorite=1`。 |
 | `/favorite/add`、`/minifavorite/add` | `c.api.favorite/minifavorite->add` | 本轮完成 | 登录新增收藏；未登录、视频不存在、重复收藏分支 live 对比通过，成功写入由 fake 覆盖；金币奖励默认不改资产，保留后续 rewarder 接入点。 |
 | `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
+| `/comment/post` | `c.api.comment->post` | 本轮完成 | 登录评论发布；未登录分支 live 对比通过，成功写入由 fake 覆盖；金币奖励和回复通知保留后续接入点。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读随机推广海报；奖励/签到 task action 未接管。 |
 | `/ucp/task`、`/ucp/task/index` | `c.api.ucp.task->index` | 本轮完成 | 登录只读任务中心聚合；统计分享、评论、收藏、观看、保存二维码、广告点击、小视频下载任务进度，不发奖励。 |
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | 本轮完成 | 登录只读推广二维码链接；保留 pid 校验、渠道配置回退、每日 inviteUrls 分组选择和 `{inviteCode}` 替换。 |

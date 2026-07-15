@@ -7,10 +7,15 @@ import (
 )
 
 type fakeStore struct {
-	lastOrder string
-	vod       map[string]interface{}
-	comment   map[string]interface{}
-	voted     []string
+	lastOrder      string
+	vod            map[string]interface{}
+	comment        map[string]interface{}
+	recentByUID    []map[string]interface{}
+	recentByIP     []map[string]interface{}
+	dayCount       int
+	created        *CommentCreateInput
+	commentCounter int
+	voted          []string
 }
 
 func (s *fakeStore) VODByID(context.Context, int) (map[string]interface{}, error) {
@@ -69,6 +74,36 @@ func (s *fakeStore) CommentByID(context.Context, int) (map[string]interface{}, e
 func (s *fakeStore) IncrementVote(_ context.Context, id int, field string) error {
 	s.voted = append(s.voted, field)
 	return nil
+}
+
+func (s *fakeStore) CountByActorSince(context.Context, interface{}, int64, bool) (int, error) {
+	return s.dayCount, nil
+}
+
+func (s *fakeStore) RecentCommentsByUID(context.Context, int, int64) ([]map[string]interface{}, error) {
+	return s.recentByUID, nil
+}
+
+func (s *fakeStore) RecentCommentsByIP(context.Context, string, int64) ([]map[string]interface{}, error) {
+	return s.recentByIP, nil
+}
+
+func (s *fakeStore) CreateComment(_ context.Context, input CommentCreateInput, _ map[string]interface{}) (int, error) {
+	s.created = &input
+	return 99, nil
+}
+
+func (s *fakeStore) IncrementVODCommentCount(context.Context, int) error {
+	s.commentCounter++
+	return nil
+}
+
+type fakeAuth struct {
+	user map[string]interface{}
+}
+
+func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}, error) {
+	return a.user, nil
 }
 
 func TestListingProcessesCommentRows(t *testing.T) {
@@ -152,5 +187,74 @@ func TestVoteSuccessAndDuplicate(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "您已经赞/踩过了" {
 		t.Fatalf("duplicate response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestPostRequiresLogin(t *testing.T) {
+	service := NewService(&fakeStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.Post(context.Background(), "", 1, 0, "hello", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请注册会员并登录APP才可以发表评论噢" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestPostValidatesContentLength(t *testing.T) {
+	service := NewService(&fakeStore{}, "https://res.example.test", fakeAuth{user: map[string]interface{}{
+		"uid":      "5",
+		"nickname": "nick",
+		"perms":    map[string]interface{}{"max.comment.post.daynum": "10"},
+	}})
+
+	_, retcode, errmsg, err := service.Post(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1, 0, "", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 4 || errmsg != "评论允许1-30字之间" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestPostRejectsSimilarRecentComment(t *testing.T) {
+	store := &fakeStore{recentByUID: []map[string]interface{}{{"content": "这是一条重复评论"}}}
+	service := NewService(store, "https://res.example.test", fakeAuth{user: map[string]interface{}{
+		"uid":      "5",
+		"nickname": "nick",
+		"perms":    map[string]interface{}{"max.comment.post.daynum": "10"},
+	}})
+
+	_, retcode, errmsg, err := service.Post(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1, 0, "这是一条重复评论", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 10 || errmsg != "请勿发布重复内容1" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestPostCreatesPendingComment(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(store, "https://res.example.test", fakeAuth{user: map[string]interface{}{
+		"uid":      "5",
+		"nickname": "nick",
+		"perms":    map[string]interface{}{"max.comment.post.daynum": "10"},
+	}})
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	_, retcode, errmsg, err := service.Post(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 61494, 0, "不错", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 0 || errmsg != "发表成功" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+	if store.created == nil || store.created.VODID != 61494 || store.created.ShowType != 4 || store.created.Content != "不错" {
+		t.Fatalf("created = %#v", store.created)
+	}
+	if store.commentCounter != 1 {
+		t.Fatalf("comment counter = %d", store.commentCounter)
 	}
 }

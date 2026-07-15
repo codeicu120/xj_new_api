@@ -56,6 +56,7 @@
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | 本轮完成 | m3u8 试看输出；HTTP 拉取通过 fetcher 注入，测试用 fixture，不依赖真实 CDN。 |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | `c.api.sendfile->play/down` | 本轮完成 | 兼容旧 PHP 空壳行为：play 只做登录和 vodid 存在性检查，成功空 200；down 空 200。 |
 | `/comment/listing-:params` | `c.api.comment->listing` | 本轮完成 | 评论列表公共只读接口，支持评论树、排序、分页和用户头像/VIP 标识。 |
+| `/comment/post` | `c.api.comment->post` | 本轮完成 | 登录评论发布；保留权限、长度、字符、回复、重复校验和评论树写入，金币奖励和回复通知保留后续接入点。 |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | `c.api.playlog/downlog->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/playlog/listing` | `c.api.playlog->listing` | 本轮完成 | 播放记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式，游客 timeline 2/3 保留旧 PHP 边界反序行为。 |
 | `/downlog/listing` | `c.api.downlog->listing` | 本轮完成 | 下载记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式。 |
@@ -129,5 +130,4 @@
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
 | `/community/:action?` 剩余 action | 社区列表、详情和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
-| `/comment/post` | 评论发布涉及敏感词、树结构、金币奖励和通知。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

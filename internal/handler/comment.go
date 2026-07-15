@@ -38,6 +38,22 @@ func (h *CommentHandler) Listing(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *CommentHandler) Post(c *gin.Context) {
+	vodID, _ := strconv.Atoi(inputValue(c, "vodid"))
+	parentID, _ := strconv.Atoi(inputValue(c, "parentid"))
+	data, retcode, errmsg, err := h.service.Post(c.Request.Context(), authToken(c), vodID, parentID, inputValue(c, "content"), c.ClientIP())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
+}
+
 func (h *CommentHandler) Up(c *gin.Context) {
 	h.vote(c, true)
 }

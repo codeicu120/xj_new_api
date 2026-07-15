@@ -131,6 +131,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
 | `/comment`、`/comment/index` | ANY | `handler.EmptyHTML` |
 | `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
+| `/comment/post` | ANY | `CommentHandler.Post` |
 | `/comment/up`、`/comment/down` | ANY | `CommentHandler.Up/Down` |
 | `/special/index` | ANY | `SpecialHandler.Index` |
 | `/special/listing`、`/special/listing-:params` | ANY | `SpecialHandler.Listing` |
@@ -280,6 +281,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | Go 入口 | 状态 |
 | --- | --- | --- | --- |
 | `/comment/listing-:params` | `c.api.comment->listing` | `CommentHandler.Listing` | 已重构，对比通过 |
+| `/comment/post` | `c.api.comment->post` | `CommentHandler.Post` | 已重构；登录评论发布，保留权限、长度、字符、回复、重复校验和评论树写入；金币奖励和回复通知保留后续接口接入点 |
 | `/comment/up`、`/comment/down` | `c.api.comment->up/down` | `CommentHandler.Up/Down` | 已重构；游客/登录赞踩、重复限制和计数自增；无效评论分支 live 对比通过 |
 | `/playlog`、`/playlog/index` | `c.api.playlog->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/playlog/listing` | `c.api.playlog->listing` | `HistoryHandler.PlayListing` | 已重构；播放记录只读列表，支持登录/游客、timeline、分页和 PHP 相对时间格式；游客 timeline 2/3 保留旧 PHP 边界反序行为 |
@@ -431,12 +433,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 未重构；播放/下载权限、日志、可能签名 |
 | `/vod/buy/:vodid` | `c.api.vod->buy` | 未重构；购买/金币 |
 | `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `reqplay/reqdown/buy` 涉及播放权限、购买或媒体处理 |
-
-### 评论、收藏、播放/下载记录
-
-| 接口 | PHP handler | 备注 |
-| --- | --- | --- |
-| `/comment/post` | `c.api.comment->post` | 未重构；评论发布涉及敏感词、树结构、金币奖励和通知 |
 
 ### 小视频、作者页
 

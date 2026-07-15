@@ -1023,6 +1023,29 @@ func TestCommentListingRoute(t *testing.T) {
 	}
 }
 
+func TestCommentPostRouteRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/comment/post", strings.NewReader("vodid=1&content=hello"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 || body.ErrMsg != "请注册会员并登录APP才可以发表评论噢" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestV2VODShowUsesRealHandler(t *testing.T) {
 	router := newTestRouter()
 

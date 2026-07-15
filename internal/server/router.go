@@ -313,6 +313,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/comment", handler.EmptyHTML)
 	router.Any("/comment/index", handler.EmptyHTML)
 	router.Any("/comment/listing-:params", commentHandler.Listing)
+	router.Any("/comment/post", commentHandler.Post)
 	router.Any("/comment/up", commentHandler.Up)
 	router.Any("/comment/down", commentHandler.Down)
 	for _, action := range []string{"list", "recommend", "hot", "latest", "favorite"} {
