@@ -716,6 +716,76 @@ func TestTaskQRLinkRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestTaskInviteMatchesEmptyPHPAction(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.TaskInvite(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskInvite(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestHighRiskActionEdgeRequiresLoginAndBlocksSuccess(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.HighRiskActionEdge(context.Background(), "", "成功分支暂未迁移")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	retcode, errmsg, err = service.HighRiskActionEdge(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", "成功分支暂未迁移")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "成功分支暂未迁移" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUserContactEdges(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.UserEmailEdge(context.Background(), "token", "bad", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请输入正确的邮箱地址" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserVerifyEmailEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "验证码不存在或已失效" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserBindMobiEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "手机验证码不正确" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {
 	service := NewService(fakeUserStore{
 		user: map[string]interface{}{"uid": "5", "uniqkey": "12345"},

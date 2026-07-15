@@ -48,6 +48,20 @@ func (s *Service) Info(ctx context.Context, token string) (map[string]interface{
 	return map[string]interface{}{"data": key}, 0, "", nil
 }
 
+func (s *Service) BindEdge(ctx context.Context, token string, inviteCode string) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "绑定邀请码失败", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	if inviteCode == "" {
+		return -1, "请输入邀请码", nil
+	}
+	return -1, "邀请码绑定成功分支暂未迁移", nil
+}
+
 func (s *Service) userByToken(ctx context.Context, token string) (map[string]interface{}, error) {
 	sid := userRepo.CleanToken(token)
 	if sid == "" || s.auth == nil {

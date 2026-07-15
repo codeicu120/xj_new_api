@@ -1387,6 +1387,25 @@
 - 兼容规则：普通 provider 返回 `failed`，`pay12` 返回 `Err`，`newpayhf/newpaykf/newpaykk/newpaylep` 返回 `FAILED`；这些都是旧 PHP 在 provider 解析失败时的响应文本。成功验签和入账分支仍留在未重构区。
 - 测试：`go test ./internal/server` 覆盖 `shangfu/pay12/newpaykf` 三类失败文本。
 
+### 账号接口安全前置失败分支
+
+- 已迁移：`/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` 的安全前置失败分支。
+- PHP: `c.api.user->register/login/forgot`、`c.api.user2->delAccount/changePhone`、`c.apiv2.user->register/login/forgot`
+- Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`
+- Auth/DB/External: 只读取当前 token 对应用户以判断已登录/未登录，不发送短信/邮件，不读写 keylimit，不创建 session，不写用户表、Redis 或奖励资产。
+- 兼容规则：注册未同意协议返回 `请同意用户协议`；已登录账号入口返回 `用户已登录`；v2 空登录账号返回 `用户名未注册`；旧版 forgot 空手机号返回 `手机号码填写不正确`；v2 forgot 空手机号/邮箱返回 `请填写手机号码或者邮箱`；注销未登录返回 `retcode=-9999 errmsg=您还没有登录`；换绑未登录返回 `retcode=-9999 errmsg=请登录后操作`。
+- 未接管：注册成功、短信/邮箱验证码校验、IP 频控、登录成功 session、forgot step1/2 查用户、forgot step3 改密、注销 Redis 写入、换绑 step2 事务写库和所有奖励/渠道/活动副作用。
+- 测试：`go test ./internal/service/user ./internal/handler ./internal/server` 通过；server 测试覆盖 7 个账号入口的错误码和文案。
+
+### `/ucp/task/invite`
+
+- PHP: `c.api.ucp.task->invite`
+- Go: `internal/handler.UCPHandler.TaskInvite`
+- Service: `internal/service/ucp.Service.TaskInvite`
+- Auth/DB/External: 只读取当前登录态；无外部调用、无金币、无 keylimit 写入。PHP 登录后方法体为空。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后返回 HTTP 200 空 body。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；service 覆盖未登录和登录空方法分支，server 覆盖未登录错误壳。
+
 ### `/comment`、`/comment/index`
 
 - PHP: `c.api.comment->index`
@@ -1472,3 +1491,47 @@
 - Go: `internal/handler.CommunityHandler`、`internal/service/community.Service`、`internal/repository/community.Repository`。
 - 兼容规则：`categories` 支持 `parent_id`，只读 `topic_category.status=1` 并按 ``order`` DESC/id ASC；`slides` 读取 `maintain_calldata.global_adgroup_ad19` 并将 article/link/game 映射成 post/ad/game；`search` 空 `wd` 返回 `请输入关键词`，非空搜索 `topics.title/tags`，按 `visit_count DESC` 返回 `rows/hotwords/pageinfo`。
 - 测试：`go test ./internal/service/community`、`go test ./internal/server -run 'Test.*Captcha|TestCommunity|TestEmptyHTMLRoutes|TestV2MiniFavoriteRoutes'` 通过。
+
+### 账号安全失败分支与 UCP 高风险未登录分支
+
+- 已迁移账号安全失败分支：`/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot`。
+- PHP: `c.api.user->register/login/forgot`、`c.apiv2.user->register/login/forgot`、`c.api.user2->delAccount/changePhone`。
+- Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`。
+- 兼容边界：只接管未同意用户协议、已登录前置、未登录、手机号格式错误、v2 空账号、无效 step 等确定失败分支；成功注册/登录/找回密码/注销/换绑仍涉及验证码、session、Redis、风控和写库，继续留在未重构清单。
+- 已迁移 UCP 特殊/高风险入口：`/ucp/task/invite` 完整按 PHP 空方法迁移；`/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder`、`/ucp/vodorder/create`、`/ucp/vodorder/support` 的未登录分支。
+- PHP: `src/c/api/ucp/task.php`、`taskbox.php`、`index.php`、`withdraw.php`、`coinlog.php`、`vippkg.php`、`coinpkg.php`、`beanpkg.php`、`vodorder.php`。
+- Go: `internal/handler.UCPHandler.TaskInvite/HighRiskAction`、`internal/service/ucp.Service.TaskInvite/HighRiskActionEdge`。
+- 兼容规则：高风险接口未登录统一返回 `retcode=-9999`、`errmsg=您还没有登录`；登录成功分支返回内部暂未迁移错误，避免误执行资产、支付、奖励、二维码图片生成、提现通知或求片写入。
+- 测试：`go test ./internal/service/ucp ./internal/service/user ./internal/handler ./internal/server` 覆盖账号失败分支、`TaskInvite` 空方法行为和 UCP 高风险未登录分支。
+
+### 支付、游戏、邀请前置分支批量迁移
+
+- 已迁移 payment 固定/失败分支：`/payment/shangfu`、`/payment/wappay3`、`/payment/wappay4`、`/payment/wappay4a`、`/payment/wappay5`、`/payment/hawpay`、`/payment/easypay`、`/payment/pay6`、`/payment/reqpay`、`/payment/pay12req`。
+- PHP: `src/c/api/payment.php`。
+- Go: `internal/handler.PaymentHandler`、`internal/service/payment.Service`。
+- 兼容规则：8 个 public action 固定返回 `retcode=0 errmsg=支付成功回调`；`reqpay` 只接管缺失/已支付/过期/非本人等前置失败；`pay12req` 错误分支返回 HTML payerror 页。钱包支付、第三方网关请求、订单状态写入和成功跳转仍未迁移。
+- 已迁移 game 未登录分支：`/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance`。
+- PHP: `src/c/api/game/wali.php`、`src/c/api/game/lottery.php`。
+- Go: `internal/handler.GameHandler.HighRiskAction`、`internal/service/game.WaliService.ActionEdge`。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录成功路径不执行金币事务、订单写入或外部平台请求。
+- 已迁移 invite 前置分支：`/invite/bind` 未登录和缺邀请码。
+- PHP: `src/c/api/invite.php::bind`。
+- Go: `internal/handler.InviteHandler.Bind`、`internal/service/invite.Service.BindEdge`。
+- 兼容规则：未登录返回 `您还没有登录`，登录缺 `invitecode` 返回 `请输入邀请码`；绑定关系、VIP/金币奖励和事务成功分支暂未接管。
+- 测试：`go test ./internal/service/payment ./internal/service/game ./internal/service/invite ./internal/server` 通过。
+
+### UCP User 邮箱和手机前置分支
+
+- 已迁移：`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`。
+- PHP: `src/c/api/ucp/user.php::checkemail/sendemail/verifyemail/bindmobi`。
+- Go: `internal/handler.UCPHandler.UserCheckEmail/UserSendEmail/UserVerifyEmail/UserBindMobi`、`internal/service/ucp.Service` contact edge methods。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后邮箱格式错误返回 `请输入正确的邮箱地址`；邮箱验证码缺失/失效返回 `验证码不存在或已失效`；手机验证码缺失/错误返回 `手机验证码不正确`。邮件发送、keylimit 成功校验、邮箱/手机绑定写入暂未接管。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### OneGo 投注前置分支
+
+- 已迁移：`/onego/bet`。
+- PHP: `src/c/api/onego.php::bet`。
+- Go: `internal/handler.OneGoHandler.Bet`、`internal/service/onego.Service.BetEdge`。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后 `quantity<1` 返回 `押注数量不能为零`。投注金币扣减、号码生成、订单写入和事务回滚暂未接管。
+- 测试：`go test ./internal/service/onego ./internal/server` 通过。

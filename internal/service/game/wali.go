@@ -108,6 +108,20 @@ func (s *WaliService) Balance(ctx context.Context, token string) (domain.GameWal
 	}}, 0, "", nil
 }
 
+func (s *WaliService) ActionEdge(ctx context.Context, token string, pendingMessage string) (int, string, error) {
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -1, "获取用户失败", err
+	}
+	if atoi(fmt.Sprint(user["uid"])) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	if pendingMessage == "" {
+		pendingMessage = "游戏成功分支暂未迁移"
+	}
+	return -1, pendingMessage, nil
+}
+
 func (s *WaliService) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, error) {
 	sid := userRepo.CleanToken(token)
 	if s.authStore == nil {

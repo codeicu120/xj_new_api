@@ -58,19 +58,11 @@ func TestLegacyPlaceholder(t *testing.T) {
 	router := newTestRouter()
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v2/login", nil)
+	req := httptest.NewRequest(http.MethodPost, "/__missing_placeholder__", nil)
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("expected status %d, got %d", http.StatusNotImplemented, rec.Code)
-	}
-
-	var body map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body["legacy_handler"] != "c.apiv2.user.login" {
-		t.Fatalf("unexpected legacy handler %q", body["legacy_handler"])
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rec.Code)
 	}
 }
 
@@ -190,6 +182,86 @@ func TestRespondFailureRoutes(t *testing.T) {
 		}
 		if got := rec.Body.String(); got != want {
 			t.Fatalf("%s: expected %q, got %q", path, want, got)
+		}
+	}
+}
+
+func TestUserAuthEdgeRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	cases := map[string]struct {
+		path    string
+		retcode int
+		errmsg  string
+	}{
+		"register":    {path: "/register", retcode: -1, errmsg: "请同意用户协议"},
+		"v2register":  {path: "/v2/register", retcode: -1, errmsg: "请同意用户协议"},
+		"v2login":     {path: "/v2/login", retcode: -1, errmsg: "用户名未注册"},
+		"forgot":      {path: "/forgot", retcode: -1, errmsg: "手机号码填写不正确"},
+		"v2forgot":    {path: "/v2/forgot", retcode: -1, errmsg: "请填写手机号码或者邮箱"},
+		"delete":      {path: "/delete", retcode: -9999, errmsg: "您还没有登录"},
+		"changePhone": {path: "/changePhone", retcode: -9999, errmsg: "请登录后操作"},
+		"taskInvite":  {path: "/ucp/task/invite", retcode: -9999, errmsg: "您还没有登录"},
+	}
+	for name, tc := range cases {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, tc.path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected status %d, got %d", name, http.StatusOK, rec.Code)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", name, err)
+		}
+		if body.RetCode != tc.retcode || body.ErrMsg != tc.errmsg {
+			t.Fatalf("%s unexpected response %#v", name, body)
+		}
+	}
+}
+
+func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
+	router := newTestRouter()
+
+	paths := []string{
+		"/ucp/upgrade",
+		"/ucp/task/sign",
+		"/ucp/task/share",
+		"/ucp/task/qrcode",
+		"/ucp/task/qrcodeSave",
+		"/ucp/task/invitecodeInput",
+		"/ucp/task/adviewClick",
+		"/ucp/taskbox/taskboxopen",
+		"/ucp/taskbox/qrcode",
+		"/ucp/user/checkemail",
+		"/ucp/user/sendemail",
+		"/ucp/user/verifyemail",
+		"/ucp/user/bindmobi",
+		"/ucp/withdraw/create",
+		"/ucp/coinlog/exchange",
+		"/ucp/vippkg/placeorder",
+		"/ucp/vippkg/coinorder",
+		"/ucp/coinpkg/placeorder",
+		"/ucp/beanpkg/placeorder",
+		"/ucp/beanpkg/coinorder",
+		"/ucp/vodorder/create",
+		"/ucp/vodorder/support",
+	}
+	for _, path := range paths {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+			t.Fatalf("%s unexpected response %#v", path, body)
 		}
 	}
 }
@@ -859,6 +931,24 @@ func TestOneGoHashPostAndMissingPlaintext(t *testing.T) {
 	}
 	if body.RetCode != -1 || body.ErrMsg != "请传入参数" {
 		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoBetRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/onego/bet", strings.NewReader("quantity=0"))
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+		t.Fatalf("expected login error, got %#v", body)
 	}
 }
 
@@ -2280,6 +2370,15 @@ func TestPaymentCallbackStatusRoutes(t *testing.T) {
 	}{
 		{path: "/payment/success", retcode: 0, errmsg: "支付成功回调"},
 		{path: "/payment/failed", retcode: -1, errmsg: "支付失败回调"},
+		{path: "/payment/shangfu", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/wappay3", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/wappay4", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/wappay4a", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/wappay5", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/hawpay", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/easypay", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/pay6", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/reqpay", retcode: -1, errmsg: "记录不存在或已支付"},
 	}
 	for _, tt := range tests {
 		rec := httptest.NewRecorder()
@@ -2299,6 +2398,72 @@ func TestPaymentCallbackStatusRoutes(t *testing.T) {
 		if body.RetCode != tt.retcode || body.ErrMsg != tt.errmsg {
 			t.Fatalf("%s expected retcode=%d errmsg=%q, got %#v", tt.path, tt.retcode, tt.errmsg, body)
 		}
+	}
+}
+
+func TestPaymentPay12ReqErrorHTML(t *testing.T) {
+	router := newTestRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/payment/pay12req", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("expected html content type, got %q", ct)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "记录不存在或已支付") {
+		t.Fatalf("expected pay error message in body, got %q", body)
+	}
+}
+
+func TestGameHighRiskRoutesRequireLogin(t *testing.T) {
+	router := newTestRouter()
+	for _, path := range []string{
+		"/game/wali/topup",
+		"/game/wali/withdraw",
+		"/game/wali/enter",
+		"/game/lottery/topup",
+		"/game/lottery/withdraw",
+		"/game/lottery/enter",
+		"/game/lottery/balance",
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+			t.Fatalf("%s expected not-login response, got %#v", path, body)
+		}
+	}
+}
+
+func TestInviteBindEdgeRoutes(t *testing.T) {
+	router := newTestRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/invite/bind", strings.NewReader(""))
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+		t.Fatalf("expected not-login response, got %#v", body)
 	}
 }
 

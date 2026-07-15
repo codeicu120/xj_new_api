@@ -55,3 +55,28 @@ func TestInfoReturnsBase36RecommendKey(t *testing.T) {
 		t.Fatalf("response = %#v %d %q", data, retcode, errmsg)
 	}
 }
+
+func TestBindEdgePrechecks(t *testing.T) {
+	tests := []struct {
+		name    string
+		user    map[string]interface{}
+		code    string
+		retcode int
+		errmsg  string
+	}{
+		{name: "guest", retcode: -9999, errmsg: "您还没有登录"},
+		{name: "missingCode", user: map[string]interface{}{"uid": "5"}, retcode: -1, errmsg: "请输入邀请码"},
+		{name: "pendingSuccess", user: map[string]interface{}{"uid": "5"}, code: "abc", retcode: -1, errmsg: "邀请码绑定成功分支暂未迁移"},
+	}
+
+	for _, tt := range tests {
+		service := NewService(fakeStore{user: tt.user}, fakeStore{})
+		retcode, errmsg, err := service.BindEdge(context.Background(), "token", tt.code)
+		if err != nil {
+			t.Fatalf("%s bind edge: %v", tt.name, err)
+		}
+		if retcode != tt.retcode || errmsg != tt.errmsg {
+			t.Fatalf("%s response = %d %q", tt.name, retcode, errmsg)
+		}
+	}
+}

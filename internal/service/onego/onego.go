@@ -251,6 +251,20 @@ func (s *Service) History(ctx context.Context, token string, page int) (domain.O
 	return domain.OneGoData{Data: orders}, 0, "", nil
 }
 
+func (s *Service) BetEdge(ctx context.Context, token string, quantity int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	if quantity < 1 {
+		return -1, "押注数量不能为零", nil
+	}
+	return -1, "一元购投注成功分支暂未迁移", nil
+}
+
 func (s *Service) BetRanks(ctx context.Context, period string, roomID int, page int) (domain.OneGoData, error) {
 	room, err := s.store.RoomByID(ctx, roomID)
 	if err != nil {

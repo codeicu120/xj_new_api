@@ -300,6 +300,27 @@ func TestHistoryRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestBetEdgePrechecks(t *testing.T) {
+	service := NewService(fakeStore{})
+
+	retcode, errmsg, err := service.BetEdge(context.Background(), "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("guest retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeStore{}, fakeAuth{user: map[string]interface{}{"uid": "5"}})
+	retcode, errmsg, err = service.BetEdge(context.Background(), "token", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "押注数量不能为零" {
+		t.Fatalf("quantity retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestHistoryBuildsUserBetRows(t *testing.T) {
 	service := NewService(fakeStore{
 		userOrders: []map[string]interface{}{

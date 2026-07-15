@@ -85,6 +85,28 @@ func (h *PaymentHandler) Failed(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.Error(h.service.FailedMessage(c.Request.Context())))
 }
 
+func (h *PaymentHandler) ReqPay(c *gin.Context) {
+	payID, _ := strconv.Atoi(inputValue(c, "payid"))
+	retcode, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func (h *PaymentHandler) Pay12Req(c *gin.Context) {
+	payID, _ := strconv.Atoi(inputValue(c, "payid"))
+	_, errmsg, err := h.service.ReqPay(c.Request.Context(), authToken(c), payID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.Data(http.StatusInternalServerError, "text/html; charset=utf-8", []byte(""))
+		return
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.PayErrorHTML(c.Request.Context(), errmsg)))
+}
+
 func (h *PaymentHandler) SuccessHTML(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.SuccessHTML(c.Request.Context())))

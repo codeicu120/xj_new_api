@@ -21,10 +21,11 @@ type Store interface {
 
 type Service struct {
 	store Store
+	now   func() time.Time
 }
 
 func NewService(store Store) *Service {
-	return &Service{store: store}
+	return &Service{store: store, now: time.Now}
 }
 
 func (s *Service) Unpaid(_ context.Context) map[string]interface{} {
@@ -39,6 +40,37 @@ func (s *Service) SuccessMessage(_ context.Context) string {
 
 func (s *Service) FailedMessage(_ context.Context) string {
 	return "支付失败回调"
+}
+
+func (s *Service) ReqPay(ctx context.Context, token string, payID int) (int, string, error) {
+	if s.store == nil {
+		return -1, "记录不存在或已支付", nil
+	}
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -1, "请求支付失败", err
+	}
+	payrow, err := s.store.PaymentByID(ctx, payID)
+	if err != nil {
+		return -1, "请求支付失败", err
+	}
+	if len(payrow) == 0 || atoi(payrow["ispaid"]) > 0 {
+		return -1, "记录不存在或已支付", nil
+	}
+	if s.now().Unix() > int64(atoi(payrow["createtime"])+3600) {
+		return -1, "支付已过期", nil
+	}
+	if atoi(payrow["uid"]) > 0 && atoi(user["uid"]) != atoi(payrow["uid"]) {
+		return -1, "此项目需要本人操作", nil
+	}
+	return -1, "支付请求成功分支暂未迁移", nil
+}
+
+func (s *Service) PayErrorHTML(_ context.Context, errmsg string) string {
+	if errmsg == "" {
+		errmsg = "记录不存在或已支付"
+	}
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>支付错误</title></head><body>` + html.EscapeString(errmsg) + `</body></html>`
 }
 
 func (s *Service) SuccessHTML(_ context.Context) string {

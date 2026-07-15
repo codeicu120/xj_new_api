@@ -30,3 +30,13 @@ func (h *InviteHandler) Info(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
+
+func (h *InviteHandler) Bind(c *gin.Context) {
+	retcode, errmsg, err := h.service.BindEdge(c.Request.Context(), authToken(c), inputValue(c, "invitecode"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}

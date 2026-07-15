@@ -145,6 +145,17 @@ func (s *Service) TaskQRLink(ctx context.Context, token string, pid string) (map
 	return s.taskQRLink(ctx, token, pid, "global.qrcode.link")
 }
 
+func (s *Service) TaskInvite(ctx context.Context, token string) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	return 0, "", nil
+}
+
 func (s *Service) TaskboxQRLink(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
 	return s.taskQRLink(ctx, token, pid, "taskbox.qrcode.link")
 }

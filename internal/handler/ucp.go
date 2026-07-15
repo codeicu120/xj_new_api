@@ -73,6 +73,61 @@ func (h *UCPHandler) TaskQRLink(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) TaskInvite(c *gin.Context) {
+	retcode, errmsg, err := h.service.TaskInvite(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		retcode, errmsg, err := h.service.HighRiskActionEdge(c.Request.Context(), authToken(c), message)
+		c.Header("X-Served-By", "newbie")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+			return
+		}
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+	}
+}
+
+func (h *UCPHandler) UserCheckEmail(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), "邮箱可用成功分支暂未迁移")
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) UserSendEmail(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), "邮箱验证码发送成功分支暂未迁移")
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) UserVerifyEmail(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserVerifyEmailEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) UserBindMobi(c *gin.Context) {
+	retcode, errmsg, err := h.service.UserBindMobiEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) respondEdge(c *gin.Context, retcode int, errmsg string, err error) {
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func (h *UCPHandler) TaskIndex(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.TaskIndex(c.Request.Context(), authToken(c))
 	c.Header("X-Served-By", "newbie")
