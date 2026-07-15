@@ -130,6 +130,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders` | ANY | `UCPHandler.VODOrderMyOrders/MySupports/HistoryOrders` |
 | `/vod/show/:vodid` | ANY | `VODHandler.Show` |
 | `/vod/up/:vodid`、`/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | ANY | `VODHandler.ReqPlay/ReqDown` |
 | `/vod/breaking` | ANY | `VODHandler.Breaking` |
 | `/vod/errorreport`、`/v2/vod/errorreport` | ANY | `VODHandler.ErrorReport` |
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
@@ -277,6 +278,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/latest-:params` | `c.api.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/vod/show/:vodid` | `c.api.vod->show` | `VODHandler.Show` | 已重构，详情主字段对比通过；相似/喜欢随机列表按 shape 对比 |
 | `/vod/up/:vodid`、`/vod/down/:vodid`、`/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | `c.api.vod/apiv2.vod->up/down` | `VODHandler.Up/Down` | 已重构；普通视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/购买/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，扣金币、日志写入和奖励分支暂不写资产 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | `VODHandler.Preview` | 已重构，m3u8 输出对比通过 |
 | `/sendfile/play/:file` | `c.api.sendfile->play` | `SendfileHandler.Play` | 已重构，按旧 PHP 空壳行为对齐 |
 | `/sendfile/down/:file` | `c.api.sendfile->down` | `SendfileHandler.Down` | 已重构，按旧 PHP 空响应对齐 |
@@ -441,9 +443,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 未重构；播放/下载权限、日志、可能签名 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的扣费/日志/奖励分支 | `c.api.vod->reqplay/reqdown` | 部分未重构；超限扣金币、播放/下载日志写入、播放/下载任务奖励、推荐奖励仍需事务化迁移 |
 | `/vod/buy/:vodid` | `c.api.vod->buy` | 未重构；购买/金币 |
-| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `reqplay/reqdown/buy` 涉及播放权限、购买或媒体处理 |
+| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `buy` 以及 `reqplay/reqdown` 资产副作用涉及购买、扣费或日志写入 |
 
 ### 小视频、作者页
 

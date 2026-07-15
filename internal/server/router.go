@@ -306,6 +306,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/vod/show/:vodid", vodHandler.Show)
 	router.Any("/vod/up/:vodid", vodHandler.Up)
 	router.Any("/vod/down/:vodid", vodHandler.Down)
+	router.Any("/vod/reqplay/:vodid", vodHandler.ReqPlay)
+	router.Any("/vod/reqdown/:vodid", vodHandler.ReqDown)
 	router.Any("/vod/breaking", vodHandler.Breaking)
 	router.Any("/vod/errorreport", vodHandler.ErrorReport)
 	router.Any("/vod/preView/:vodid/index.m3u8", vodHandler.Preview)

@@ -2150,6 +2150,30 @@ func TestMiniVODReqMediaRoutes(t *testing.T) {
 	}
 }
 
+func TestVODReqMediaRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/vod/reqplay/0", "/vod/reqdown/0"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != 1 || body.ErrMsg != "记录不存在或已被删除" {
+			t.Fatalf("%s unexpected response %#v", path, body)
+		}
+	}
+}
+
 func newTestRouter() http.Handler {
 	return NewRouter(Options{
 		Config: config.Config{

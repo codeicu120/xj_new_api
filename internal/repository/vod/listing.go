@@ -514,6 +514,88 @@ WHERE vodid=?`, vodID, vodID, vodID); err != nil {
 	return nil
 }
 
+func (r *ListingRepository) FavoriteCount(ctx context.Context, uid int, vodID int) (int, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM vod_favorites WHERE uid=? AND vodid=?", uid, vodID).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count vod favorite: %w", err)
+	}
+	return total, nil
+}
+
+func (r *ListingRepository) BoughtCount(ctx context.Context, uid int, vodID int) (int, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_bought WHERE uid=? AND vodid=?", uid, vodID).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count vod bought: %w", err)
+	}
+	return total, nil
+}
+
+func (r *ListingRepository) PlayLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	if uid > 0 {
+		return r.vodLogCount(ctx, "vod_playlogs_week", "uid", uid, vodID, playIndex, "playtime", since)
+	}
+	if sid == "" {
+		return 0, nil
+	}
+	return r.vodGuestLogCount(ctx, "vod_guest_playlogs", sid, vodID, playIndex, "playtime", since)
+}
+
+func (r *ListingRepository) DownLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	if uid > 0 {
+		return r.vodLogCount(ctx, "vod_downlogs", "uid", uid, vodID, playIndex, "downtime", since)
+	}
+	if sid == "" {
+		return 0, nil
+	}
+	return r.vodGuestLogCount(ctx, "vod_guest_downlogs", sid, vodID, playIndex, "downtime", since)
+}
+
+func (r *ListingRepository) vodLogCount(ctx context.Context, table string, actorColumn string, actorID int, vodID int, playIndex int, timeColumn string, since int64) (int, error) {
+	query := "SELECT COUNT(*) FROM " + table + " WHERE " + actorColumn + "=?"
+	args := []interface{}{actorID}
+	query, args = appendVodLogWhere(query, args, vodID, playIndex, timeColumn, since)
+	var total int
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count %s: %w", table, err)
+	}
+	return total, nil
+}
+
+func (r *ListingRepository) vodGuestLogCount(ctx context.Context, table string, sid string, vodID int, playIndex int, timeColumn string, since int64) (int, error) {
+	query := "SELECT COUNT(*) FROM " + table + " WHERE sid=?"
+	args := []interface{}{sid}
+	query, args = appendVodLogWhere(query, args, vodID, playIndex, timeColumn, since)
+	var total int
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count %s: %w", table, err)
+	}
+	return total, nil
+}
+
+func appendVodLogWhere(query string, args []interface{}, vodID int, playIndex int, timeColumn string, since int64) (string, []interface{}) {
+	if vodID > 0 {
+		query += " AND vodid=? AND playindex=?"
+		args = append(args, vodID, playIndex)
+	}
+	if since > 0 {
+		query += " AND " + timeColumn + ">=?"
+		args = append(args, since)
+	}
+	return query, args
+}
+
 func (r *ListingRepository) IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error {
 	if r.db == nil || strings.TrimSpace(keyword) == "" {
 		return nil

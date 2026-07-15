@@ -2,6 +2,9 @@ package vod
 
 import (
 	"context"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,6 +62,10 @@ type ListingStore interface {
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
 	IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error
 	RecountUpDown(ctx context.Context, vodID int) error
+	FavoriteCount(ctx context.Context, uid int, vodID int) (int, error)
+	BoughtCount(ctx context.Context, uid int, vodID int) (int, error)
+	PlayLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error)
+	DownLogCount(ctx context.Context, uid int, sid string, vodID int, playIndex int, since int64) (int, error)
 }
 
 type AuthStore interface {
@@ -581,6 +588,154 @@ func (s *ListingService) Vote(ctx context.Context, token string, vodID int, up b
 	return s.voteUser(ctx, uid, atoi(str(row["vodid"])), up)
 }
 
+func (s *ListingService) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {
+	return s.reqMedia(ctx, token, vodID, playIndex, true)
+}
+
+func (s *ListingService) ReqDown(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {
+	return s.reqMedia(ctx, token, vodID, playIndex, false)
+}
+
+func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, playIndex int, play bool) (map[string]interface{}, int, string, error) {
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return nil, -1, vodMediaFailMessage(play), err
+	}
+	if len(row) == 0 || atoi(str(row["showtype"])) > 0 {
+		return map[string]interface{}{}, 1, "记录不存在或已被删除", nil
+	}
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return nil, -1, vodMediaFailMessage(play), err
+	}
+	if play && atoi(str(row["isvip"])) == 2 {
+		count, err := s.store.BoughtCount(ctx, atoi(str(user["uid"])), vodID)
+		if err != nil {
+			return nil, -1, vodMediaFailMessage(play), err
+		}
+		if count == 0 {
+			return map[string]interface{}{"isbought": 0}, 168, "此内容需要付费购买.", nil
+		}
+	}
+	if retcode, errmsg := checkVODPerm(row, user); retcode != 0 {
+		return map[string]interface{}{}, retcode, errmsg, nil
+	}
+	mediaURL, price, serverID := vodMediaSource(row, playIndex, play)
+	if mediaURL == "" {
+		if play {
+			return map[string]interface{}{}, 2, "播放地址不存在", nil
+		}
+		return map[string]interface{}{}, 2, "下载地址不存在", nil
+	}
+	if atoi(str(user["uid"])) == 0 && str(user["sid"]) == "" {
+		return map[string]interface{}{}, -9999, "客户端游客请先携带信息", nil
+	}
+	servers, err := s.store.Servers(ctx)
+	if err != nil {
+		return nil, -1, vodMediaFailMessage(play), err
+	}
+	httpURL := sanitizeMediaURL(mediaURL)
+	if play {
+		httpURL = signVODCDNURL(httpURL, row, servers, user, s.now().Unix())
+	}
+	if !hasURLScheme(httpURL) {
+		host := strings.TrimRight(vodServerHost(servers, serverID), "/")
+		httpURL = host + "/" + strings.TrimLeft(httpURL, "/")
+	}
+	data := map[string]interface{}{}
+	if play {
+		count, err := s.store.FavoriteCount(ctx, atoi(str(user["uid"])), vodID)
+		if err != nil {
+			return nil, -1, vodMediaFailMessage(play), err
+		}
+		data["isfavorite"] = boolInt(count > 0)
+		data["iszan"] = 0
+		if atoi(str(user["uid"])) > 0 {
+			updown, err := s.store.UpDownByUser(ctx, atoi(str(user["uid"])), vodID)
+			if err != nil {
+				return nil, -1, vodMediaFailMessage(play), err
+			}
+			data["iszan"] = atoi(str(updown["updown"]))
+		}
+		data["encurl"] = 0
+	}
+	now := s.now().Unix()
+	if price == 0 || (atoi64(str(row["free_sdate"])) < now && now < atoi64(str(row["free_edate"]))) {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			if price == 0 {
+				return data, 0, "免费观看", nil
+			}
+			return data, 0, "限时免费观看", nil
+		}
+		if price == 0 {
+			return data, 0, "免费观看提供下载", nil
+		}
+		return data, 0, "限时免费观看提供下载", nil
+	}
+	since := now - 86400*7
+	if !play {
+		since = now - 86400*365
+	}
+	var watched int
+	if play {
+		watched, err = s.store.PlayLogCount(ctx, atoi(str(user["uid"])), str(user["sid"]), vodID, playIndex, since)
+	} else {
+		watched, err = s.store.DownLogCount(ctx, atoi(str(user["uid"])), str(user["sid"]), vodID, playIndex, since)
+	}
+	if err != nil {
+		return nil, -1, vodMediaFailMessage(play), err
+	}
+	if watched > 0 {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			return data, 0, "本周已观看过继续提供", nil
+		}
+		return data, 0, "本周已下载过继续提供", nil
+	}
+	actionDayCount := 0
+	dayStart := dayStart(s.now)
+	if play {
+		actionDayCount, err = s.store.PlayLogCount(ctx, atoi(str(user["uid"])), str(user["sid"]), 0, 0, dayStart)
+	} else {
+		actionDayCount, err = s.store.DownLogCount(ctx, atoi(str(user["uid"])), str(user["sid"]), 0, 0, dayStart)
+	}
+	if err != nil {
+		return nil, -1, vodMediaFailMessage(play), err
+	}
+	dayKey := "max.vod.play.daynum"
+	if !play {
+		dayKey = "max.vod.down.daynum"
+	}
+	if actionDayCount < getVODPermInt(user["perms"], dayKey) {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			if atoi(str(user["uid"])) > 0 {
+				return data, 0, "用户权限范围内免费播放", nil
+			}
+			return data, 0, "游客权限范围内免费播放", nil
+		}
+		if atoi(str(user["uid"])) > 0 {
+			return data, 0, "用户权限范围内免费下载", nil
+		}
+		return data, 0, "游客权限范围内免费下载", nil
+	}
+	if play {
+		data["httpurl_preview"] = httpURL + "?300"
+		if atoi(str(user["uid"])) > 0 {
+			return data, 4, "今日观影次数已用完，是否去免费增加次数？", nil
+		}
+		return data, 3, "今日观看次数已看完，请点击免费注册会员获取更多影片观看次数。", nil
+	}
+	if atoi(str(user["uid"])) > 0 {
+		return data, 4, "今日下载次数已用完，是否去免费增加次数？", nil
+	}
+	return data, 3, "今日下载次数已用完，请点击免费注册会员获取更多影片下载次数。", nil
+}
+
 func (s *ListingService) Breaking(ctx context.Context) (map[string]interface{}, int, string, error) {
 	now := s.now()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
@@ -693,6 +848,139 @@ func (s *ListingService) userByToken(ctx context.Context, token string) (map[str
 		return map[string]interface{}{"uid": "0", "sid": sid}, nil
 	}
 	return user, nil
+}
+
+func checkVODPerm(row map[string]interface{}, user map[string]interface{}) (int, string) {
+	perms := user["perms"]
+	if atoi(str(row["isvip"])) == 1 && getVODPermInt(perms, "allow.vod.vip") != 1 {
+		return 5, "VIP独享内容，请升级"
+	}
+	if atoi(str(row["islimit"])) > 0 && getVODPermInt(perms, "allow.vod.limit") != 1 {
+		return 6, "此内容仅提供给高级别用户，请升级或做任务推广吧"
+	}
+	if atoi(str(row["islimitv3"])) > 0 && getVODPermInt(perms, "allow.vod.limitv3") != 1 {
+		return 6, "此内容仅提供给高级别用户，请升级或做任务推广吧"
+	}
+	return 0, ""
+}
+
+func vodMediaFailMessage(play bool) string {
+	if play {
+		return "请求播放地址失败"
+	}
+	return "请求下载地址失败"
+}
+
+func vodMediaSource(row map[string]interface{}, playIndex int, play bool) (string, int, int) {
+	if playIndex < 0 {
+		playIndex = 0
+	}
+	serverID := atoi(str(row["play_srvid"]))
+	if !play {
+		serverID = atoi(str(row["down_srvid"]))
+	}
+	if playIndex > 0 {
+		field := "playlist"
+		if !play {
+			field = "downlist"
+		}
+		if item := vodPlaylistItem(str(row[field]), playIndex); len(item) > 0 {
+			price := atoi(str(item["view_price"]))
+			if price == -1 {
+				price = atoi(str(row["view_price"]))
+			}
+			return str(item["play_url"]), price, serverID
+		}
+		return "", 0, 0
+	}
+	if play {
+		return str(row["play_url"]), atoi(str(row["view_price"])), serverID
+	}
+	return str(row["down_url"]), atoi(str(row["view_price"])), serverID
+}
+
+func vodPlaylistItem(raw string, index int) map[string]interface{} {
+	raw = strings.ReplaceAll(raw, "\r", "")
+	raw = strings.TrimSpace(raw)
+	if raw == "" || index <= 0 {
+		return map[string]interface{}{}
+	}
+	lines := strings.Split(raw, "\n")
+	if index > len(lines) {
+		return map[string]interface{}{}
+	}
+	parts := strings.Split(lines[index-1], "$")
+	for len(parts) < 3 {
+		parts = append(parts, "")
+	}
+	return map[string]interface{}{
+		"play_name":  parts[0],
+		"play_url":   parts[1],
+		"view_price": ternary(isNumeric(parts[2]), atoi(parts[2]), -1),
+	}
+}
+
+func sanitizeMediaURL(value string) string {
+	return strings.NewReplacer("\n", "", "\r", "", "\t", "", "'", "", `"`, "").Replace(value)
+}
+
+func signVODCDNURL(httpURL string, row map[string]interface{}, servers []map[string]interface{}, user map[string]interface{}, now int64) string {
+	playServerID := atoi(str(row["play_srvid"]))
+	for _, server := range servers {
+		if playServerID != atoi(str(server["srvid"])) || str(server["cdnkey"]) == "" || str(server["cdnparam"]) == "" {
+			continue
+		}
+		if !strings.HasPrefix(httpURL, "/") && !hasURLScheme(httpURL) {
+			httpURL = "/" + httpURL
+		}
+		actor := str(user["uid"])
+		if atoi(actor) == 0 {
+			actor = str(user["sid"])
+		}
+		if strings.Contains(str(server["cdnparam"]), "tx") {
+			sign := fmt.Sprintf("%d-%s-0-", now, actor)
+			sum := md5.Sum([]byte(httpURL + "-" + sign + str(server["cdnkey"])))
+			return httpURL + "?" + str(server["cdnparam"]) + "=" + sign + hex.EncodeToString(sum[:])
+		}
+		sign := fmt.Sprintf("%d-0-%s-", now, actor)
+		sum := sha256.Sum256([]byte(httpURL + "-" + sign + str(server["cdnkey"])))
+		return httpURL + "?" + str(server["cdnparam"]) + "=" + sign + hex.EncodeToString(sum[:])
+	}
+	return httpURL
+}
+
+func vodServerHost(servers []map[string]interface{}, serverID int) string {
+	for _, server := range servers {
+		if atoi(str(server["srvid"])) == serverID {
+			return str(server["srvhost"])
+		}
+	}
+	return ""
+}
+
+func hasURLScheme(value string) bool {
+	if index := strings.Index(value, "://"); index > 1 && index <= 5 {
+		return true
+	}
+	return false
+}
+
+func dayStart(now func() time.Time) int64 {
+	t := now()
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Unix()
+}
+
+func getVODPermInt(perms interface{}, key string) int {
+	switch typed := perms.(type) {
+	case map[string]interface{}:
+		return atoi(str(typed[key]))
+	case string:
+		values := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(typed), &values); err == nil {
+			return atoi(str(values[key]))
+		}
+	}
+	return 0
 }
 
 func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {

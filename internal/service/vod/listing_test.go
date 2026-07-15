@@ -31,6 +31,10 @@ type fakeListingStore struct {
 	savedErrorReport    *vodRepo.ErrorReportInput
 	savedUpdown         int
 	counters            []string
+	favoriteCount       int
+	boughtCount         int
+	playLogCount        int
+	downLogCount        int
 }
 
 type fakeM3U8Fetcher map[string]string
@@ -236,6 +240,22 @@ func (s *fakeListingStore) IncrementVODCounter(_ context.Context, _ int, field s
 
 func (s *fakeListingStore) RecountUpDown(context.Context, int) error {
 	return nil
+}
+
+func (s *fakeListingStore) FavoriteCount(context.Context, int, int) (int, error) {
+	return s.favoriteCount, nil
+}
+
+func (s *fakeListingStore) BoughtCount(context.Context, int, int) (int, error) {
+	return s.boughtCount, nil
+}
+
+func (s *fakeListingStore) PlayLogCount(context.Context, int, string, int, int, int64) (int, error) {
+	return s.playLogCount, nil
+}
+
+func (s *fakeListingStore) DownLogCount(context.Context, int, string, int, int, int64) (int, error) {
+	return s.downLogCount, nil
 }
 
 func TestListingServiceSearchIndex(t *testing.T) {
@@ -606,6 +626,64 @@ func TestVoteUserSwitchesState(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "已赞" || store.savedUpdown != 1 {
 		t.Fatalf("response = %d %q saved=%d", retcode, errmsg, store.savedUpdown)
+	}
+}
+
+func TestReqPlayFreeVOD(t *testing.T) {
+	store := &fakeListingStore{
+		vodByID: map[string]interface{}{
+			"vodid":      "100",
+			"showtype":   "0",
+			"play_url":   "p/index.m3u8",
+			"play_srvid": "9",
+			"view_price": "0",
+			"isvip":      "0",
+		},
+		favoriteCount: 1,
+	}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看" || data["httpurl"] != "https://cover.example.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if data["isfavorite"] != 1 || data["iszan"] != 0 {
+		t.Fatalf("flags=%#v", data)
+	}
+}
+
+func TestReqPlayRejectsVIPWithoutPerm(t *testing.T) {
+	store := &fakeListingStore{vodByID: map[string]interface{}{"vodid": "100", "showtype": "0", "isvip": "1"}}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+
+	_, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 5 || errmsg != "VIP独享内容，请升级" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestReqDownFreeVOD(t *testing.T) {
+	store := &fakeListingStore{vodByID: map[string]interface{}{
+		"vodid":      "100",
+		"showtype":   "0",
+		"down_url":   "d/file.mp4",
+		"down_srvid": "9",
+		"view_price": "0",
+	}}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+
+	data, retcode, errmsg, err := service.ReqDown(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqdown: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看提供下载" || data["httpurl"] != "https://cover.example.test/d/file.mp4" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
 	}
 }
 

@@ -53,6 +53,7 @@
 | `/v2/amazing/listing`、`/v2/amazing/recommend`、`/v2/amazing/hot`、`/v2/amazing/latest` | `c.apiv2.amazing->listing` | 本轮完成 | 动态 action 路由组，支持 `-params`，迁移精彩推荐列表筛选、排序和分页。 |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | `c.api.vod->listing` | 本轮完成 | 非 v2 动态 action 路由组，支持 `-params`；复用 VOD 列表服务并对齐 PHP 分页 selector。 |
 | `/vod/show/:vodid` | `c.api.vod->show` | 本轮完成 | 视频详情只读接口，迁移主视频、父级分类、相似视频和猜你喜欢；随机列表按 shape 对比。 |
+| `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 本轮完成 | 长视频播放/下载地址请求的可控路径；记录/购买/权限/地址错误、免费/限免、已观看和权限额度内提供地址已接管，扣金币、日志和奖励分支后续事务化迁移。 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | 本轮完成 | m3u8 试看输出；HTTP 拉取通过 fetcher 注入，测试用 fixture，不依赖真实 CDN。 |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | `c.api.sendfile->play/down` | 本轮完成 | 兼容旧 PHP 空壳行为：play 只做登录和 vodid 存在性检查，成功空 200；down 空 200。 |
 | `/comment/listing-:params` | `c.api.comment->listing` | 本轮完成 | 评论列表公共只读接口，支持评论树、排序、分页和用户头像/VIP 标识。 |
@@ -134,5 +135,5 @@
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、播放/下载可控路径和长视频地址转换已完成；剩余多涉及金币事务、奖励或媒体解析。 |
-| `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
+| `/vod/buy`、`/v2/vod/reqplay`、`/v2/vod/reqdown`、`/v2/vod/buy`，以及 `/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、播放/下载可控路径已完成；剩余涉及购买、扣费、日志写入、奖励和 v2 加密响应。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

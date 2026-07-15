@@ -113,6 +113,14 @@ func (h *VODHandler) Preview(c *gin.Context) {
 	c.Data(http.StatusOK, "vnd.apple.mpegurl", []byte(body))
 }
 
+func (h *VODHandler) ReqPlay(c *gin.Context) {
+	h.reqMedia(c, true)
+}
+
+func (h *VODHandler) ReqDown(c *gin.Context) {
+	h.reqMedia(c, false)
+}
+
 func (h *VODHandler) Up(c *gin.Context) {
 	h.vote(c, true)
 }
@@ -170,6 +178,32 @@ func (h *VODHandler) vote(c *gin.Context, up bool) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func (h *VODHandler) reqMedia(c *gin.Context, play bool) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	playIndex, _ := strconv.Atoi(inputValue(c, "playindex"))
+	var (
+		data    map[string]interface{}
+		retcode int
+		errmsg  string
+		err     error
+	)
+	if play {
+		data, retcode, errmsg, err = h.listingService.ReqPlay(c.Request.Context(), authToken(c), vodID, playIndex)
+	} else {
+		data, retcode, errmsg, err = h.listingService.ReqDown(c.Request.Context(), authToken(c), vodID, playIndex)
+	}
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
 }
 
 func vodAction(path string) string {
