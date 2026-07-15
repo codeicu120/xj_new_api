@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const coinTypeBuyVOD = 113
+
 type Repository struct {
 	db *sql.DB
 }
@@ -45,6 +47,109 @@ func (r *Repository) Delete(ctx context.Context, uid int, vodid int) error {
 		return fmt.Errorf("delete bought vod: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) VODByID(ctx context.Context, vodid int) (map[string]interface{}, error) {
+	if r.db == nil || vodid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM vods WHERE vodid=?", vodid)
+	if err != nil {
+		return nil, fmt.Errorf("query vod: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) BoughtCount(ctx context.Context, uid int, vodid int) (int, error) {
+	if r.db == nil || uid <= 0 || vodid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_bought WHERE uid=? AND vodid=?", uid, vodid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count bought vod: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) Goldbean(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT uid, gold_bean FROM users_goldbean WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query goldbean: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) BuyVOD(ctx context.Context, uid int, vodid int, price int) error {
+	if r.db == nil || uid <= 0 || vodid <= 0 || price <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin buy vod: %w", err)
+	}
+	defer tx.Rollback()
+
+	var balance int
+	err = tx.QueryRowContext(ctx, "SELECT gold_bean FROM users_goldbean WHERE uid=? FOR UPDATE", uid).Scan(&balance)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return fmt.Errorf("lock goldbean: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO users_goldbean(uid, gold_bean) VALUES(?, 0)", uid); err != nil {
+			return fmt.Errorf("create goldbean: %w", err)
+		}
+		balance = 0
+	}
+	newBalance := balance - price
+	if newBalance < 0 {
+		return fmt.Errorf("goldbean insufficient")
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users_goldbean SET gold_bean=? WHERE uid=?", newBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update goldbean: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update goldbean affected %d rows", affected)
+	}
+	now := time.Now().Unix()
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_beanlogs(bean_type, uid, bean_num, balance, add_time, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeBuyVOD, uid, -price, newBalance, now, vodid)
+	if err != nil {
+		return fmt.Errorf("insert beanlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert beanlog affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "REPLACE INTO user_bought(uid, vodid, buytime) VALUES(?, ?, ?)", uid, vodid, now)
+	if err != nil {
+		return fmt.Errorf("save bought vod: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("save bought vod affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit buy vod: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) queryOne(ctx context.Context, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := r.queryRows(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return rows[0], nil
 }
 
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {

@@ -39,6 +39,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | 本轮完成 | 登录只读邀请金币日志分页，过滤 `cointype IN (201,32,11)`，分页和日志字段映射与 PHP 一致。 |
 | `/bought/listing` | `c.api.bought->listing` | 本轮完成 | 登录只读已购影片列表，读取 `user_bought LEFT JOIN vods`，复用 VOD `procRow2` 兼容字段和 `/bought/listing?page=[?]` 分页，对比通过。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；空 `vodids` 与 PHP 一样返回成功，删除写入按 uid 限定。 |
+| `/bought/buy`、`/vod/buy/:vodid`、`/v2/vod/buy/:vodid` | `c.api.bought->buy`、`c.api.vod->buy`、`c.apiv2.vod->buy` | 本轮完成 | 登录购买付费影片；校验已购、影片状态、VIP 折扣和金豆余额，并在事务内扣 `users_goldbean`、写 `user_beanlogs` 和 `user_bought`。 |
 | `/playlog/listing`、`/downlog/listing` | `c.api.playlog/downlog->listing` | 本轮完成 | 登录用户读取用户播放/下载记录；未登录按游客 sid 返回空或游客记录，不强制登录。 |
 | `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 登录用户软删除自己的播放/下载记录；未登录按游客 sid 软删除，不强制登录。 |
 | `/favorite/listing`、`/minifavorite/listing` | `c.api.favorite/minifavorite->listing` | 本轮完成 | 登录只读收藏列表；普通视频支持 `wd` 搜索，小视频补 `isfavorite=1`。 |
@@ -72,4 +73,3 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/task/*`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
 | `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用。 |
-| `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

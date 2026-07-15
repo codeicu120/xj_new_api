@@ -140,7 +140,7 @@ func NewRouter(opts Options) *gin.Engine {
 	openHandler := handler.NewOpenHandler(openService.NewService(userRepository, statsRepository, cfg.ResourceBaseURL))
 	activityHandler := handler.NewActivityHandler(activityService.NewService(activityRepo.NewRepository(db), userRepository, cfg.ResourceBaseURL))
 	inviteHandler := handler.NewInviteHandler(inviteService.NewService(userRepository, inviteRepo.NewRepository(db)))
-	boughtHandler := handler.NewBoughtHandler(boughtService.NewService(userRepository, boughtRepo.NewRepository(db), vodListingService))
+	boughtHandler := handler.NewBoughtHandler(boughtService.NewService(userRepository, boughtRepo.NewRepository(db), vodListingService).WithVIPDiscount(cfg.VIPDiscount))
 	historyHandler := handler.NewHistoryHandler(historyService.NewService(userRepository, historyRepo.NewRepository(db), vodListingService))
 	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService))
 	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
@@ -215,6 +215,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/payment/failed", paymentHandler.Failed)
 	router.Any("/bought/listing", boughtHandler.Listing)
 	router.Any("/bought/delete", boughtHandler.Delete)
+	router.Any("/bought/buy", boughtHandler.Buy)
 	router.Any("/playlog", handler.EmptyHTML)
 	router.Any("/playlog/index", handler.EmptyHTML)
 	router.Any("/playlog/listing", historyHandler.PlayListing)
@@ -308,6 +309,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/vod/down/:vodid", vodHandler.Down)
 	router.Any("/vod/reqplay/:vodid", vodHandler.ReqPlay)
 	router.Any("/vod/reqdown/:vodid", vodHandler.ReqDown)
+	router.Any("/vod/buy/:vodid", boughtHandler.Buy)
 	router.Any("/vod/breaking", vodHandler.Breaking)
 	router.Any("/vod/errorreport", vodHandler.ErrorReport)
 	router.Any("/vod/preView/:vodid/index.m3u8", vodHandler.Preview)
@@ -389,7 +391,7 @@ func NewRouter(opts Options) *gin.Engine {
 		v2.Any("/vod/down/:vodid", vodHandler.Down)
 		v2.Any("/vod/reqplay/:vodid", vodHandler.ReqPlay)
 		v2.Any("/vod/reqdown/:vodid", vodHandler.ReqDown)
-		v2.Any("/vod/buy/:vodid", notImplemented("c.apiv2.vod.buy"))
+		v2.Any("/vod/buy/:vodid", boughtHandler.Buy)
 		v2.Any("/vod/errorreport", vodHandler.ErrorReport)
 	}
 

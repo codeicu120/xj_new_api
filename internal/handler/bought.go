@@ -48,6 +48,24 @@ func (h *BoughtHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: ""})
 }
 
+func (h *BoughtHandler) Buy(c *gin.Context) {
+	vodID, _ := strconv.Atoi(inputValue(c, "vodid"))
+	if vodID == 0 {
+		vodID, _ = strconv.Atoi(c.Param("vodid"))
+	}
+	retcode, errmsg, err := h.service.Buy(c.Request.Context(), authToken(c), vodID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: ""})
+}
+
 func commaInts(value string) []int {
 	if strings.TrimSpace(value) == "" {
 		return []int{}

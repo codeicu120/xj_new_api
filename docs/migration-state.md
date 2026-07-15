@@ -160,7 +160,7 @@
 - Go: `internal/handler.VODHandler.Listing`
 - Service: `internal/service/vod.ListingService`
 - Repository: `internal/repository/vod.ListingRepository`
-- 路由：注册 `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` 及各自 `-:params` 形式；移除会与具体路由冲突的 `/v2/vod/*path` catch-all，占位保留 `/v2/vod/show/:vodid` 和 `up/down/reqplay/reqdown/buy`。
+- 路由：注册 `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` 及各自 `-:params` 形式；移除会与具体路由冲突的 `/v2/vod/*path` catch-all；`/v2/vod/show/:vodid`、`up/down/reqplay/reqdown/buy` 已分别接入真实 handler。
 - Params：按 PHP 模板 `$cateid:0-$areaid:0-$yearid:0-$definition:0-$duration:0-$freetype:0-$mosaic:0-$langvoice:0-$orderby:0-$page:1` 解析；path page 为 `0` 时使用 query `page`。
 - DB：读取 `vods`、`vod_categories`、`vod_areas`、`vod_years`、`vod_servers`、`vod_tags`；`pagesize=16`。
 - 排序：`listing` 默认 `utimestamp DESC`，`orderby=1/2/3` 分别为 `upnum/playcount_total/scorenum DESC`；`hot=playcount_week DESC`；`latest=vodid DESC`；`recommend` 使用 `showtype=0` 随机列表并保持 `pageinfo.total=0` 语义。
@@ -1354,3 +1354,14 @@
 - External: `CaptchaVerifier`、`SMSSender`、`MailSender`、`Limiter` 均为接口；默认 sender 不直连真实短信/邮件平台，生产接入时替换具体 client。
 - 兼容规则：保留手机号/邮箱格式错误、sendu 未登录、缺图形验证码、验证码失败、频控、平台未配置等 legacy errmsg；成功响应使用 PHP `Json::ok($errmsg)` 形态，`retcode=0` 且消息在 `errmsg`。
 - 测试：`go test ./internal/service/verification ./internal/server` 通过；PHP-Go live 对比 `/sms/sendv?mobi=bad`、`/email/send?email=bad`、`/sms/sendu` 未登录错误分支一致；成功发送分支由 fake sender/captcha/limiter 覆盖。
+
+### `/bought/buy`、`/vod/buy/:vodid`、`/v2/vod/buy/:vodid`
+
+- PHP: `c.api.bought->buy`、`c.api.vod->buy`、`c.apiv2.vod->buy`
+- Go: `internal/handler.BoughtHandler.Buy`
+- Service: `internal/service/bought.Service`
+- Repository: `internal/repository/bought.Repository`
+- Auth: 必须登录；无 token 或 session 无效返回 `retcode=-9999`、`errmsg=请登录后操作`。
+- DB/Transaction: 读取 `vods`、`user_bought`、`users_goldbean`；购买扣费时 `BeginTx`，用 `SELECT ... FOR UPDATE` 锁 `users_goldbean`，更新金豆余额，写 `user_beanlogs(bean_type=113)`，再 `REPLACE INTO user_bought`。
+- 兼容规则：影片不存在或 `showtype>0` 返回 `记录不存在或已被删除`；已购买直接成功；余额不足返回 `retcode=4`、`errmsg=金豆余额不足`；VIP 用户按 `VIPDiscount` 折扣计算 `view_price`；`view_price=0` 时兼容旧 PHP，只返回成功，不写已购记录。
+- 测试：`go test ./internal/service/bought ./internal/server` 通过；单测覆盖未登录、影片不存在、已购买、余额不足、VIP 折扣、0 价格兼容和成功扣费写入参数。
