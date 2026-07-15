@@ -2,6 +2,8 @@ package aiundress
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -29,6 +31,19 @@ func (f fakeStore) List(context.Context, int, int, int, int, int) ([]map[string]
 
 func (f fakeStore) SettingByUUID(context.Context, string) (string, error) {
 	return f.setting, nil
+}
+
+type fakeExternalClient struct {
+	path    string
+	payload map[string]interface{}
+	resp    ExternalResponse
+	err     error
+}
+
+func (c *fakeExternalClient) PostJSON(_ context.Context, path string, payload map[string]interface{}) (ExternalResponse, error) {
+	c.path = path
+	c.payload = payload
+	return c.resp, c.err
 }
 
 func TestListingRequiresLoginWithPHPErrorCode(t *testing.T) {
@@ -71,5 +86,118 @@ func TestListingBuildsResourceURLsAndPageInfo(t *testing.T) {
 	}
 	if data.PageInfo["page_url"] != "/aiundress/listing?page=[?]" || data.PageInfo["pagesize"] != 10 {
 		t.Fatalf("pageinfo = %#v", data.PageInfo)
+	}
+}
+
+func TestModuleListWrapsExternalData(t *testing.T) {
+	client := &fakeExternalClient{resp: ExternalResponse{
+		Code: 200,
+		Data: []interface{}{map[string]interface{}{"module": "4"}},
+	}}
+	service := NewService(fakeAuth{}, fakeStore{}, "").WithExternalClient(client)
+
+	data, retcode, errmsg, err := service.ModuleList(context.Background())
+	if err != nil {
+		t.Fatalf("module list: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if client.path != "/cps/getModuleList" {
+		t.Fatalf("path=%q", client.path)
+	}
+	if len(client.payload) != 0 {
+		t.Fatalf("payload=%#v", client.payload)
+	}
+	if !reflect.DeepEqual(data.Data, client.resp.Data) {
+		t.Fatalf("data=%#v", data.Data)
+	}
+}
+
+func TestResourceTypeListForwardsModule(t *testing.T) {
+	client := &fakeExternalClient{resp: ExternalResponse{Code: 200, Data: map[string]interface{}{"ok": true}}}
+	service := NewService(fakeAuth{}, fakeStore{}, "").WithExternalClient(client)
+
+	_, retcode, errmsg, err := service.ResourceTypeList(context.Background(), "4")
+	if err != nil {
+		t.Fatalf("resource type list: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if client.path != "/cps/resourceTypeList" {
+		t.Fatalf("path=%q", client.path)
+	}
+	if client.payload["module"] != "4" {
+		t.Fatalf("payload=%#v", client.payload)
+	}
+}
+
+func TestResourceListForwardsPHPPayloadAndDefaultPageSize(t *testing.T) {
+	client := &fakeExternalClient{resp: ExternalResponse{Code: 200, Data: map[string]interface{}{"rows": []interface{}{}}}}
+	service := NewService(fakeAuth{}, fakeStore{}, "").WithExternalClient(client)
+
+	_, retcode, errmsg, err := service.ResourceList(context.Background(), ResourceListInput{
+		Module:  "4",
+		TypeID:  "12",
+		Current: "3",
+	})
+	if err != nil {
+		t.Fatalf("resource list: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	want := map[string]interface{}{
+		"module":    "4",
+		"typeId":    "12",
+		"pageSize":  10,
+		"current":   "3",
+		"id":        "",
+		"name":      "",
+		"sortField": "",
+		"sortType":  "",
+	}
+	if client.path != "/cps/resourceList" {
+		t.Fatalf("path=%q", client.path)
+	}
+	if !reflect.DeepEqual(client.payload, want) {
+		t.Fatalf("payload=%#v want %#v", client.payload, want)
+	}
+}
+
+func TestExternalFailureMatchesPHPRequestFailed(t *testing.T) {
+	service := NewService(fakeAuth{}, fakeStore{}, "")
+
+	_, retcode, errmsg, err := service.ModuleList(context.Background())
+	if err != nil {
+		t.Fatalf("module list: %v", err)
+	}
+	if retcode != -1 || errmsg != "请求失败" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service.WithExternalClient(&fakeExternalClient{err: errors.New("dial failed")})
+	_, retcode, errmsg, err = service.ModuleList(context.Background())
+	if err != nil {
+		t.Fatalf("module list: %v", err)
+	}
+	if retcode != -1 || errmsg != "请求失败" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestExternalBusinessFailureMatchesPHPMessage(t *testing.T) {
+	service := NewService(fakeAuth{}, fakeStore{}, "").WithExternalClient(&fakeExternalClient{resp: ExternalResponse{
+		Code:    401,
+		Message: "bad key",
+	}})
+
+	_, retcode, errmsg, err := service.ModuleList(context.Background())
+	if err != nil {
+		t.Fatalf("module list: %v", err)
+	}
+	if retcode != -1 || errmsg != "请求失败[401]:bad key" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }

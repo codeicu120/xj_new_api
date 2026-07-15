@@ -29,6 +29,7 @@ import (
 	minivodRepo "xj_comp/internal/repository/minivod"
 	onegoRepo "xj_comp/internal/repository/onego"
 	soRepo "xj_comp/internal/repository/so"
+	starliveRepo "xj_comp/internal/repository/starlive"
 	statsRepo "xj_comp/internal/repository/stats"
 	ucpRepo "xj_comp/internal/repository/ucp"
 	userRepo "xj_comp/internal/repository/user"
@@ -57,6 +58,7 @@ import (
 	picService "xj_comp/internal/service/pic"
 	sendfileService "xj_comp/internal/service/sendfile"
 	soService "xj_comp/internal/service/so"
+	starliveService "xj_comp/internal/service/starlive"
 	statsService "xj_comp/internal/service/stats"
 	ucpService "xj_comp/internal/service/ucp"
 	userService "xj_comp/internal/service/user"
@@ -145,9 +147,12 @@ func NewRouter(opts Options) *gin.Engine {
 	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService).WithResourceBaseURL(cfg.ResourceBaseURL))
 	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
-	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
+	starLiveHandler := handler.NewStarLiveHandler(starliveService.NewService(starliveRepo.NewRepository(db), userRepository, ucpRepository, ucpRepository))
+	aiundressExternalClient := aiundressService.NewHTTPExternalClient(cfg.AIUndressHost, cfg.AIUndressKey, 5*time.Second)
+	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).WithExternalClient(aiundressExternalClient))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
+	respondHandler := handler.NewRespondHandler()
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -176,6 +181,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/game/wali/balance", gameHandler.WaliBalance)
 	router.Any("/game/lottery/gameList", gameHandler.LotteryGames)
 	router.Any("/hgame/index", hgameHandler.Index)
+	router.Any("/starLive/index", starLiveHandler.Index)
+	router.Any("/starLive/queryCoinBalance", starLiveHandler.QueryCoinBalance)
 	router.Any("/art", artHandler.Index)
 	router.Any("/art/index", artHandler.Index)
 	router.Any("/art/announce", artHandler.Announce)
@@ -213,6 +220,37 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/payment/unpaid", paymentHandler.Unpaid)
 	router.Any("/payment/success", paymentHandler.Success)
 	router.Any("/payment/failed", paymentHandler.Failed)
+	router.Any("/payment/wappay1", paymentHandler.WapPay1)
+	router.Any("/payment/wappay2", paymentHandler.WapPay2)
+	router.Any("/payment/pay7submit", paymentHandler.Pay7Submit)
+	router.Any("/payment/pay11", paymentHandler.Pay11)
+	for _, action := range []string{
+		"pay7", "pay8", "pay9", "pay10", "pay10a", "pay10b", "pay12",
+		"gpay1", "gpay2",
+		"newpay", "newpayff", "newpayxxx", "newpayqk", "newpayxyf", "newpaykf", "newpaypi", "newpaygs", "newpaylep",
+		"newpayys", "newpayyswx", "newpayhw", "newpayhs", "newpaypx", "newpaypxwx", "newpay99", "newpayxy", "newpayjd",
+		"newpaycr", "newpaylu", "newpayluwx", "newpaymyr", "newpaymyrz", "newpaylh", "newpaylai", "newpayxh", "newpayya",
+		"newpayyh", "newpayhf", "newpaydd", "newpaykk", "newpayrq",
+	} {
+		router.Any("/payment/"+action, paymentHandler.SuccessHTML)
+	}
+	for _, action := range []string{
+		"shangfu", "wappay1", "wappay2", "wappay3", "wappay4", "wappay4a", "wappay5",
+		"hawpay", "easypay", "gpay1", "gpay2",
+		"pay6", "pay7", "pay8", "pay9", "pay10", "pay10a", "pay10b", "pay11",
+		"newpay", "newpay99", "newpaycr", "newpaydd", "newpayff", "newpaygs", "newpayhs", "newpayhw",
+		"newpayjd", "newpaylai", "newpaylh", "newpaylu", "newpayluwx", "newpaymyr", "newpaymyrz",
+		"newpaypi", "newpaypx", "newpaypxwx", "newpayqk", "newpayrq", "newpayxh", "newpayxxx",
+		"newpayxy", "newpayxyf", "newpayya", "newpayyh", "newpayys", "newpayyswx",
+	} {
+		router.Any("/respond/"+action, respondHandler.Failed("failed"))
+	}
+	for _, action := range []string{"pay12"} {
+		router.Any("/respond/"+action, respondHandler.Failed("Err"))
+	}
+	for _, action := range []string{"newpayhf", "newpaykf", "newpaykk", "newpaylep"} {
+		router.Any("/respond/"+action, respondHandler.Failed("FAILED"))
+	}
 	router.Any("/bought/listing", boughtHandler.Listing)
 	router.Any("/bought/delete", boughtHandler.Delete)
 	router.Any("/bought/buy", boughtHandler.Buy)
@@ -249,6 +287,9 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/aiundress", aiundressHandler.Listing)
 	router.Any("/aiundress/listing", aiundressHandler.Listing)
 	router.Any("/aiundress/index", handler.EmptyHTML)
+	router.Any("/aiundress/moduleList", aiundressHandler.ModuleList)
+	router.Any("/aiundress/resourceTypeList", aiundressHandler.ResourceTypeList)
+	router.Any("/aiundress/resourceList", aiundressHandler.ResourceList)
 	router.Any("/getCertUuid", indexHandler.GetCertUUID)
 	router.Any("/ucp/index", ucpHandler.Index)
 	router.Any("/ucp/user", ucpHandler.UserIndex)

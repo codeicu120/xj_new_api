@@ -3,6 +3,8 @@ package payment
 import (
 	"context"
 	"fmt"
+	"html"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +39,40 @@ func (s *Service) SuccessMessage(_ context.Context) string {
 
 func (s *Service) FailedMessage(_ context.Context) string {
 	return "支付失败回调"
+}
+
+func (s *Service) SuccessHTML(_ context.Context) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>支付成功</title></head><body><ul><li><strong>支付成功</strong></li></ul></body></html>`
+}
+
+func (s *Service) QRCodeHTML(_ context.Context, qrlink string) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>微信扫码支付</title><script type="text/javascript" src="/qrcode.min.js"></script></head><body><ul><li>1、截图保存并打开微信</li><li>2、微信右上角扫一扫选择相册</li><li>付款中如遇警示弹窗，请点击继续支付</li><li><div id="qrcode"></div></li></ul><script type="text/javascript">new QRCode(document.getElementById("qrcode"), "` + html.EscapeString(qrlink) + `");</script></body></html>`
+}
+
+func (s *Service) SubmitHTML(_ context.Context, gateway string, rawParams string) string {
+	values := parseQuery(rawParams)
+	formdata := strings.Builder{}
+	for key, vals := range values {
+		for _, value := range vals {
+			formdata.WriteString(`<input type="hidden" name="`)
+			formdata.WriteString(html.EscapeString(key))
+			formdata.WriteString(`" value="`)
+			formdata.WriteString(html.EscapeString(value))
+			formdata.WriteString(`" />`)
+		}
+	}
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>正在跳转</title></head><body><form method="post" action="` + html.EscapeString(gateway) + `" id="form">` + formdata.String() + `</form><script type="text/javascript">document.getElementById('form').submit();</script></body></html>`
+}
+
+func (s *Service) PaymentHTML(ctx context.Context, payID int) (string, error) {
+	if payID <= 0 || s.store == nil {
+		return "", nil
+	}
+	payrow, err := s.store.PaymentByID(ctx, payID)
+	if err != nil {
+		return "", err
+	}
+	return str(payrow["payhtml"]), nil
 }
 
 func (s *Service) Query(ctx context.Context, token string, payID int) (map[string]interface{}, int, string, error) {
@@ -220,6 +256,14 @@ func mapOrEmpty(value interface{}) map[string]interface{} {
 		return typed
 	}
 	return map[string]interface{}{}
+}
+
+func parseQuery(raw string) url.Values {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return url.Values{}
+	}
+	return values
 }
 
 func processPaymentRows(rows []map[string]interface{}) []map[string]interface{} {

@@ -37,6 +37,9 @@
 | `/payment/chpayway` | `c.api.payment->chpayway` | 本轮完成 | 修改未支付订单支付方式；保留本人校验、支付方式白名单校验和条件更新，避免已支付订单被修改。 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | 本轮完成 | 当前 PHP 运行代码固定返回 `data.total_count=0`；未执行的未支付订单查询分支暂不接管。 |
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | 本轮完成 | 固定支付状态 JSON 文案；不包含第三方支付回调验签或入账逻辑。 |
+| `/payment/wappay1`、`/payment/wappay2`、`/payment/pay7submit`、`/payment/pay11` | `c.api.payment->wappay1/wappay2/pay7submit/pay11` | 本轮完成 | 支付返回页/只读 HTML 分支；`wappay2?payid=` 只读 `payhtml`，`pay7submit` 生成自动 POST 表单，`pay11` 支持二维码页。 |
+| `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12`、`/payment/gpay1`、`/payment/gpay2`、`/payment/newpay*` 页面 action | `c.api.payment->$action` | 本轮完成 | PHP public action 仅返回支付成功 HTML，Go 已批量接管；对应 `_action` 下单/写入分支未伪造。 |
+| `/respond/*` 常见支付 provider 失败分支 | `c.respond.*` | 本轮完成 | 空请求/解析失败分支返回旧 provider `echoErr()` 文本；成功验签、锁单入账和 `payment->doAction()` 未接管。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
@@ -126,6 +129,9 @@
 | `/art/show` | `c.api.art->show` | 本轮完成 | 公告/文章详情，读 `arts` 和 `arts_content`；成功、缺少 `artid`、不存在记录分支均对比一致。 |
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | 本轮完成 | 登录只读 AI 任务历史；未登录错误、`module/page` 分页、字段集合和 test 环境 R2 资源域名 live 对比通过。 |
 | `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
+| `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | 本轮完成 | 只读第三方资源查询；`channel_key` 不硬编码，需通过 `AIUNDRESS_THIRD_KEY` 注入，缺配置按旧 PHP 外部请求失败返回 `retcode=-1 errmsg=请求失败`。 |
+| `/starLive/index` | `c.api.starlive->index` | 本轮完成 | 直播初始化；支持登录用户或游客 sid，读取 `starlive_info`，兼容 PHP AES-128-CBC/base64 的 `encryptUid` 和 `md5(appId_userId_secKey)` token。 |
+| `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | 本轮完成 | 直播余额查询；返回 raw JSON `{code,data}`，游客长 memberId 余额为 0，用户余额按 `users_quota.goldcoin*10`。 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | 本轮完成 | 小视频播放任务金币领取；登录用户写金币日志，游客更新游客金币，保留旧 PHP 未校验 log 归属行为。 |
 
 ## 优先候选
@@ -139,9 +145,10 @@
 | 接口 | 原因 |
 | --- | --- |
 | `/register`、`/login`、`/forgot` | 公共但涉及账号、短信、风控和写库。 |
-| `/payment/*`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付下单、外部平台请求或回调，需要独立 reviewer/灰度/回滚策略。 |
+| `/payment/*` 剩余下单/跳转 action、`/respond/*` 成功分支 | 支付页面、只读分支和回调失败分支已迁；剩余涉及支付平台请求、下单状态写入、回调验签、锁单入账或 `payment->doAction()`，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
+| `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | 直播平台下注、结算、翻译扣款或外部回调，涉及资产写入和平台幂等。 |
 | `/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |
-| `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |
+| `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 和只读资源查询已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁和金豆扣减。 |

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strconv"
 
@@ -82,4 +83,46 @@ func (h *PaymentHandler) Success(c *gin.Context) {
 func (h *PaymentHandler) Failed(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	c.JSON(http.StatusOK, legacyjson.Error(h.service.FailedMessage(c.Request.Context())))
+}
+
+func (h *PaymentHandler) SuccessHTML(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.SuccessHTML(c.Request.Context())))
+}
+
+func (h *PaymentHandler) Pay7Submit(c *gin.Context) {
+	rawParams, _ := base64.StdEncoding.DecodeString(inputValue(c, "p"))
+	c.Header("X-Served-By", "newbie")
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.SubmitHTML(c.Request.Context(), inputValue(c, "gateway"), string(rawParams))))
+}
+
+func (h *PaymentHandler) Pay11(c *gin.Context) {
+	qrlink := inputValue(c, "qrlink")
+	c.Header("X-Served-By", "newbie")
+	if qrlink == "" {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.SuccessHTML(c.Request.Context())))
+		return
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(h.service.QRCodeHTML(c.Request.Context(), qrlink)))
+}
+
+func (h *PaymentHandler) WapPay1(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: h.service.SuccessMessage(c.Request.Context())})
+}
+
+func (h *PaymentHandler) WapPay2(c *gin.Context) {
+	payID, _ := strconv.Atoi(inputValue(c, "payid"))
+	if payID > 0 {
+		html, err := h.service.PaymentHTML(c.Request.Context(), payID)
+		c.Header("X-Served-By", "newbie")
+		if err != nil {
+			c.Data(http.StatusInternalServerError, "text/html; charset=utf-8", []byte(""))
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+		return
+	}
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: h.service.SuccessMessage(c.Request.Context())})
 }

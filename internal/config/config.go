@@ -36,6 +36,8 @@ type Config struct {
 	GameResourceURL string
 	VIPDiscount     int
 	UploadPath      string
+	AIUndressHost   string
+	AIUndressKey    string
 }
 
 func FromEnv() Config {
@@ -53,6 +55,8 @@ func FromEnv() Config {
 		GameResourceURL: envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
 		VIPDiscount:     envInt("VIP_DISCOUNT", 50),
 		UploadPath:      envString("UPLOAD_PATH", defaultUploadPath),
+		AIUndressHost:   envString("AIUNDRESS_THIRD_HOST", ""),
+		AIUndressKey:    envString("AIUNDRESS_THIRD_KEY", ""),
 	}
 }
 

@@ -1185,6 +1185,26 @@
 - 兼容规则：返回 `data.rows/pageinfo`；`image/output` 空值保持空，已有 URL 原样返回，相对路径在 `APP_ENV=test` 下按旧 PHP 拼接 R2 域名，其他环境优先使用 `resurl_h5_ai` 并替换 `{rand}` 为中国时区 `yyyyMMddHH`。
 - 测试：`go test ./internal/service/aiundress ./internal/server` 通过；PHP-Go live 对比 `/aiundress`、`/aiundress/listing` 未登录分支一致，登录测试 token 下 `/aiundress/listing?page=1&module=4` 的 `retcode/total/rows/page_url/首行字段/image` 一致。
 
+### `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`
+
+- PHP: `c.api.aiundress->moduleList/resourceTypeList/resourceList`
+- Go: `internal/handler.AIUndressHandler.ModuleList/ResourceTypeList/ResourceList`
+- Service: `internal/service/aiundress.Service`
+- External: `internal/service/aiundress.ExternalClient`；默认 HTTP client 用 `AIUNDRESS_THIRD_HOST` 和 `AIUNDRESS_THIRD_KEY` 注入，不硬编码旧 PHP `third_key`。
+- Auth: 公开只读资源查询，不要求登录。
+- 兼容规则：向第三方 `/cps/getModuleList`、`/cps/resourceTypeList`、`/cps/resourceList` POST JSON，并设置 `channel_key` header；成功时保留旧 PHP `data.data` 包装；`resourceList` 保留 `pageSize<1` 默认 10，以及空 `id/name/sortField/sortType` 参数；缺配置、网络错误或解析失败返回 `retcode=-1 errmsg=请求失败`，第三方业务码非 200 返回 `请求失败[code]:message`。
+- 测试：`go test ./internal/service/aiundress ./internal/server` 通过；service 使用 fake client 覆盖成功 payload、缺配置/请求失败和第三方业务失败，server 覆盖缺配置下三个路由的旧 PHP 错误形状。
+
+### `/starLive/index`、`/starLive/queryCoinBalance`
+
+- PHP: `c.api.starlive->index/queryCoinBalance`
+- Go: `internal/handler.StarLiveHandler.Index/QueryCoinBalance`
+- Service: `internal/service/starlive.Service`
+- Repository: `internal/repository/starlive.Repository` 读取 `starlive_info`；用户、游客和金币余额复用 `user.Repository`、`ucp.Repository`。
+- Auth: `index` 支持登录用户 sid 或游客 sid；缺游客信息返回 `retcode=-9999 errmsg=客户端游客请先携带信息`。`queryCoinBalance` 是直播平台 raw JSON 查询，不走 legacy JSON。
+- 兼容规则：`index` 返回 legacy JSON 且数据为旧 PHP 的嵌套 `data.data`，`encryptUid` 使用 AES-128-CBC/PKCS7/raw 后 base64，IV 为 `16-Bytes--String`，token 为 `md5(appId_userId_secKey)`；无直播配置返回 `暂未开放`。`queryCoinBalance` 对 `memberId` 长度大于 12 的游客返回 `{code:0,data:{balance:0}}`，普通用户读取 `users_quota.goldcoin` 并乘以 10，不存在返回 `{code:-1,data:{msg:"未知用户"}}`。
+- 测试：`go test ./internal/service/starlive ./internal/handler ./internal/server ./internal/service/aiundress` 通过；AES/token 期望值用本地 PHP OpenSSL 命令生成，service fake 覆盖未携带游客、未开放、登录成功和余额分支。
+
 ### `/ucp/taskbox/taskboxlog`
 
 - PHP: `c.api.ucp.taskbox->taskboxlog`
@@ -1346,6 +1366,26 @@
 - Auth/DB/External: 无；两个接口只返回固定 JSON 文案，不读取订单、不验签、不调用支付平台。
 - 兼容规则：`success` 返回 `retcode=0`、`errmsg=支付成功回调`、无 `data`；`failed` 返回 `retcode=-1`、`errmsg=支付失败回调`、无 `data`。
 - 测试：`go test ./internal/service/payment ./internal/server` 通过；PHP-Go live 对比两个接口 retcode/errmsg 一致，忽略旧 PHP 游客中间件动态字段。
+
+### 支付返回页和只读 HTML action
+
+- 已迁移：`/payment/wappay1`、`/payment/wappay2`、`/payment/pay7submit`、`/payment/pay11`、`/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12`、`/payment/gpay1`、`/payment/gpay2`、`/payment/newpay*` 页面 action。
+- PHP: `c.api.payment->$action`
+- Go: `internal/handler.PaymentHandler.WapPay1/WapPay2/Pay7Submit/Pay11/SuccessHTML`
+- Service: `internal/service/payment.Service`
+- Auth/External: 无；本批只接管 public 返回页、自动提交表单和只读 `payhtml`，不请求第三方支付平台、不创建订单、不入账。
+- DB: 仅 `/payment/wappay2?payid=` 读取 `trade_payments.payhtml`。
+- 兼容规则：`wappay1` 和 `wappay2` 无 `payid` 返回固定支付成功回调 JSON；`wappay2?payid=` 直接返回订单 `payhtml`；`pay7submit` 解 base64 `p` 并生成自动 POST 表单；`pay11` 无 `qrlink` 返回成功页，有 `qrlink` 返回二维码页；其余页面 action 返回支付成功 HTML。`_newpayhw` 等下单分支仍未接管，因为会写 `out_trxid` 或请求外部网关。
+- 测试：`go test ./internal/service/payment ./internal/server` 通过；service 测试覆盖成功页、二维码页、表单转义和 `payhtml` 读取。
+
+### 支付回调失败分支
+
+- 已迁移：`/respond/shangfu`、`/respond/wappay1..5`、`/respond/wappay4a`、`/respond/hawpay`、`/respond/easypay`、`/respond/gpay1/gpay2`、`/respond/pay6..12`、`/respond/newpay*` 常见 provider 的空请求/解析失败分支；`chan1` 未接管。
+- PHP: `c.respond.*`
+- Go: `internal/handler.RespondHandler.Failed`
+- Auth/DB/External: 无；本批只返回 provider `echoErr()` 文本，不读取订单、不验签、不入账、不调用 `payment->doAction()`。
+- 兼容规则：普通 provider 返回 `failed`，`pay12` 返回 `Err`，`newpayhf/newpaykf/newpaykk/newpaylep` 返回 `FAILED`；这些都是旧 PHP 在 provider 解析失败时的响应文本。成功验签和入账分支仍留在未重构区。
+- 测试：`go test ./internal/server` 覆盖 `shangfu/pay12/newpaykf` 三类失败文本。
 
 ### `/comment`、`/comment/index`
 

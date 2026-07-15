@@ -22,6 +22,31 @@ func (h *AIUndressHandler) Listing(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	module, _ := strconv.Atoi(inputValue(c, "module"))
 	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), page, module)
+	respondLegacy(c, data, retcode, errmsg, err)
+}
+
+func (h *AIUndressHandler) ModuleList(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.ModuleList(c.Request.Context())
+	respondLegacy(c, data, retcode, errmsg, err)
+}
+
+func (h *AIUndressHandler) ResourceTypeList(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.ResourceTypeList(c.Request.Context(), inputValue(c, "module"))
+	respondLegacy(c, data, retcode, errmsg, err)
+}
+
+func (h *AIUndressHandler) ResourceList(c *gin.Context) {
+	pageSize, _ := strconv.Atoi(inputValue(c, "pageSize"))
+	data, retcode, errmsg, err := h.service.ResourceList(c.Request.Context(), aiundressService.ResourceListInput{
+		Module:   inputValue(c, "module"),
+		TypeID:   inputValue(c, "typeId"),
+		PageSize: pageSize,
+		Current:  inputValue(c, "page"),
+	})
+	respondLegacy(c, data, retcode, errmsg, err)
+}
+
+func respondLegacy(c *gin.Context, data interface{}, retcode int, errmsg string, err error) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

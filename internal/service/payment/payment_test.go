@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +59,36 @@ func TestCallbackMessages(t *testing.T) {
 	if got := service.FailedMessage(context.Background()); got != "支付失败回调" {
 		t.Fatalf("unexpected failed message %q", got)
 	}
+}
+
+func TestPaymentHTMLHelpers(t *testing.T) {
+	service := NewService(fakeStore{payment: map[string]interface{}{"payhtml": "<form>ok</form>"}})
+
+	if html := service.SuccessHTML(context.Background()); !containsAll(html, "支付成功", "<html") {
+		t.Fatalf("unexpected success html %q", html)
+	}
+	if html := service.QRCodeHTML(context.Background(), `we"chat`); !containsAll(html, "QRCode", "we&#34;chat") {
+		t.Fatalf("unexpected qrcode html %q", html)
+	}
+	if html := service.SubmitHTML(context.Background(), `https://pay.example/g`, "a=1&b=%E4%B8%AD"); !containsAll(html, `action="https://pay.example/g"`, `name="a" value="1"`, `name="b" value="中"`) {
+		t.Fatalf("unexpected submit html %q", html)
+	}
+	payHTML, err := service.PaymentHTML(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("payment html: %v", err)
+	}
+	if payHTML != "<form>ok</form>" {
+		t.Fatalf("unexpected payment html %q", payHTML)
+	}
+}
+
+func containsAll(value string, needles ...string) bool {
+	for _, needle := range needles {
+		if !strings.Contains(value, needle) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestQueryRequiresPaymentAccess(t *testing.T) {

@@ -44,6 +44,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/balance` | ANY | `GameHandler.WaliBalance` |
 | `/game/lottery/gameList` | ANY | `GameHandler.LotteryGames` |
 | `/hgame/index` | ANY | `HGameHandler.Index` |
+| `/starLive/index`、`/starLive/queryCoinBalance` | ANY | `StarLiveHandler.Index/QueryCoinBalance` |
 | `/art`、`/art/index` | ANY | `ArtHandler.Index` |
 | `/art/announce` | ANY | `ArtHandler.Announce` |
 | `/art/show` | ANY | `ArtHandler.Show` |
@@ -66,6 +67,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/payways` | ANY | `PaymentHandler.Payways` |
 | `/payment/chpayway` | ANY | `PaymentHandler.ChPayway` |
 | `/payment/unpaid`、`/payment/success`、`/payment/failed` | ANY | `PaymentHandler.Unpaid/Success/Failed` |
+| `/payment/wappay1`、`/payment/wappay2`、`/payment/pay7submit`、`/payment/pay11` | ANY | `PaymentHandler.WapPay1/WapPay2/Pay7Submit/Pay11` |
+| `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12` | ANY | `PaymentHandler.SuccessHTML` |
+| `/payment/gpay1`、`/payment/gpay2`、`/payment/newpay*`（已注册页面 action） | ANY | `PaymentHandler.SuccessHTML` |
+| `/respond/*`（已注册支付回调失败分支，除 `chan1`） | ANY | `RespondHandler.Failed` |
 | `/bought/listing`、`/bought/delete`、`/bought/buy` | ANY | `BoughtHandler.Listing/Delete/Buy` |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
 | `/playlog/listing`、`/playlog/remove`、`/downlog/listing`、`/downlog/remove` | ANY | `HistoryHandler` |
@@ -98,6 +103,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/explore/vodtask/reqcoin` | ANY | `ExploreHandler.VodTaskReqCoin` |
 | `/aiundress`、`/aiundress/listing` | ANY | `AIUndressHandler.Listing` |
 | `/aiundress/index` | ANY | `handler.EmptyHTML` |
+| `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | ANY | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` |
 | `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
 | `/getGlobalData` | ANY | `IndexHandler.GetGlobalData` |
 | `/init` | ANY | `IndexHandler.Init` |
@@ -222,6 +228,15 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/chpayway` | `c.api.payment->chpayway` | `PaymentHandler.ChPayway` | 已重构；修改未支付订单支付方式，保留本人校验、支付通道校验和条件更新防已支付订单被修改 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | `PaymentHandler.Unpaid` | 已重构；旧 PHP 当前直接返回 `data.total_count=0`，后续未执行的 24 小时未支付查询分支不接管 |
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | `PaymentHandler.Success/Failed` | 已重构；固定支付状态 JSON 文案，不包含平台回调验签 |
+| `/payment/wappay1` | `c.api.payment->wappay1` | `PaymentHandler.WapPay1` | 已重构；固定 `retcode=0 errmsg=支付成功回调`，不涉及回调入账 |
+| `/payment/wappay2` | `c.api.payment->wappay2` | `PaymentHandler.WapPay2` | 已重构；无 `payid` 返回固定成功回调文案，有 `payid` 时只读 `trade_payments.payhtml` 并返回 HTML |
+| `/payment/pay7submit` | `c.api.payment->pay7submit` | `PaymentHandler.Pay7Submit` | 已重构；解码 `p` 后生成自动 POST 表单 HTML，不请求支付平台 |
+| `/payment/pay11` | `c.api.payment->pay11` | `PaymentHandler.Pay11` | 已重构；无 `qrlink` 返回支付成功页，有 `qrlink` 返回二维码 HTML 页 |
+| `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12` | `c.api.payment->$action` | `PaymentHandler.SuccessHTML` | 已重构；PHP public action 均为读取 `templates/api/paysuccess.html` 并返回 HTML |
+| `/payment/gpay1`、`/payment/gpay2`、`/payment/newpay`、`/payment/newpayff`、`/payment/newpayxxx`、`/payment/newpayqk`、`/payment/newpayxyf`、`/payment/newpaykf`、`/payment/newpaypi`、`/payment/newpaygs`、`/payment/newpaylep`、`/payment/newpayys`、`/payment/newpayyswx`、`/payment/newpayhw`、`/payment/newpayhs`、`/payment/newpaypx`、`/payment/newpaypxwx`、`/payment/newpay99`、`/payment/newpayxy`、`/payment/newpayjd`、`/payment/newpaycr`、`/payment/newpaylu`、`/payment/newpayluwx`、`/payment/newpaymyr`、`/payment/newpaymyrz`、`/payment/newpaylh`、`/payment/newpaylai`、`/payment/newpayxh`、`/payment/newpayya`、`/payment/newpayyh`、`/payment/newpayhf`、`/payment/newpaydd`、`/payment/newpaykk`、`/payment/newpayrq` | `c.api.payment->$action` | `PaymentHandler.SuccessHTML` | 已重构；PHP public action 均为支付成功 HTML 页面；其中 `_newpayhw` 下单分支写 `out_trxid` 未接管，只接管 public 返回页 |
+| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay4a`、`/respond/wappay5` | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回 provider `echoErr()` 文本，成功验签和入账事务未接管 |
+| `/respond/hawpay`、`/respond/easypay`、`/respond/gpay1`、`/respond/gpay2`、`/respond/pay6`、`/respond/pay7`、`/respond/pay8`、`/respond/pay9`、`/respond/pay10`、`/respond/pay10a`、`/respond/pay10b`、`/respond/pay11`、`/respond/pay12` | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回 `failed`/`Err`/`FAILED` 等旧文本，成功验签和入账事务未接管 |
+| `/respond/newpay*`（除未注册 `chan1`） | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回旧 provider 失败文本，成功验签和入账事务未接管 |
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
 | `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
 | `/bought/buy` | `c.api.bought->buy` | `BoughtHandler.Buy` | 已重构；登录购买付费影片，复刻记录不存在、已购成功、VIP 折扣、金豆余额和金豆事务扣费写 `user_beanlogs/user_bought` |
@@ -383,6 +398,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/art/show` | `c.api.art->show` | `ArtHandler.Show` | 已重构，对比通过；公告/文章详情，成功和不存在错误分支一致 |
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
+| `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` | 已重构；只读外部资源查询，第三方 host/key 通过 `AIUNDRESS_THIRD_HOST`/`AIUNDRESS_THIRD_KEY` 注入，缺配置或外部请求失败返回 `retcode=-1 errmsg=请求失败` |
+| `/starLive/index` | `c.api.starlive->index` | `StarLiveHandler.Index` | 已重构；直播初始化，兼容登录用户或游客 sid，读取 `starlive_info`，按 PHP AES-128-CBC/base64 生成 `encryptUid` 并返回嵌套 `data.data` |
+| `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | `StarLiveHandler.QueryCoinBalance` | 已重构；直播平台余额查询 raw JSON 响应，游客长 memberId 返回 0，用户金币余额按 `goldcoin*10` 返回 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | `IndexHandler.GetGlobalData` | 已重构；全局配置/版本/广告/弹窗/开关聚合，核心 key shape 和版本覆盖对比通过 |
 | `/init` | `c.api.index->init` | `IndexHandler.Init` | 已重构；客户端初始化聚合，复用 globalData，登录/游客 user、appver、通知、邀请和站点配置 live 对比通过 |
 
@@ -497,11 +515,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/payment/:action`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`） | `c.api.payment->$action` | 未重构；PHP 实际剩余 action 包含 `reqpay`、`shangfu`、`wappay1..5`、`wappay4a`、`hawpay`、`easypay`、`pay6..12/pay12req`、`gpay1/gpay2`、大量 `newpay*` 等，涉及下单、平台请求或跳转；裸 `/payment` 旧 PHP 为 404 |
-| `/respond/:action` | `c.respond.*` | 未重构；支付平台回调动态路由，PHP 会调用 `c.respond.<action>->index` |
-| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay4a`、`/respond/wappay5` | `c.respond.*` | 未重构；支付回调 |
-| `/respond/hawpay`、`/respond/easypay`、`/respond/chan1`、`/respond/pay6`、`/respond/pay7`、`/respond/pay8`、`/respond/pay9`、`/respond/pay10`、`/respond/pay10a`、`/respond/pay10b`、`/respond/pay11`、`/respond/pay12` | `c.respond.*` | 未重构；支付回调 |
-| `/respond/gpay1`、`/respond/gpay2`、`/respond/newpay*` | `c.respond.*` | 未重构；PHP `src/c/respond` 下存在多组 `newpay` 回调文件，均走通用回调初始化和支付处理 |
+| `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 未重构；PHP 实际剩余 action 包含 `reqpay`、`shangfu`、`wappay3/wappay4/wappay4a/wappay5`、`hawpay`、`easypay`、`pay6`、`pay12req` 等下单/跳转/平台请求路径；完整迁移需 runtime provider 配置与网关接口 |
+| `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 未重构；已注册常见 provider 的失败分支，成功分支仍需先补 `SELECT ... FOR UPDATE` 锁单、幂等入账、`payment->doAction()` 和 provider 验签适配 |
+| `/respond/chan1` | `c.respond.chan1` | 未重构；不是普通支付回调，硬编码 secret，包含创建订单、充值入账和赠送 VIP |
 
 ### 个人中心
 
@@ -533,14 +549,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 未重构；下分、金币增加、外部平台 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 未重构；外部平台进入游戏 |
 | `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台资产、余额或外部进入游戏 |
-| `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
+| `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`） | `c.api.starlive->$action` | 未重构；剩余 `gameBet/gameWin/tryAgain/translate` 涉及下注、结算、翻译扣款或外部回调 |
 | `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 未重构；一元购剩余 `bet` 投注写入涉及金币扣减 |
 
 ### 社区、HGame、AI
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
+| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 未重构；上传、生成等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源
 
