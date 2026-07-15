@@ -121,6 +121,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/show/:vodid` | ANY | `VODHandler.Show` |
 | `/vod/up/:vodid`、`/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 | `/vod/breaking` | ANY | `VODHandler.Breaking` |
+| `/vod/errorreport`、`/v2/vod/errorreport` | ANY | `VODHandler.ErrorReport` |
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
 | `/comment`、`/comment/index` | ANY | `handler.EmptyHTML` |
@@ -374,6 +375,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
 | `/ucp/vodorder/historyorders` | `c.api.ucp.vodorder->historyorders` | `UCPHandler.VODOrderHistoryOrders` | 已重构，对比通过；登录只读成功的历史求片记录 |
 | `/vod/breaking` | `c.api.vod->breaking` | `VODHandler.Breaking` | 已重构，对比通过；公共只读每日爆料，返回当天 cateid=99 的 vodid/title |
+| `/vod/errorreport`、`/v2/vod/errorreport` | `c.api.vod->errorreport`、`c.apiv2.vod->errorreport` | `VODHandler.ErrorReport` | 已重构；视频报错反馈写入 `vod_errors`，不涉及金币、支付或播放权限 |
 
 ### 个人中心公开只读
 
@@ -414,7 +416,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` | `c.api.vod->reqplay/reqdown` | 未重构；播放/下载权限、日志、可能签名 |
 | `/vod/buy/:vodid` | `c.api.vod->buy` | 未重构；购买/金币 |
-| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `reqplay/reqdown/buy/errorreport` 等涉及播放权限、购买、反馈写入或媒体处理 |
+| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `reqplay/reqdown/buy` 涉及播放权限、购买或媒体处理 |
 
 ### 评论、收藏、播放/下载记录
 

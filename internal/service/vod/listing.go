@@ -52,6 +52,8 @@ type ListingStore interface {
 	TopMiniSearchVODIDs(ctx context.Context) (string, error)
 	MiniVODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error)
 	BreakingVOD(ctx context.Context, cateID int, since int64) (map[string]interface{}, error)
+	VODErrorByUID(ctx context.Context, uid string, vodID int) (map[string]interface{}, error)
+	SaveVODError(ctx context.Context, input vodRepo.ErrorReportInput) (int, error)
 	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
 	DeleteUpDown(ctx context.Context, uid int, vodID int) error
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
@@ -86,6 +88,19 @@ type ListingRequest struct {
 	IsH5Request bool
 }
 
+type ErrorReportRequest struct {
+	Token      string
+	VODID      int
+	PlayURL    string
+	AppVersion string
+	SysVersion string
+	Model      string
+	Channel    string
+	Network    string
+	Details    string
+	ClientIP   string
+}
+
 func NewListingService(store ListingStore, resourceBaseURL string, vipDiscount int) *ListingService {
 	if vipDiscount == 0 {
 		vipDiscount = 100
@@ -98,6 +113,69 @@ func NewListingService(store ListingStore, resourceBaseURL string, vipDiscount i
 		limiter:         newMemoryVoteLimiter(),
 		now:             time.Now,
 	}
+}
+
+func (s *ListingService) ErrorReport(ctx context.Context, req ErrorReportRequest) (int, string, error) {
+	if strings.TrimSpace(req.PlayURL) == "" ||
+		strings.TrimSpace(req.AppVersion) == "" ||
+		strings.TrimSpace(req.SysVersion) == "" ||
+		strings.TrimSpace(req.Model) == "" ||
+		strings.TrimSpace(req.Network) == "" {
+		return -9999, "缺少参数", nil
+	}
+	vod, err := s.store.VODByID(ctx, req.VODID)
+	if err != nil {
+		return -1, "提交报错失败", err
+	}
+	if len(vod) == 0 {
+		return -9999, "该视频不存在或者已删除", nil
+	}
+	uid, err := s.errorReportUID(ctx, req.Token)
+	if err != nil {
+		return -1, "提交报错失败", err
+	}
+	row, err := s.store.VODErrorByUID(ctx, uid, req.VODID)
+	if err != nil {
+		return -1, "提交报错失败", err
+	}
+	if len(row) > 0 {
+		return -9999, "您已提交过该视频报错反馈", nil
+	}
+	_, err = s.store.SaveVODError(ctx, vodRepo.ErrorReportInput{
+		UID:        uid,
+		VODID:      req.VODID,
+		PlayURL:    strings.TrimSpace(req.PlayURL),
+		AppVersion: strings.TrimSpace(req.AppVersion),
+		SysVersion: strings.TrimSpace(req.SysVersion),
+		Model:      strings.TrimSpace(req.Model),
+		Channel:    strings.TrimSpace(req.Channel),
+		Network:    strings.TrimSpace(req.Network),
+		ClientIP:   strings.TrimSpace(req.ClientIP),
+		Details:    strings.TrimSpace(req.Details),
+		Now:        s.now().Unix(),
+	})
+	if err != nil {
+		return -1, "提交报错失败", err
+	}
+	return 0, "", nil
+}
+
+func (s *ListingService) errorReportUID(ctx context.Context, token string) (string, error) {
+	sid := userRepo.CleanToken(strings.TrimSpace(token))
+	if sid == "" {
+		return "0", nil
+	}
+	if s.auth == nil {
+		return sid, nil
+	}
+	user, err := s.auth.UserBySession(ctx, sid)
+	if err != nil {
+		return "", fmt.Errorf("load user: %w", err)
+	}
+	if user != nil && atoi(str(user["uid"])) > 0 {
+		return str(user["uid"]), nil
+	}
+	return sid, nil
 }
 
 func (s *ListingService) WithAuth(auth AuthStore) *ListingService {

@@ -27,6 +27,8 @@ type fakeListingStore struct {
 	miniIncrementCalls  int
 	updown              map[string]interface{}
 	breaking            map[string]interface{}
+	errorReport         map[string]interface{}
+	savedErrorReport    *vodRepo.ErrorReportInput
 	savedUpdown         int
 	counters            []string
 }
@@ -194,6 +196,20 @@ func (s *fakeListingStore) BreakingVOD(context.Context, int, int64) (map[string]
 		return s.breaking, nil
 	}
 	return map[string]interface{}{"vodid": "99", "title": "爆料", "showtype": "0"}, nil
+}
+
+func (s *fakeListingStore) VODErrorByUID(context.Context, string, int) (map[string]interface{}, error) {
+	if s.errorReport == nil {
+		return map[string]interface{}{}, nil
+	}
+	return s.errorReport, nil
+}
+
+func (s *fakeListingStore) SaveVODError(_ context.Context, input vodRepo.ErrorReportInput) (int, error) {
+	if s.savedErrorReport != nil {
+		*s.savedErrorReport = input
+	}
+	return 1, nil
 }
 
 func (s *fakeListingStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
@@ -618,6 +634,76 @@ func TestBreakingMissing(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "记录不存在或已被删除" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestErrorReportValidatesRequiredFields(t *testing.T) {
+	service := NewListingService(&fakeListingStore{}, "https://res.example.test", 100)
+
+	retcode, errmsg, err := service.ErrorReport(context.Background(), ErrorReportRequest{VODID: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "缺少参数" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestErrorReportMissingVOD(t *testing.T) {
+	service := NewListingService(&fakeListingStore{vodByID: map[string]interface{}{}}, "https://res.example.test", 100)
+
+	retcode, errmsg, err := service.ErrorReport(context.Background(), validErrorReportRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "该视频不存在或者已删除" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestErrorReportDuplicate(t *testing.T) {
+	service := NewListingService(&fakeListingStore{errorReport: map[string]interface{}{"id": "1"}}, "https://res.example.test", 100)
+
+	retcode, errmsg, err := service.ErrorReport(context.Background(), validErrorReportRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您已提交过该视频报错反馈" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestErrorReportSavesInput(t *testing.T) {
+	saved := vodRepo.ErrorReportInput{}
+	service := NewListingService(&fakeListingStore{savedErrorReport: &saved}, "https://res.example.test", 100)
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	retcode, errmsg, err := service.ErrorReport(context.Background(), validErrorReportRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if saved.UID != "0" || saved.VODID != 100 || saved.PlayURL != "https://play.example.test/a.m3u8" {
+		t.Fatalf("saved = %#v", saved)
+	}
+	if saved.Now != 1770000000 || saved.ClientIP != "127.0.0.1" {
+		t.Fatalf("saved time/ip = %#v", saved)
+	}
+}
+
+func validErrorReportRequest() ErrorReportRequest {
+	return ErrorReportRequest{
+		VODID:      100,
+		PlayURL:    "https://play.example.test/a.m3u8",
+		AppVersion: "1.0.0",
+		SysVersion: "iOS 18",
+		Model:      "iPhone",
+		Channel:    "appstore",
+		Network:    "wifi",
+		Details:    "broken",
+		ClientIP:   "127.0.0.1",
 	}
 }
 

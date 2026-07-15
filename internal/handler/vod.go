@@ -135,6 +135,32 @@ func (h *VODHandler) Breaking(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
 }
 
+func (h *VODHandler) ErrorReport(c *gin.Context) {
+	vodID, _ := strconv.Atoi(inputValue(c, "vodid"))
+	retcode, errmsg, err := h.listingService.ErrorReport(c.Request.Context(), vodService.ErrorReportRequest{
+		Token:      authToken(c),
+		VODID:      vodID,
+		PlayURL:    inputValue(c, "play_url"),
+		AppVersion: inputValue(c, "app_ver"),
+		SysVersion: inputValue(c, "sys_ver"),
+		Model:      inputValue(c, "model"),
+		Channel:    inputValue(c, "channel"),
+		Network:    inputValue(c, "network"),
+		Details:    inputValue(c, "details"),
+		ClientIP:   c.ClientIP(),
+	})
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: ""})
+}
+
 func (h *VODHandler) vote(c *gin.Context, up bool) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
 	retcode, errmsg, err := h.listingService.Vote(c.Request.Context(), authToken(c), vodID, up)

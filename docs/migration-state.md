@@ -1109,6 +1109,17 @@
 - 兼容规则：成功返回 `data.vodid/title` 且 `errmsg=ok`；无记录或 `showtype>0` 返回 `记录不存在或已被删除`。
 - 测试：`go test ./internal/service/vod ./internal/repository/vod ./internal/server` 通过；PHP-Go live 对比当前本地库无记录错误分支 retcode/errmsg 一致，忽略旧 PHP 动态游客 token。
 
+### `/vod/errorreport`、`/v2/vod/errorreport`
+
+- PHP: `c.api.vod->errorreport`、`c.apiv2.vod->errorreport`
+- Go: `internal/handler.VODHandler.ErrorReport`
+- Service: `internal/service/vod.ListingService`
+- Repository: `internal/repository/vod.ListingRepository`
+- Auth: 不强制登录；登录用户使用 uid，未登录/游客使用本地 token/sid 语义，Go 不生成旧 PHP 动态游客 token。
+- DB: 读取 `vods` 校验视频存在；读取/写入 `vod_errors`，同一 `uid + vodid` 只允许提交一次。
+- 兼容规则：缺少 `play_url/app_ver/sys_ver/model/network` 返回 `retcode=-9999`、`errmsg=缺少参数`；视频不存在返回 `该视频不存在或者已删除`；重复返回 `您已提交过该视频报错反馈`；成功无 `data` 字段。
+- 测试：`go test ./internal/service/vod ./internal/repository/vod ./internal/server` 和 `go test ./...` 通过；单测覆盖缺参数、视频不存在、重复和成功保存字段，路由测试覆盖 `/vod/errorreport` 与 `/v2/vod/errorreport` 缺参数分支；PHP-Go live 对比两个路径的缺参数分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/payment/unpaid`
 
 - PHP: `c.api.payment->unpaid`

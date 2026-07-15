@@ -98,6 +98,7 @@
 | `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 本轮完成 | 专题公共接口，复用 VOD 行处理；listing 含分页、前 4 个视频和第一页 actorrows，detail 含全量视频排序和浏览数写入副作用。 |
 | `/special/up/:spid`、`/special/down/:spid` | `c.api.special->up/down` | 本轮完成 | 专题赞踩；不存在分支 live 对比通过，成功/重复投票写入分支由 service fake 覆盖。 |
 | `/vod/breaking` | `c.api.vod->breaking` | 本轮完成 | 每日爆料公共只读接口，读取当天 `cateid=99` 视频并返回 `vodid/title`；本地无记录错误分支 live 对比通过。 |
+| `/vod/errorreport`、`/v2/vod/errorreport` | `c.api.vod->errorreport`、`c.apiv2.vod->errorreport` | 本轮完成 | 视频报错反馈；校验必填参数、视频存在和重复提交后写 `vod_errors`，不涉及金币、支付或播放权限。 |
 | `/search` | `c.api.search->index` | 本轮完成 | 普通视频搜索；空关键词返回热词/热片/猜你喜欢，带关键词返回分页视频列表并更新 `vod_schlogs`。 |
 | `/minisearch` | `c.api.miniSearch->index` | 本轮完成 | 小视频搜索；空关键词返回小视频热词/热片/猜你喜欢，带关键词返回 `rows[].vodrow` 并更新 `minivod_schlogs`。 |
 | `/art`、`/art/index` | `c.api.art->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |

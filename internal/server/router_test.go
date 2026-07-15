@@ -914,6 +914,31 @@ func TestLegacyVODPreviewRoute(t *testing.T) {
 	}
 }
 
+func TestVODErrorReportRoutesRequireParams(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/vod/errorreport", "/v2/vod/errorreport"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("vodid=1"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -9999 || body.ErrMsg != "缺少参数" {
+			t.Fatalf("%s expected missing params, got %#v", path, body)
+		}
+	}
+}
+
 func TestCommentListingRoute(t *testing.T) {
 	router := newTestRouter()
 

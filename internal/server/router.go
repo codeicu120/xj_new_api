@@ -300,6 +300,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/vod/up/:vodid", vodHandler.Up)
 	router.Any("/vod/down/:vodid", vodHandler.Down)
 	router.Any("/vod/breaking", vodHandler.Breaking)
+	router.Any("/vod/errorreport", vodHandler.ErrorReport)
 	router.Any("/vod/preView/:vodid/index.m3u8", vodHandler.Preview)
 	router.Any("/sendfile/play/:file", sendfileHandler.Play)
 	router.Any("/sendfile/down/:file", sendfileHandler.Down)
@@ -368,6 +369,7 @@ func NewRouter(opts Options) *gin.Engine {
 		for _, action := range []string{"reqplay", "reqdown", "buy"} {
 			v2.Any("/vod/"+action+"/:vodid", notImplemented("c.apiv2.vod."+action))
 		}
+		v2.Any("/vod/errorreport", vodHandler.ErrorReport)
 	}
 
 	router.NoRoute(func(c *gin.Context) {

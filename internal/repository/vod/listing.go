@@ -28,6 +28,20 @@ type SpecialFilter struct {
 	SPType int
 }
 
+type ErrorReportInput struct {
+	UID        string
+	VODID      int
+	PlayURL    string
+	AppVersion string
+	SysVersion string
+	Model      string
+	Channel    string
+	Network    string
+	ClientIP   string
+	Details    string
+	Now        int64
+}
+
 type ListingRepository struct {
 	db *sql.DB
 }
@@ -112,6 +126,50 @@ func (r *ListingRepository) VODByID(ctx context.Context, vodID int) (map[string]
 		return map[string]interface{}{}, nil
 	}
 	return rows[0], nil
+}
+
+func (r *ListingRepository) VODErrorByUID(ctx context.Context, uid string, vodID int) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(uid) == "" || vodID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_errors WHERE uid=? AND vodid=?", uid, vodID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) SaveVODError(ctx context.Context, input ErrorReportInput) (int, error) {
+	if r.db == nil || strings.TrimSpace(input.UID) == "" || input.VODID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, `
+INSERT INTO vod_errors(uid, vodid, play_url, app_ver, sys_ver, model, channel, network, client_ip, details, status, create_time, update_time)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+		input.UID,
+		input.VODID,
+		input.PlayURL,
+		input.AppVersion,
+		input.SysVersion,
+		input.Model,
+		input.Channel,
+		input.Network,
+		input.ClientIP,
+		input.Details,
+		input.Now,
+		input.Now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert vod error report: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert vod error report id: %w", err)
+	}
+	return int(id), nil
 }
 
 func (r *ListingRepository) SimilarVODsByTagIDs(ctx context.Context, tagIDs []int, excludeID int, since int64, pageSize int) ([]map[string]interface{}, error) {
