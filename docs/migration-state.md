@@ -43,7 +43,7 @@
 - PHP: `c.api.aiundress->index`
 - Go: `internal/handler.EmptyHTML`
 - Auth: 按本地旧 PHP 运行时行为，`/aiundress/index` 不返回 JSON 业务数据。
-- 兼容规则：返回 HTTP 200、`Content-Type: text/html`、空 body；`/aiundress` 本身旧 PHP 返回登录错误，不在本轮接管；上传、生成、列表、第三方查询等 AI action 仍未迁移。
+- 兼容规则：返回 HTTP 200、`Content-Type: text/html`、空 body；上传、生成、第三方查询等 AI action 仍未迁移。
 - 测试：聚焦 `go test ./internal/server` 通过；PHP-Go 对比 `/aiundress/index` 的 status/content-type/body 一致。
 
 ### `/captcha/req`
@@ -269,6 +269,51 @@
 - 兼容规则：`listing` 复用 VOD `ProcessMiniRows`，并按 PHP 补 `isfavorite=1`；分页 URL 为 `/minifavorite/listing?page=[?]`；`remove` 返回 `errmsg=已删除N项`。
 - 未接管：`add` 会写收藏并可能触发金币奖励和 `user_coinlogs`，保留高风险清单。
 - 测试：聚焦 `go test ./internal/service/favorite ./internal/server ./internal/service/vod` 通过。
+
+### `/minivod/{listing,recommend,hot,latest,topzan,topcomment,topplay,topcoin,topnew,topday,topweek,topmonth}`
+
+- PHP: `c.api.minivod->listing`
+- Go: `internal/handler.MiniVODHandler.Listing`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 公共列表接口，不要求登录。
+- Params: `$cateid:0-$areaid:0-$yearid:0-$tagid:0-$definition:0-$duration:0-$freetype:0-$mosaic:0-$langvoice:0-$orderby:0-$page:1`；path page 为 `0` 时使用 query `page`。
+- DB: 读取 `vods(showtype=1)`、`vod_categories`、`vod_areas`、`vod_years`、`vod_servers`、`vod_tags`；排行榜 `topzan/topcomment/topplay/topcoin` 读取 `settings` 中 PHP 序列化数组 `minivod.*_vodids` 并按 `FIELD(vodid, ...)` 排序；需要用户包装 rows 的 action 读取 `users`。
+- 兼容规则：返回 `now/action/sample_params/params/rows/vodrows/pageinfo/orders/categories/areas/years/definitions/durations/freetypes/mosaics/langvoices`；`recommend` 保持 PHP 随机列表且 `pageinfo.total=0`；`latest/top*` 和 `tagid` 过滤时返回 `rows[].vodrow/user` 包装。
+- 测试：聚焦 `go test ./internal/service/minivod ./internal/server ./...` 通过；PHP-Go 对比 `/minivod/listing`、`/minivod/latest`、`/minivod/topday`、`/minivod/recommend`、`/minivod/listing-...-2`，以及 `topzan/topcomment/topplay/topcoin` 的 total、数量和前 5 个 vodid 通过；`recommend` 随机内容只按 shape 对比。
+
+### `/minivod/show/:vodid`
+
+- PHP: `c.api.minivod->show`
+- Go: `internal/handler.MiniVODHandler.Show`
+- Service: `internal/service/minivod.Service.Show`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 公共详情接口，不要求登录。
+- DB: 读取 `vods` 中 `showtype=1` 的小视频详情、`users` 作者、`vod_categories` 分类层级、`vod_tags/vod_tagmaps` 相关视频、随机猜你喜欢。
+- 兼容规则：小视频不存在或 `showtype!=1` 返回 `记录不存在或已删除`；作者不存在返回 `作者不存在或已被删除`；成功返回 `vodrow/categories/similarrows/likerows/voduser`。PHP 详情未传 `minivod=true` 给 `procRow2`，Go 保持普通 `/vod` 播放/下载/预览 URL 前缀。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；PHP-Go live 对比 `/minivod/show/0` 不存在分支和本地样本 `/minivod/show/56914`、`/minivod/show/76989` 作者缺失分支通过。本地导入库未找到作者存在的小视频样本，成功分支由 service 单测覆盖。
+
+### `/miniplaylog/listing`、`/miniplaylog/remove`
+
+- PHP: `c.api.minivod->history/historyDelete`
+- Go: `internal/handler.HistoryHandler.MiniPlayListing/MiniPlayRemove`
+- Service: `internal/service/history.Service`
+- Repository: `internal/repository/history.Repository`
+- Auth: 不强制登录；登录用户按 `uid`，游客按 `sid`。
+- DB: 登录用户读取 `minivod_viewlogs_%02d`，游客读取 `minivod_guestviewlogs_<sid首字符>`，再关联 `vods(showtype=1)`；删除按旧 PHP 模型语义从分表物理删除 `logid`。
+- 兼容规则：列表 `pagesize=20`，timeline 1/2/3 分别对应最近一周、近一个月、一个月前到三个月内；返回 `rows/pageinfo`，`playtime` 保持 PHP 相对时间/日期格式；列表行使用小视频 URL 前缀。
+- 测试：`go test ./internal/repository/history ./internal/service/history ./internal/server` 通过；`POST /miniplaylog/remove` 空参数 PHP-Go live 对比均为 `已删除0项`；本地旧 PHP `/miniplaylog/listing` 在 5 秒内无响应，新 Go smoke 返回空列表和正确分页 URL。
+
+### `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing`
+
+- PHP: `c.api.my->index/listing`
+- Go: `internal/handler.MiniVODHandler.Author`
+- Service: `internal/service/minivod.Service.AuthorListing`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 公共作者主页接口，不要求登录。
+- DB: 读取 `users` 作者信息和 `vods(authorid=?, showtype=1)` 小视频列表。
+- 兼容规则：用户不存在返回 `用户不存在或已被删除`；成功返回 `now/userrow/vodrows/pageinfo/orders`，`userrow.uniqkey` 使用 base36 大写，头像 URL 使用 `/C1/avatar/` 规则，列表行使用小视频 URL 前缀。
+- 测试：`go test ./internal/service/minivod ./internal/server ./...` 通过；PHP-Go live 对比 `/my/1?page=1` 的 `uid/uniqkey/avatar_url/pageinfo/orders/vodrows count` 通过，`/my/999999999` 错误分支通过。
 
 ### `/v2/amazing/{listing,recommend,hot,latest}`
 
@@ -797,3 +842,104 @@
 - DB: 读取 `promotion_taskboxs ORDER BY taskid ASC`、每个任务对应的 `promotion_taskboxlogs`、最近 30 条 `taskstatus=2` 的宝箱日志并关联用户。
 - 兼容规则：返回 `data.taskrows` 和 `data.logrows`；任务状态复刻推广任务、每日 22:00 五分钟、每周六 22:00 五分钟规则；缺失用户的 `username/nickname` 保持 `null`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/taskbox/index`，忽略动态 `xxx_api_auth` 后字段和状态一致；旧 PHP `/ucp/taskbox` 为空响应，Go 未注册该路径。
+
+### `/community/{list,recommend,hot,latest,favorite}`、`/community/*-:params`
+
+- PHP: `c.api.topic->list`
+- Go: `internal/handler.CommunityHandler.Listing`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 公共列表接口不要求登录；`favorite` 未登录返回 `retcode=-9999`、`errmsg=请登录后操作`，登录后按 `topic_favorites` 过滤。
+- Params: `$category_id:0-$type:0-$orderby:0-$page:1`；path page 为 `0` 时使用 query `page`。
+- DB: 读取 `topics`、`topic_images`、`topic_videos`、`vod_servers`；登录时补充 `topic_favorites/topic_ups` 标志。
+- 兼容规则：返回 `now/action/sample_params/params/rows/pageinfo`；支持 `recommend`、`hot`、`latest` 排序和 `category_id/type/orderby` 筛选；行内补 `images/content_images/videos/is_favorite/is_up`。
+- 测试：`go test ./internal/service/community ./internal/server ./...` 通过；PHP-Go live 对比 `/community/list` 主结构、首行 key/媒体字段、`/community/favorite` 未登录分支通过。
+
+### `/community/clisting`、`/community/clisting-:params`
+
+- PHP: `c.api.topic->clisting`
+- Go: `internal/handler.CommunityHandler.CommentListing`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 公共评论列表接口；登录时补充评论 `is_up`。
+- Params: `$orderby:0-$page:1`；query `orderby/page` 会覆盖默认值。
+- DB: 读取 `topics` 存在性、`topic_comments LEFT JOIN users` 根评论和子评论、`topic_comments_ups`。
+- 兼容规则：`tid` 不存在返回 `记录不存在或已被删除`；成功返回 `now/sample_params/params/rows/pageinfo`，评论行包含 `subrows`、相对时间和头像 URL。
+- 测试：`go test ./internal/service/community ./internal/server ./...` 通过；PHP-Go live 对比 `/community/clisting?tid=0` 错误分支和 `/community/clisting?tid=<列表首条 tid>` 空评论分页通过；修正默认 `params.orderby` 为数字 `0` 以匹配 PHP。
+
+### `/getGlobalData`
+
+- PHP: `c.api.index->getGlobalData`
+- Go: `internal/handler.IndexHandler.GetGlobalData`
+- Service: `internal/service/index.GlobalService`
+- Repository: `internal/repository/index.SettingsRepository`
+- Auth: 公共配置接口；旧 PHP 游客响应会追加动态 `xxx_api_auth`，Go 不生成该字段。
+- DB: 读取 `maintain_calldata` 中 `global.appver/search.hotwords/global.hottags/global.hotcategories/global.ads/global.popup*/*adgroup*` 等配置，读取 `settings` 中 `setting/baseset/user.regopt`。
+- 兼容规则：返回版本、热词、热门标签/分类、下载链接、弹窗、广告组、启动广告、推广文案、游戏/直播/AI/验证码等开关；`ver` query 会覆盖 `appver.AndroidVer/iOSVer`；资源路径用 `RESOURCE_BASE_URL` 拼接。
+- 测试：`go test ./internal/service/index ./internal/server ./...` 通过；PHP-Go live 对比 `/getGlobalData` 的核心 key shape、`webreg/appver/hottags/hotcategories/appdownurl/gameDisabled/smscaptcha` 和 `/getGlobalData?ver=1.2.3` 版本覆盖通过，忽略旧 PHP 动态 `xxx_api_auth` 和随机广告/推广 URL 差异。
+
+### `/aiundress`、`/aiundress/listing`
+
+- PHP: `c.api.aiundress->listing`
+- Go: `internal/handler.AIUndressHandler.Listing`
+- Service: `internal/service/aiundress.Service`
+- Repository: `internal/repository/aiundress.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录按旧 PHP 返回 `retcode=-1`、`errmsg=请先登录`。
+- DB: 读取 `ai_undress WHERE uid=? AND status<=4 AND status>0`，`module` 非 0 时追加筛选，`ORDER BY id DESC`，`pagesize=10`；同时读取 `settings.uuid=setting` 中的 `resurl_h5_ai`。
+- 兼容规则：返回 `data.rows/pageinfo`；`image/output` 空值保持空，已有 URL 原样返回，相对路径在 `APP_ENV=test` 下按旧 PHP 拼接 R2 域名，其他环境优先使用 `resurl_h5_ai` 并替换 `{rand}` 为中国时区 `yyyyMMddHH`。
+- 测试：`go test ./internal/service/aiundress ./internal/server` 通过；PHP-Go live 对比 `/aiundress`、`/aiundress/listing` 未登录分支一致，登录测试 token 下 `/aiundress/listing?page=1&module=4` 的 `retcode/total/rows/page_url/首行字段/image` 一致。
+
+### `/ucp/taskbox/taskboxlog`
+
+- PHP: `c.api.ucp.taskbox->taskboxlog`
+- Go: `internal/handler.UCPHandler.TaskboxLog`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 统计并读取 `promotion_taskboxlogs AS a LEFT JOIN users AS b ON b.uid=a.uid WHERE a.uid=? ORDER BY a.addtime DESC`，`pagesize=20`。
+- 兼容规则：返回 `data.logrows/pageinfo`；日志行复用任务宝箱首页的 `procRow2` 兼容字段，分页 URL 为 `/ucp/taskbox/taskboxlog?page=[?]`。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/taskbox/taskboxlog?page=1` 未登录分支一致，登录测试 token 下 `rows/total/page_url/首行内容` 一致。
+
+### `/onego/history`
+
+- PHP: `c.api.onego->history`
+- Go: `internal/handler.OneGoHandler.History`
+- Service: `internal/service/onego.Service`
+- Repository: `internal/repository/onego.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取当前用户 `one_go_orders`，按 PHP 的 `GROUP BY period, room_id ORDER BY id DESC` 获取代表订单；再读取同一期同房间的用户投注号和 `one_go_records` 开奖信息。
+- 兼容规则：返回 `data.data`；代表订单的 `id/uid/room_id/bet_coins` 转 int，补 `bet_no/win_no/win_coins`，不额外返回分页字段。
+- 测试：`go test ./internal/service/onego ./internal/server` 通过；PHP-Go live 对比 `/onego/history?page=1` 未登录分支和登录测试 token 空历史一致。
+
+### `/onego/bet_ranks`
+
+- PHP: `c.api.onego->bet_ranks`
+- Go: `internal/handler.OneGoHandler.BetRanks`
+- Service: `internal/service/onego.Service`
+- Repository: `internal/repository/onego.Repository`
+- Auth: 公共只读排行接口，不要求登录。
+- DB: 校验 `one_go_rooms.id` 和 `one_go_records(period, room_id)`，读取 `one_go_orders` 按 uid 汇总 `SUM(bet_coins)` 与 `COUNT(*)`。
+- 兼容规则：无效房间返回 `无效场次`，无效期号返回 `无效的活动期号`；成功行转 int，补 `room_name/user`，`total_bets` 按房间金币单价折算。
+- 测试：`go test ./internal/service/onego ./internal/server` 通过；PHP-Go live 对比无效房间、有效房间无效期号分支一致，当前本地库无投注订单样本，成功分支由 service fake 覆盖。
+
+### `/ucp/user`、`/ucp/user/index`
+
+- PHP: `c.api.ucp.user->index`
+- Go: `internal/handler.UCPHandler.UserIndex`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 通过 session 获取 uid 后重新读取 `users` 当前行，并读取 `user_groups` 计算 `gicon/isvip`。
+- 兼容规则：返回 `data.user`；复用 PHP `user.procRow2` 字段，包括 `uniqkey` 大写 base36、头像 URL、VIP 到期字段、金币/金豆缺失时为 0。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/user` 未登录分支一致，登录测试 token 下 user 字段集合和核心值一致。
+
+### `/ucp/bankcard`、`/ucp/bankcard/index`
+
+- PHP: `c.api.ucp.bankcard->index`
+- Go: `internal/handler.UCPHandler.BankcardIndex`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `user_bankcards WHERE uid=? ORDER BY isdef DESC` 和 `banks WHERE showtype=0 ORDER BY sortnum ASC, bankid ASC`。
+- 兼容规则：返回 `data.cardrows/maxallow/allowtype/banknames/bankRows`；`maxallow=3`，`allowtype=7`，`bankRows` 只保留 `bankid/bankname/coverpic` 并按 PHP 转换 `bankid` 为 int。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/bankcard` 未登录分支一致，登录测试 token 下 cardrows、bankRows、限制字段和首行内容一致。

@@ -27,12 +27,20 @@ func (h *HistoryHandler) DownListing(c *gin.Context) {
 	h.listing(c, historyRepo.KindDown, "获取下载记录失败")
 }
 
+func (h *HistoryHandler) MiniPlayListing(c *gin.Context) {
+	h.listing(c, historyRepo.KindMiniPlay, "获取小视频播放记录失败")
+}
+
 func (h *HistoryHandler) PlayRemove(c *gin.Context) {
 	h.remove(c, historyRepo.KindPlay, "删除播放记录失败")
 }
 
 func (h *HistoryHandler) DownRemove(c *gin.Context) {
 	h.remove(c, historyRepo.KindDown, "删除下载记录失败")
+}
+
+func (h *HistoryHandler) MiniPlayRemove(c *gin.Context) {
+	h.remove(c, historyRepo.KindMiniPlay, "删除小视频播放记录失败")
 }
 
 func (h *HistoryHandler) listing(c *gin.Context, kind historyRepo.Kind, errmsg string) {

@@ -79,6 +79,60 @@ LIMIT ? OFFSET 0`, limit)
 	return scanRows(rows)
 }
 
+func (r *Repository) CountTaskboxLogs(ctx context.Context, uid int) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM promotion_taskboxlogs WHERE 1=1 AND uid=?", uid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count taskbox logs: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) TaskboxLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	offset := limitOffset(page, pageSize)
+	rows, err := r.db.QueryContext(ctx, `
+SELECT a.*, b.username, b.nickname, b.avatar
+FROM promotion_taskboxlogs a
+LEFT JOIN users b ON b.uid=a.uid
+WHERE 1=1 AND a.uid=?
+ORDER BY a.addtime DESC
+LIMIT ? OFFSET ?`, uid, pageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query user taskbox logs: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM user_bankcards WHERE uid=? ORDER BY isdef DESC", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query bankcards: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) Banks(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM banks WHERE showtype=0 ORDER BY sortnum ASC, bankid ASC")
+	if err != nil {
+		return nil, fmt.Errorf("query banks: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
 func (r *Repository) CountPayments(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil
@@ -837,6 +891,16 @@ func normalizeSQLValue(value interface{}) interface{} {
 func atoi(value interface{}) int {
 	parsed, _ := strconv.Atoi(fmt.Sprint(value))
 	return parsed
+}
+
+func limitOffset(page int, pageSize int) int {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	return (page - 1) * pageSize
 }
 
 func str(value interface{}) string {

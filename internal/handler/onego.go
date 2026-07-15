@@ -87,11 +87,38 @@ func (h *OneGoHandler) Hash(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *OneGoHandler) History(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, retcode, errmsg, err := h.service.History(c.Request.Context(), authToken(c), page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *OneGoHandler) Lucky(c *gin.Context) {
 	data, err := h.service.Lucky(c.Request.Context())
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取一元购幸运榜失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *OneGoHandler) BetRanks(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	roomID, _ := strconv.Atoi(inputValue(c, "roomid"))
+	data, err := h.service.BetRanks(c.Request.Context(), inputValue(c, "period"), roomID, page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		h.writeOneGoError(c, err, "获取一元购押注排行失败")
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
@@ -117,6 +144,10 @@ func (h *OneGoHandler) writeOneGoError(c *gin.Context, err error, fallback strin
 		c.JSON(http.StatusOK, oneGoError("活动已结束或尚未开始"))
 	case errors.Is(err, onegoService.ErrNoData):
 		c.JSON(http.StatusOK, oneGoError("暂无数据"))
+	case errors.Is(err, onegoService.ErrInvalidRoom):
+		c.JSON(http.StatusOK, oneGoError("无效场次"))
+	case errors.Is(err, onegoService.ErrInvalidPeriod):
+		c.JSON(http.StatusOK, oneGoError("无效的活动期号"))
 	default:
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(fallback))
 	}

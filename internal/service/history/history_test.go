@@ -51,6 +51,13 @@ func (fakeVODProcessor) ProcessRows(_ context.Context, rows []map[string]interfa
 	return rows, nil
 }
 
+func (fakeVODProcessor) ProcessMiniRowsFullPrice(_ context.Context, rows []map[string]interface{}, _ bool) ([]map[string]interface{}, error) {
+	for _, row := range rows {
+		row["mini_processed"] = "1"
+	}
+	return rows, nil
+}
+
 func TestListingUsesGuestSIDWhenNotLoggedIn(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, store, fakeVODProcessor{})
@@ -139,5 +146,29 @@ func TestRemoveWithNoIDsMatchesPHPSuccess(t *testing.T) {
 	}
 	if msg != "已删除0项" || len(store.removed) != 0 {
 		t.Fatalf("msg=%q removed=%#v", msg, store.removed)
+	}
+}
+
+func TestMiniPlayListingUsesMiniProcessorAndPageURL(t *testing.T) {
+	store := &fakeStore{
+		user:  map[string]interface{}{"uid": "7", "sid": "sid"},
+		total: 1,
+		rows:  []map[string]interface{}{{"vodid": "9", "logid": "3", "playtime": "1699999940"}},
+	}
+	service := NewService(store, store, fakeVODProcessor{})
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	data, err := service.Listing(context.Background(), "token", historyRepo.KindMiniPlay, 1, 1, false)
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if store.kind != historyRepo.KindMiniPlay || store.uid != 7 {
+		t.Fatalf("lookup = kind:%s uid:%d", store.kind, store.uid)
+	}
+	if data.PageInfo["page_url"] != "/miniplaylog/listing?timeline=1&page=[?]" {
+		t.Fatalf("pageinfo = %#v", data.PageInfo)
+	}
+	if data.Rows[0]["mini_processed"] != "1" || data.Rows[0]["playtime"] != "1分钟前" {
+		t.Fatalf("rows = %#v", data.Rows)
 	}
 }

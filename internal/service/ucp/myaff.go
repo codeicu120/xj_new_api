@@ -46,6 +46,8 @@ type UserStore interface {
 	MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error)
+	Banks(ctx context.Context) ([]map[string]interface{}, error)
 	CountMessages(ctx context.Context, uid int, cid int) (int, error)
 	Messages(ctx context.Context, uid int, cid int, page int, pageSize int) ([]map[string]interface{}, error)
 	SetMsgRead(ctx context.Context, uid int, cid int) error
@@ -62,6 +64,8 @@ type UserStore interface {
 	Taskboxes(ctx context.Context) ([]map[string]interface{}, error)
 	TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error)
 	TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error)
+	CountTaskboxLogs(ctx context.Context, uid int) (int, error)
+	TaskboxLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 }
 
 type Service struct {
@@ -207,6 +211,48 @@ func (s *Service) Index(ctx context.Context, token string) (domain.UCPIndexData,
 		UInfo:  uinfo,
 		Signed: boolInt(signedCount > 0),
 		Groups: indexGroups(groups),
+	}, 0, "", nil
+}
+
+func (s *Service) UserIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
+	authUser, groups, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(authUser["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	user, err := s.store.UserByID(ctx, uid)
+	if err != nil {
+		return nil, -1, "获取用户资料失败", err
+	}
+	return map[string]interface{}{"user": singleUser(s.processUsers([]map[string]interface{}{user}, groups))}, 0, "", nil
+}
+
+func (s *Service) BankcardIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	cardRows, err := s.store.Bankcards(ctx, uid)
+	if err != nil {
+		return nil, -1, "获取银行卡失败", err
+	}
+	bankRows, err := s.store.Banks(ctx)
+	if err != nil {
+		return nil, -1, "获取银行卡失败", err
+	}
+	return map[string]interface{}{
+		"cardrows":  cardRows,
+		"maxallow":  3,
+		"allowtype": 7,
+		"banknames": []string{"工商银行", "建设银行", "中国银行", "农业银行", "交通银行", "招商银行", "中信银行", "上海浦东发展银行", "兴业银行", "民生银行"},
+		"bankRows":  s.processBankRows(bankRows),
 	}, 0, "", nil
 }
 
@@ -717,6 +763,22 @@ func (s *Service) processUsers(rows []map[string]interface{}, groups []map[strin
 			"duetime":         duetime,
 			"dueday":          dueday,
 			"recommend_total": atoi(row["recommend_total"]),
+		})
+	}
+	return out
+}
+
+func (s *Service) processBankRows(rows []map[string]interface{}) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		coverpic := str(row["coverpic"])
+		if coverpic != "" && !strings.HasPrefix(coverpic, "http://") && !strings.HasPrefix(coverpic, "https://") {
+			coverpic = s.resourceBaseURL + "/" + strings.TrimLeft(coverpic, "/")
+		}
+		out = append(out, map[string]interface{}{
+			"bankid":   atoi(row["bankid"]),
+			"bankname": str(row["bankname"]),
+			"coverpic": coverpic,
 		})
 	}
 	return out

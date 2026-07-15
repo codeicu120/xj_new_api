@@ -10,11 +10,12 @@ import (
 )
 
 type IndexHandler struct {
-	certService *indexService.CertService
+	certService   *indexService.CertService
+	globalService *indexService.GlobalService
 }
 
-func NewIndexHandler(certService *indexService.CertService) *IndexHandler {
-	return &IndexHandler{certService: certService}
+func NewIndexHandler(certService *indexService.CertService, globalService *indexService.GlobalService) *IndexHandler {
+	return &IndexHandler{certService: certService, globalService: globalService}
 }
 
 func (h *IndexHandler) GetCertUUID(c *gin.Context) {
@@ -29,4 +30,28 @@ func (h *IndexHandler) GetCertUUID(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(map[string]interface{}{"data": data}))
+}
+
+func (h *IndexHandler) GetGlobalData(c *gin.Context) {
+	data, err := h.globalService.GetGlobalData(c.Request.Context(), indexService.GlobalRequest{
+		Pkg:       firstNonEmpty(c.Query("pkg"), c.GetHeader("x-channel")),
+		Version:   c.Query("ver"),
+		XVersion:  c.GetHeader("x-version"),
+		UserAgent: c.GetHeader("user-agent"),
+	})
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取全局配置失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

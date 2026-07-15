@@ -42,6 +42,10 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读随机推广海报；奖励/签到 task action 未接管。 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读任务宝箱状态；开启宝箱奖励写入未接管。 |
+| `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志，分页 URL 为 `/ucp/taskbox/taskboxlog?page=[?]`；开启宝箱奖励写入未接管。 |
+| `/onego/history` | `c.api.onego->history` | 本轮完成 | 登录只读本人一元购投注历史；投注写入 `/onego/bet` 未接管。 |
+| `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | 本轮完成 | 登录只读当前用户资料；资料修改、密码和邮箱/手机验证码 action 未接管。 |
+| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | 本轮完成 | 登录只读提款地址和后台银行列表；新增、修改、删除提款地址 action 未接管。 |
 
 ## 暂缓
 

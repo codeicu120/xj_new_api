@@ -13,10 +13,12 @@ import (
 	"xj_comp/internal/config"
 	"xj_comp/internal/handler"
 	activityRepo "xj_comp/internal/repository/activity"
+	aiundressRepo "xj_comp/internal/repository/aiundress"
 	amazingRepo "xj_comp/internal/repository/amazing"
 	artRepo "xj_comp/internal/repository/art"
 	boughtRepo "xj_comp/internal/repository/bought"
 	commentRepo "xj_comp/internal/repository/comment"
+	communityRepo "xj_comp/internal/repository/community"
 	exploreRepo "xj_comp/internal/repository/explore"
 	favoriteRepo "xj_comp/internal/repository/favorite"
 	gameRepo "xj_comp/internal/repository/game"
@@ -24,6 +26,7 @@ import (
 	historyRepo "xj_comp/internal/repository/history"
 	indexRepo "xj_comp/internal/repository/index"
 	inviteRepo "xj_comp/internal/repository/invite"
+	minivodRepo "xj_comp/internal/repository/minivod"
 	onegoRepo "xj_comp/internal/repository/onego"
 	soRepo "xj_comp/internal/repository/so"
 	statsRepo "xj_comp/internal/repository/stats"
@@ -31,12 +34,14 @@ import (
 	userRepo "xj_comp/internal/repository/user"
 	vodRepo "xj_comp/internal/repository/vod"
 	activityService "xj_comp/internal/service/activity"
+	aiundressService "xj_comp/internal/service/aiundress"
 	amazingService "xj_comp/internal/service/amazing"
 	artService "xj_comp/internal/service/art"
 	attachService "xj_comp/internal/service/attach"
 	boughtService "xj_comp/internal/service/bought"
 	captchaService "xj_comp/internal/service/captcha"
 	commentService "xj_comp/internal/service/comment"
+	communityService "xj_comp/internal/service/community"
 	exploreService "xj_comp/internal/service/explore"
 	favoriteService "xj_comp/internal/service/favorite"
 	gameService "xj_comp/internal/service/game"
@@ -45,6 +50,7 @@ import (
 	indexService "xj_comp/internal/service/index"
 	inviteService "xj_comp/internal/service/invite"
 	iplocService "xj_comp/internal/service/iploc"
+	minivodService "xj_comp/internal/service/minivod"
 	onegoService "xj_comp/internal/service/onego"
 	openService "xj_comp/internal/service/open"
 	picService "xj_comp/internal/service/pic"
@@ -98,7 +104,8 @@ func NewRouter(opts Options) *gin.Engine {
 		gameService.NewBroadcastService(gameRepo.NewBroadcastRepository(db)),
 		gameService.NewWaliService(gameRepo.NewPlatformRepository(db), userRepository, nil),
 	)
-	indexHandler := handler.NewIndexHandler(indexService.NewCertService(indexRepo.NewSettingsRepository(db), nil))
+	indexRepository := indexRepo.NewSettingsRepository(db)
+	indexHandler := handler.NewIndexHandler(indexService.NewCertService(indexRepository, nil), indexService.NewGlobalService(indexRepository, cfg.ResourceBaseURL))
 	amazingHandler := handler.NewAmazingHandler(
 		amazingService.NewCategoryService(amazingRepo.NewCategoryRepository(db)),
 		amazingService.NewListingService(amazingRepo.NewSoftwareRepository(db), cfg.ResourceBaseURL),
@@ -107,11 +114,13 @@ func NewRouter(opts Options) *gin.Engine {
 	vodRepository := vodRepo.NewListingRepository(db)
 	vodListingService := vodService.NewListingService(vodRepository, cfg.ResourceBaseURL, cfg.VIPDiscount)
 	vodHandler := handler.NewVODHandler(vodListingService)
+	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db), vodListingService, cfg.ResourceBaseURL))
 	specialHandler := handler.NewSpecialHandler(vodService.NewSpecialService(vodRepository, userRepository, cfg.ResourceBaseURL, 100))
 	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepo.NewRepository(db)}, cfg.ResourceBaseURL))
 	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepository, vodRepository))
 	commentHandler := handler.NewCommentHandler(commentService.NewService(commentRepo.NewRepository(db), cfg.ResourceBaseURL))
-	onegoHandler := handler.NewOneGoHandler(onegoService.NewService(onegoRepo.NewRepository(db)))
+	communityHandler := handler.NewCommunityHandler(communityService.NewService(userRepository, communityRepo.NewRepository(db), cfg.ResourceBaseURL))
+	onegoHandler := handler.NewOneGoHandler(onegoService.NewService(onegoRepo.NewRepository(db), userRepository))
 	artHandler := handler.NewArtHandler(artService.NewService(artRepo.NewRepository(db), cfg.ResourceBaseURL))
 	attachHandler := handler.NewAttachHandler(attachService.NewService(userRepository))
 	picHandler := handler.NewPicHandler(picService.NewService(cfg.UploadPath))
@@ -125,6 +134,7 @@ func NewRouter(opts Options) *gin.Engine {
 	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService))
 	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
+	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -155,6 +165,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/attach/index", attachHandler.Index)
 	router.Any("/attach/upavatar", attachHandler.UpAvatar)
 	router.Any("/getLikeRows", vodHandler.LikeRows)
+	router.Any("/getGlobalData", indexHandler.GetGlobalData)
 	router.Any("/search", vodHandler.Search)
 	router.Any("/minisearch", vodHandler.MiniSearch)
 	router.Any("/shortcutstats/add", statsHandler.ShortcutAdd)
@@ -184,6 +195,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/downlog/index", handler.EmptyHTML)
 	router.Any("/downlog/listing", historyHandler.DownListing)
 	router.Any("/downlog/remove", historyHandler.DownRemove)
+	router.Any("/miniplaylog/listing", historyHandler.MiniPlayListing)
+	router.Any("/miniplaylog/remove", historyHandler.MiniPlayRemove)
 	router.Any("/favorite", handler.EmptyHTML)
 	router.Any("/favorite/index", handler.EmptyHTML)
 	router.Any("/favorite/listing", favoriteHandler.Listing)
@@ -200,9 +213,15 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/explore/signtask/index", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask/index", exploreHandler.EmptyOK)
+	router.Any("/aiundress", aiundressHandler.Listing)
+	router.Any("/aiundress/listing", aiundressHandler.Listing)
 	router.Any("/aiundress/index", handler.EmptyHTML)
 	router.Any("/getCertUuid", indexHandler.GetCertUUID)
 	router.Any("/ucp/index", ucpHandler.Index)
+	router.Any("/ucp/user", ucpHandler.UserIndex)
+	router.Any("/ucp/user/index", ucpHandler.UserIndex)
+	router.Any("/ucp/bankcard", ucpHandler.BankcardIndex)
+	router.Any("/ucp/bankcard/index", ucpHandler.BankcardIndex)
 	router.GET("/ucp/feedback", ucpHandler.FeedbackListing)
 	router.GET("/ucp/feedback/index", ucpHandler.FeedbackIndex)
 	router.GET("/ucp/feedback/listing", ucpHandler.FeedbackNewListing)
@@ -217,6 +236,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/rolltitle", ucpHandler.RollTitle)
 	router.Any("/ucp/task/sharepic", ucpHandler.TaskSharePic)
 	router.Any("/ucp/taskbox/index", ucpHandler.TaskboxIndex)
+	router.Any("/ucp/taskbox/taskboxlog", ucpHandler.TaskboxLog)
 	router.Any("/ucp/affcenter", ucpHandler.AffCenter)
 	router.Any("/ucp/payment", ucpHandler.PaymentListing)
 	router.Any("/ucp/payment/index", ucpHandler.PaymentListing)
@@ -234,6 +254,12 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/sendfile/play/:file", sendfileHandler.Play)
 	router.Any("/sendfile/down/:file", sendfileHandler.Down)
 	router.Any("/comment/listing-:params", commentHandler.Listing)
+	for _, action := range []string{"list", "recommend", "hot", "latest", "favorite"} {
+		router.Any("/community/"+action, communityHandler.Listing)
+		router.Any("/community/"+action+"-:params", communityHandler.Listing)
+	}
+	router.Any("/community/clisting", communityHandler.CommentListing)
+	router.Any("/community/clisting-:params", communityHandler.CommentListing)
 	router.Any("/special/index", specialHandler.Index)
 	router.Any("/special/listing", specialHandler.Listing)
 	router.Any("/special/listing-:params", specialHandler.Listing)
@@ -245,12 +271,21 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/onego/current", onegoHandler.Current)
 	router.Any("/onego/last", onegoHandler.Last)
 	router.Any("/onego/hash", onegoHandler.Hash)
+	router.Any("/onego/history", onegoHandler.History)
 	router.Any("/onego/lucky", onegoHandler.Lucky)
+	router.Any("/onego/bet_ranks", onegoHandler.BetRanks)
 	router.Any("/onego/marquee", onegoHandler.Marquee)
 	for _, action := range []string{"listing", "recommend", "hot", "latest"} {
 		router.Any("/vod/"+action, vodHandler.Listing)
 		router.Any("/vod/"+action+"-:params", vodHandler.Listing)
 	}
+	for _, action := range []string{"listing", "recommend", "hot", "latest", "topzan", "topcomment", "topplay", "topcoin", "topnew", "topday", "topweek", "topmonth"} {
+		router.Any("/minivod/"+action, minivodHandler.Listing)
+		router.Any("/minivod/"+action+"-:params", minivodHandler.Listing)
+	}
+	router.Any("/minivod/show/:vodid", minivodHandler.Show)
+	router.Any("/my/:authorid", minivodHandler.Author)
+	router.Any("/my/:authorid/:action", minivodHandler.Author)
 	for _, size := range []string{"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "M", "N"} {
 		router.Any("/"+size+"/*uri", picHandler.Index)
 	}

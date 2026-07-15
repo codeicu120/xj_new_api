@@ -99,6 +99,41 @@ func (r *Repository) UserWins(ctx context.Context, uid int) ([]map[string]interf
 	return r.queryRows(ctx, "SELECT COUNT(*) as wins, room_id FROM one_go_records WHERE winner = ? GROUP BY room_id", uid)
 }
 
+func (r *Repository) UserOrdersGrouped(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT * FROM one_go_orders WHERE 1=1 AND uid=? GROUP BY period, room_id ORDER BY id DESC LIMIT ? OFFSET ?", uid, pageSize, offset(page, pageSize))
+}
+
+func (r *Repository) UserOrdersByPeriod(ctx context.Context, period string, roomID int, uid int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT * FROM one_go_orders WHERE period=? AND room_id=? AND uid=?", period, roomID, uid)
+}
+
+func (r *Repository) RecordByPeriod(ctx context.Context, period string, roomID int) (map[string]interface{}, error) {
+	if r.db == nil || period == "" || roomID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM one_go_records WHERE period=? AND room_id=?", period, roomID)
+	if err != nil {
+		return nil, fmt.Errorf("query onego record by period: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) RankBetCoins(ctx context.Context, period string, roomID int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT uid, room_id, SUM(bet_coins) as total_coins, COUNT(*) as total_bets FROM one_go_orders WHERE period=? AND room_id=? GROUP BY uid ORDER BY total_coins DESC LIMIT ? OFFSET ?", period, roomID, pageSize, offset(page, pageSize))
+}
+
 func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil

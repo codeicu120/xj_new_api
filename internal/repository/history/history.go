@@ -11,8 +11,9 @@ import (
 type Kind string
 
 const (
-	KindPlay Kind = "play"
-	KindDown Kind = "down"
+	KindPlay     Kind = "play"
+	KindDown     Kind = "down"
+	KindMiniPlay Kind = "mini_play"
 )
 
 type Repository struct {
@@ -31,20 +32,29 @@ func (r *Repository) Items(ctx context.Context, kind Kind, uid int, sid string, 
 	if spec.table == "" {
 		return 0, []map[string]interface{}{}, nil
 	}
+	if kind == KindMiniPlay {
+		spec = miniPlaySpec(uid, sid)
+	}
 	where, args := historyWhere(kind, spec, uid, sid, timeline, now)
 	total, err := r.count(ctx, spec.table, where, args)
 	if err != nil {
+		if isMissingTable(err) && kind == KindMiniPlay {
+			return 0, []map[string]interface{}{}, nil
+		}
 		return 0, nil, err
 	}
 	offset := limitOffset(total, pageSize, page)
 	logRows, err := r.queryRows(ctx, "SELECT * FROM "+spec.table+" WHERE "+where+" ORDER BY "+spec.timeField+" DESC LIMIT ? OFFSET ?", append(args, pageSize, offset)...)
 	if err != nil {
+		if isMissingTable(err) && kind == KindMiniPlay {
+			return 0, []map[string]interface{}{}, nil
+		}
 		return 0, nil, fmt.Errorf("query history logs: %w", err)
 	}
 	if len(logRows) == 0 {
 		return total, []map[string]interface{}{}, nil
 	}
-	vodRows, err := r.vodsByIDs(ctx, vodIDs(logRows))
+	vodRows, err := r.vodsByIDs(ctx, vodIDs(logRows), kind == KindMiniPlay)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -58,6 +68,21 @@ func (r *Repository) Remove(ctx context.Context, kind Kind, uid int, sid string,
 	spec := specFor(kind, uid > 0)
 	if spec.table == "" {
 		return 0, nil
+	}
+	if kind == KindMiniPlay {
+		spec = miniPlaySpec(uid, sid)
+		result, err := r.db.ExecContext(ctx, "DELETE FROM "+spec.table+" WHERE "+spec.owner+"=? AND logid=?", ownerValue(spec.owner, uid, sid), vodid)
+		if err != nil {
+			if isMissingTable(err) {
+				return 0, nil
+			}
+			return 0, fmt.Errorf("remove mini playlog: %w", err)
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("remove mini playlog rows affected: %w", err)
+		}
+		return int(count), nil
 	}
 	if kind == KindPlay && uid > 0 {
 		tx, err := r.db.BeginTx(ctx, nil)
@@ -106,9 +131,22 @@ func specFor(kind Kind, user bool) tableSpec {
 			return tableSpec{table: "vod_downlogs", owner: "uid", timeField: "downtime"}
 		}
 		return tableSpec{table: "vod_guest_downlogs", owner: "sid", timeField: "downtime"}
+	case KindMiniPlay:
+		return tableSpec{owner: ternaryString(user, "uid", "sid"), timeField: "playtime"}
 	default:
 		return tableSpec{}
 	}
+}
+
+func miniPlaySpec(uid int, sid string) tableSpec {
+	if uid > 0 {
+		return tableSpec{table: fmt.Sprintf("minivod_viewlogs_%02d", uid%100), owner: "uid", timeField: "playtime"}
+	}
+	suffix := "0"
+	if sid != "" {
+		suffix = sid[:1]
+	}
+	return tableSpec{table: "minivod_guestviewlogs_" + suffix, owner: "sid", timeField: "playtime"}
 }
 
 func execRemove(ctx context.Context, tx *sql.Tx, table string, owner string, uid int, sid string, vodid int) (int, error) {
@@ -131,7 +169,10 @@ func ownerValue(owner string, uid int, sid string) interface{} {
 }
 
 func historyWhere(kind Kind, spec tableSpec, uid int, sid string, timeline int, now int64) (string, []interface{}) {
-	where := spec.owner + "=? AND showtype=0"
+	where := spec.owner + "=?"
+	if kind != KindMiniPlay {
+		where += " AND showtype=0"
+	}
 	args := []interface{}{sid}
 	if spec.owner == "uid" {
 		args[0] = uid
@@ -169,6 +210,18 @@ func historyWhere(kind Kind, spec tableSpec, uid int, sid string, timeline int, 
 			where += " AND downtime<?"
 			args = append(args, now-86400*30)
 		}
+	case KindMiniPlay:
+		switch timeline {
+		case 1:
+			where += " AND playtime>?"
+			args = append(args, now-86400*7)
+		case 2:
+			where += " AND playtime BETWEEN ? AND ?"
+			args = append(args, now-86400*30, now-86400*7)
+		case 3:
+			where += " AND playtime BETWEEN ? AND ?"
+			args = append(args, now-86400*90, now-86400*30)
+		}
 	}
 	return where, args
 }
@@ -181,7 +234,7 @@ func (r *Repository) count(ctx context.Context, table string, where string, args
 	return total, nil
 }
 
-func (r *Repository) vodsByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error) {
+func (r *Repository) vodsByIDs(ctx context.Context, ids []int, mini bool) ([]map[string]interface{}, error) {
 	if len(ids) == 0 {
 		return []map[string]interface{}{}, nil
 	}
@@ -197,7 +250,12 @@ func (r *Repository) vodsByIDs(ctx context.Context, ids []int) ([]map[string]int
 	if len(args) == 0 {
 		return []map[string]interface{}{}, nil
 	}
-	rows, err := r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+strings.Join(placeholders, ",")+") AND showtype=0", args...)
+	showType := 0
+	if mini {
+		showType = 1
+	}
+	args = append(args, showType)
+	rows, err := r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+strings.Join(placeholders, ",")+") AND showtype=?", args...)
 	if err != nil {
 		return nil, fmt.Errorf("query history vods: %w", err)
 	}
@@ -282,6 +340,17 @@ func normalizeSQLValue(value interface{}) interface{} {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func isMissingTable(err error) bool {
+	return err != nil && (strings.Contains(err.Error(), "Error 1146") || strings.Contains(err.Error(), "doesn't exist"))
+}
+
+func ternaryString(ok bool, yes string, no string) string {
+	if ok {
+		return yes
+	}
+	return no
 }
 
 func limitOffset(total int, pageSize int, page int) int {

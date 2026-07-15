@@ -61,16 +61,28 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/bought/listing`、`/bought/delete` | ANY | `BoughtHandler.Listing/Delete` |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
 | `/playlog/listing`、`/playlog/remove`、`/downlog/listing`、`/downlog/remove` | ANY | `HistoryHandler` |
+| `/miniplaylog/listing`、`/miniplaylog/remove` | ANY | `HistoryHandler` |
 | `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | ANY | `handler.EmptyHTML` |
 | `/favorite/listing`、`/favorite/remove`、`/minifavorite/listing`、`/minifavorite/remove` | ANY | `FavoriteHandler` |
+| `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest`、`/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` | ANY | `MiniVODHandler.Listing` |
+| `/minivod/*-:params`（上述 action） | ANY | `MiniVODHandler.Listing` |
+| `/minivod/show/:vodid` | ANY | `MiniVODHandler.Show` |
+| `/my/:authorid`、`/my/:authorid/:action` | ANY | `MiniVODHandler.Author` |
+| `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` | ANY | `CommunityHandler.Listing` |
+| `/community/*-:params`（上述 action） | ANY | `CommunityHandler.Listing` |
+| `/community/clisting`、`/community/clisting-:params` | ANY | `CommunityHandler.CommentListing` |
 | `/explore/index` | ANY | `ExploreHandler.Index` |
 | `/explore/notification`、`/explore/notification/index` | ANY | `ExploreHandler.EmptyOK` |
 | `/explore/notification/clean` | ANY | `ExploreHandler.CleanNotification` |
 | `/explore/signtask`、`/explore/signtask/index` | ANY | `ExploreHandler.EmptyOK` |
 | `/explore/vodtask`、`/explore/vodtask/index` | ANY | `ExploreHandler.EmptyOK` |
+| `/aiundress`、`/aiundress/listing` | ANY | `AIUndressHandler.Listing` |
 | `/aiundress/index` | ANY | `handler.EmptyHTML` |
 | `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
+| `/getGlobalData` | ANY | `IndexHandler.GetGlobalData` |
 | `/ucp/index` | ANY | `UCPHandler.Index` |
+| `/ucp/user`、`/ucp/user/index` | ANY | `UCPHandler.UserIndex` |
+| `/ucp/bankcard`、`/ucp/bankcard/index` | ANY | `UCPHandler.BankcardIndex` |
 | `/ucp/feedback` | GET | `UCPHandler.FeedbackListing` |
 | `/ucp/feedback/index` | GET | `UCPHandler.FeedbackIndex` |
 | `/ucp/feedback/listing` | GET | `UCPHandler.FeedbackNewListing` |
@@ -81,7 +93,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/myaff` | ANY | `UCPHandler.MyAff` |
 | `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
 | `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
-| `/ucp/taskbox/index` | ANY | `UCPHandler.TaskboxIndex` |
+| `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
 | `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
@@ -98,7 +110,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/special/listing`、`/special/listing-:params` | ANY | `SpecialHandler.Listing` |
 | `/special/detail/:spid`、`/special/detail/:spid-:params` | ANY | `SpecialHandler.Detail` |
 | `/special/up/:spid`、`/special/down/:spid` | ANY | `SpecialHandler.Up/Down` |
-| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee` | ANY | `OneGoHandler` |
+| `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee` | ANY | `OneGoHandler` |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | ANY | `VODHandler.Listing` |
 | `/vod/listing-:params`、`/vod/recommend-:params`、`/vod/hot-:params`、`/vod/latest-:params` | ANY | `VODHandler.Listing` |
 | `/v2/amazing/categories` | ANY | `AmazingHandler.Categories` |
@@ -173,7 +185,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
 | `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
+| `/onego/history` | `c.api.onego->history` | `OneGoHandler.History` | 已重构，对比通过；登录只读本人投注历史，未登录 `retcode=-9999` |
 | `/onego/lucky` | `c.api.onego->lucky` | `OneGoHandler.Lucky` | 已重构，对比通过；一元购幸运榜公共只读，保留旧 PHP 排行 SQL 未分页行为 |
+| `/onego/bet_ranks` | `c.api.onego->bet_ranks` | `OneGoHandler.BetRanks` | 已重构；押注排行只读，错误分支 live 对比通过，本地无订单样本成功分支由 fake 覆盖 |
 | `/onego/marquee` | `c.api.onego->marquee` | `OneGoHandler.Marquee` | 已重构，对比通过；一元购跑马灯公共只读，按最近已开奖期生成中奖消息 |
 
 ### v2 公共接口
@@ -235,6 +249,27 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minifavorite/listing` | `c.api.minifavorite->listing` | `FavoriteHandler.MiniListing` | 已重构；登录只读小视频收藏，复用 mini VOD 行处理并补 `isfavorite=1` |
 | `/minifavorite/remove` | `c.api.minifavorite->remove` | `FavoriteHandler.MiniRemove` | 已重构；登录删除小视频收藏，空 `vodids` 返回 `已删除0项` |
 
+### 小视频、作者页
+
+| 接口 | PHP handler | Go 入口 | 状态 |
+| --- | --- | --- | --- |
+| `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构，对比通过；支持筛选、排序、分页、随机推荐和 latest 用户包装 rows |
+| `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构，对比通过；setting 序列化排行榜、日/周/月榜和 rows 用户包装 |
+| `/minivod/*-:params`（上述 action） | `c.api.minivod->listing` | `MiniVODHandler.Listing` | 已重构；参数模板 `$cateid-$areaid-$yearid-$tagid-$definition-$duration-$freetype-$mosaic-$langvoice-$orderby-$page` |
+| `/minivod/show/:vodid` | `c.api.minivod->show` | `MiniVODHandler.Show` | 已重构；读取 `showtype=1` 小视频详情、作者、分类层级、相关视频和猜你喜欢；本地旧库缺作者样本的错误分支对比通过，成功分支单测覆盖 |
+| `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
+| `/miniplaylog/remove` | `c.api.minivod->historyDelete` | `HistoryHandler.MiniPlayRemove` | 已重构；按 PHP 模型语义用输入 `vodid/vodids` 删除 `logid`，空参数 live 对比通过 |
+| `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | `MiniVODHandler.Author` | 已重构，对比通过；作者主页小视频列表，返回 `now/userrow/vodrows/pageinfo/orders` |
+
+### 社区、HGame、AI
+
+| 接口 | PHP handler | Go 入口 | 状态 |
+| --- | --- | --- | --- |
+| `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest` | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构，对比通过；主题列表、推荐/热门/最新、分类/type/分页和媒体字段 |
+| `/community/favorite` | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构，对比通过；未登录 `retcode=-9999`，登录按 `topic_favorites` 过滤 |
+| `/community/*-:params`（上述 action） | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构；参数模板 `$category_id-$type-$orderby-$page` |
+| `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | `CommunityHandler.CommentListing` | 已重构，对比通过；评论树列表，`tid` 不存在分支一致 |
+
 ### 搜索、专题、公告
 
 | 接口 | PHP handler | Go 入口 | 状态 |
@@ -248,7 +283,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/art`、`/art/index` | `c.api.art->index` | `ArtHandler.Index` | 已重构，对比通过；旧 PHP 空方法，返回 text/html 空 body |
 | `/art/announce` | `c.api.art->announce` | `ArtHandler.Announce` | 已重构，对比通过；公告列表，保留旧 PHP 未定义 `$action` 导致的 `/art/?page=[?]` 分页 URL |
 | `/art/show` | `c.api.art->show` | `ArtHandler.Show` | 已重构，对比通过；公告/文章详情，成功和不存在错误分支一致 |
+| `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
+| `/getGlobalData` | `c.api.index->getGlobalData` | `IndexHandler.GetGlobalData` | 已重构；全局配置/版本/广告/弹窗/开关聚合，核心 key shape 和版本覆盖对比通过 |
 
 ### 需要登录但不需要验证码
 
@@ -274,8 +311,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
+| `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | `UCPHandler.UserIndex` | 已重构，对比通过；登录只读当前用户资料，复用 PHP user row 字段 |
+| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表，写入 action 未接管 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | `UCPHandler.TaskSharePic` | 已重构，对比通过；公共随机推广海报，只读无奖励写入 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
+| `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
 
 ### 个人中心公开只读
 
@@ -313,7 +353,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/init` | `c.api.index->init` | 未重构；依赖登录/游客初始化、系统设置、版本、广告、全局数据、通知等 |
 | `/`、`/index` | `c.api.index->index` | 未重构；首页聚合，多表、多广告配置 |
-| `/getGlobalData` | `c.api.index->getGlobalData` | 未重构；依赖系统设置、维护配置、广告、弹窗、版本和外链 |
 | `/getCover` | `c.api.index->getCover` | 未重构；Redis、外部封面服务、AES 加密 |
 | `/sms/:action?`（除 `/sms`、`/sms/index`） | `c.api.sms->$action` | 未重构；剩余 `sendv/sendu` 涉及验证码、短信平台、频控 |
 | `/email/:action?`（除 `/email`、`/email/index`） | `c.api.email->$action` | 未重构；剩余 `send` 涉及验证码、邮件平台、频控 |
@@ -339,19 +378,13 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` | `c.api.minivod->listing` | 未重构 |
-| `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` | `c.api.minivod->listing` | 未重构 |
-| `/minivod/*-:params` | `c.api.minivod->listing` | 未重构 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | 未重构 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | 未重构 |
-| `/minivod/show/:vodid`、`/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->$action` | 未重构 |
+| `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->$action` | 未重构；用户行为/写入 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->$action` | 未重构；播放/下载权限 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 未重构；金币打赏 |
-| `/miniplaylog/listing` | `c.api.minivod->history` | 未重构 |
-| `/miniplaylog/remove` | `c.api.minivod->historyDelete` | 未重构；写入 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 未重构 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
-| `/my/:authorid/:action?` | `c.api.my->$action` | 未重构；作者页/小视频 |
 
 ### 用户账号
 
@@ -378,14 +411,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `POST /ucp/feedback` | `c.api.ucp.index->feedback` | 未重构；提交反馈写入 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
-| `/ucp/user/:action?` | `c.api.ucp.user->$action` | 未重构 |
+| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`） | `c.api.ucp.msg->$action` | 未重构；剩余 `send` 涉及站内信发送、每日限额和批量收件人 |
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
 | `/ucp/account/:action?`（除 `/ucp/account`、`/ucp/account/index`、`/ucp/account/balancelog`） | `c.api.ucp.account->$action` | 未重构；账户其他 action |
-| `/ucp/bankcard/:action?` | `c.api.ucp.bankcard->$action` | 未重构 |
+| `/ucp/bankcard/:action?`（除 `/ucp/bankcard`、`/ucp/bankcard/index`） | `c.api.ucp.bankcard->$action` | 未重构；新增、修改、删除提款地址涉及写库 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
-| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 空响应未接管，`taskboxopen` 涉及奖励写入 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen` 涉及奖励写入 |
 | `/ucp/vippkg/:action?` | `c.api.ucp.vippkg->$action` | 未重构；会员套餐/订单 |
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |
@@ -412,19 +445,16 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 未重构；外部平台进入游戏 |
 | `/game/lottery/gameList`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台 |
 | `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
-| `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee`） | `c.api.onego->$action` | 未重构；一元购剩余 history/bet/bet_ranks 等登录/投注写入 |
+| `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 未重构；一元购剩余 `bet` 投注写入涉及金币扣减 |
 | `/bought/:action?`（除 `/bought/listing`、`/bought/delete`） | `c.api.bought->$action` | 未重构；剩余 `buy` 涉及金豆扣费 |
 
 ### 社区、HGame、AI
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` | `c.api.topic->list` | 未重构 |
-| `/community/*-:params` | `c.api.topic->list` | 未重构 |
-| `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 未重构 |
 | `/community/:action?` | `c.api.topic->$action` | 未重构；发帖/评论等写入 |
 | `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 未重构；当前旧 PHP 仅发现 `index`，`/hgame` 本身为 404 |
-| `/aiundress/:action?`（除 `/aiundress/index`） | `c.api.aiundress->$action` | 未重构；AI/外部服务/任务，`/aiundress` 本身旧 PHP 返回登录错误且未接管 |
+| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源
 
@@ -433,7 +463,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 ## 建议后续顺序
 
-1. 继续公共接口：`/getGlobalData`、`/init`；这两个依赖全局设置、广告和版本配置，建议成组迁移。
+1. 继续公共接口：`/init`、`/`、`/index`；这些依赖全局设置、广告、首页聚合和游客初始化。
 2. 中风险接口：`/getCover`、`/sms/:action?`、`/email/:action?`。
 3. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
 

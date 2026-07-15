@@ -54,22 +54,33 @@
 | `/downlog/listing` | `c.api.downlog->listing` | 本轮完成 | 下载记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式。 |
 | `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 播放/下载记录软删除；未登录按游客 sid，空 `vodids` 返回 `已删除0项`。 |
 | `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | `c.api.favorite/minifavorite->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
+| `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频公共列表，支持筛选、排序、分页、随机推荐和 latest 用户包装 rows。 |
+| `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
+| `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
+| `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
+| `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | 本轮完成 | 作者主页小视频列表；`/my/1` 关键字段 live 对比通过，用户不存在分支一致。 |
+| `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` 及 `-params` | `c.api.topic->list` | 本轮完成 | 社区主题列表；`favorite` 未登录分支、列表主结构和媒体字段 live 对比通过。 |
+| `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 本轮完成 | 社区评论列表；`tid` 不存在分支和空评论分页 live 对比通过。 |
 | `/game/games` | `c.api.game.index->games` | 本轮完成 | 读 `game`，支持 `platform_id/category_id`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | 本轮完成 | 复用 VOD 行处理，按旧 PHP 固定返回 6 条随机猜你喜欢。 |
 | `/getCertUuid` | `c.api.index->getCertUuid` | 本轮完成 | 证书 UUID 外部查询代理；本地错误分支对比一致，成功分支通过 fake client 覆盖。 |
+| `/getGlobalData` | `c.api.index->getGlobalData` | 本轮完成 | 全局配置聚合；核心 key shape、版本覆盖、热门标签/分类和开关字段 live 对比通过，忽略旧 PHP 动态游客 token。 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
 | `/game/wali/test` | `c.api.game.wali->ping` | 本轮完成 | 瓦力平台 ping；读取 `game_platform.json` 后 AES-ECB 加密、MD5 签名并外呼，live 对比一致。 |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | 本轮完成 | 需要登录但无本地写入；复用瓦力 AES/签名外呼，返回外部平台余额。 |
 | `/hgame/index` | `c.api.hgame->index` | 本轮完成 | HGame 公共只读列表，返回 `data.data.list/slide`，`/hgame` 本身保持旧 PHP 404 未接管。 |
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
-| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 空响应未接管，领奖 action 未接管。 |
+| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 无稳定响应未接管，领奖 action 未接管。 |
+| `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志；未登录错误、登录测试 token 分页和首行内容 live 对比通过。 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | `c.api.ucp.msg->setread/cleanread/delete` | 本轮完成 | 登录消息状态写入；未登录和空数组成功分支对比通过，旧 PHP 动态 `xxx_api_auth` 不回传。 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
 | `/onego/hash` | `c.api.onego->hash` | 本轮完成 | 一元购公共哈希计算接口，复刻 PHP `hash('sha256')` 和末尾数字期号截取规则。 |
+| `/onego/history` | `c.api.onego->history` | 本轮完成 | 登录只读本人投注历史；未登录和测试 token 空历史 live 对比通过。 |
 | `/onego/lucky` | `c.api.onego->lucky` | 本轮完成 | 一元购幸运榜公共只读接口，按获奖金币总数排序并附带各房间获奖次数；保留 PHP 未分页排行 SQL。 |
+| `/onego/bet_ranks` | `c.api.onego->bet_ranks` | 本轮完成 | 押注排行只读接口；无效场次和无效期号 live 对比通过，本地无订单样本，成功分支由 service fake 覆盖。 |
 | `/onego/marquee` | `c.api.onego->marquee` | 本轮完成 | 一元购跑马灯公共只读接口，读取最近已开奖期前 10 条记录并按规则模板生成中奖消息。 |
 | `/special/index` | `c.api.special->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |
 | `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 本轮完成 | 专题公共接口，复用 VOD 行处理；listing 含分页、前 4 个视频和第一页 actorrows，detail 含全量视频排序和浏览数写入副作用。 |
@@ -79,6 +90,7 @@
 | `/art`、`/art/index` | `c.api.art->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |
 | `/art/announce` | `c.api.art->announce` | 本轮完成 | 系统公告列表，读 `art_categories.uuid=announce` 和公开 `arts`；分页 URL 保留旧 PHP `/art/?page=[?]` 行为。 |
 | `/art/show` | `c.api.art->show` | 本轮完成 | 公告/文章详情，读 `arts` 和 `arts_content`；成功、缺少 `artid`、不存在记录分支均对比一致。 |
+| `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | 本轮完成 | 登录只读 AI 任务历史；未登录错误、`module/page` 分页、字段集合和 test 环境 R2 资源域名 live 对比通过。 |
 | `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
 
 ## 优先候选
@@ -86,7 +98,6 @@
 | 优先级 | 接口 | PHP handler | 风险 |
 | --- | --- | --- | --- |
 | 1 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
-| 2 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
 
 ## 暂缓
 
@@ -97,5 +108,7 @@
 | `/payment/*`、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
-| `/minivod/*` | 多数依赖游客/用户权限、播放记录、金币或数据库。 |
+| `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/up`、`/minivod/down` | 小视频列表、排行榜、详情、播放记录和作者页已完成；剩余多涉及游客/用户权限、金币、点赞踩写入或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
+| `/community/:action?` 剩余 action | 社区列表和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
+| `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

@@ -20,6 +20,14 @@ func (s ucpStore) UserByID(ctx context.Context, uid int) (map[string]interface{}
 	return s.user.UserByID(ctx, uid)
 }
 
+func (s ucpStore) Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error) {
+	return s.ucp.Bankcards(ctx, uid)
+}
+
+func (s ucpStore) Banks(ctx context.Context) ([]map[string]interface{}, error) {
+	return s.ucp.Banks(ctx)
+}
+
 func (s ucpStore) Groups(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.user.Groups(ctx)
 }
@@ -50,6 +58,14 @@ func (s ucpStore) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey in
 
 func (s ucpStore) TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error) {
 	return s.ucp.TaskboxCompletedLogs(ctx, limit)
+}
+
+func (s ucpStore) CountTaskboxLogs(ctx context.Context, uid int) (int, error) {
+	return s.ucp.CountTaskboxLogs(ctx, uid)
+}
+
+func (s ucpStore) TaskboxLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	return s.ucp.TaskboxLogs(ctx, uid, page, pageSize)
 }
 
 func (s ucpStore) CountPayments(ctx context.Context, uid int) (int, error) {

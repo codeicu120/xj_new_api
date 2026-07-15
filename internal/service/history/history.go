@@ -22,6 +22,7 @@ type Store interface {
 
 type VODProcessor interface {
 	ProcessRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error)
+	ProcessMiniRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error)
 }
 
 type Service struct {
@@ -51,7 +52,12 @@ func (s *Service) Listing(ctx context.Context, token string, kind historyRepo.Ki
 	if err != nil {
 		return domain.HistoryListingData{}, err
 	}
-	if s.vodProcessor != nil {
+	if s.vodProcessor != nil && kind == historyRepo.KindMiniPlay {
+		rows, err = s.vodProcessor.ProcessMiniRowsFullPrice(ctx, rows, isH5Request)
+		if err != nil {
+			return domain.HistoryListingData{}, err
+		}
+	} else if s.vodProcessor != nil {
 		rows, err = s.vodProcessor.ProcessRows(ctx, rows, isH5Request)
 		if err != nil {
 			return domain.HistoryListingData{}, err
@@ -62,6 +68,8 @@ func (s *Service) Listing(ctx context.Context, token string, kind historyRepo.Ki
 	if kind == historyRepo.KindDown {
 		timeField = "downtime"
 		baseURL = "/downlog/listing"
+	} else if kind == historyRepo.KindMiniPlay {
+		baseURL = "/miniplaylog/listing"
 	}
 	for _, row := range rows {
 		row[timeField] = legacyRelativeTime(atoi64(row[timeField]), now)

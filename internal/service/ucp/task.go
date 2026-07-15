@@ -73,6 +73,30 @@ func (s *Service) TaskboxIndex(ctx context.Context, token string) (map[string]in
 	}, nil
 }
 
+func (s *Service) TaskboxLogListing(ctx context.Context, token string, page int) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	const pageSize = 20
+	total, err := s.store.CountTaskboxLogs(ctx, uid)
+	if err != nil {
+		return nil, -1, "获取任务宝箱日志失败", err
+	}
+	rows, err := s.store.TaskboxLogs(ctx, uid, page, pageSize)
+	if err != nil {
+		return nil, -1, "获取任务宝箱日志失败", err
+	}
+	return map[string]interface{}{
+		"logrows":  s.processTaskboxLogRows(rows),
+		"pageinfo": pageInfo(total, pageSize, page, "/ucp/taskbox/taskboxlog?page=[?]"),
+	}, 0, "", nil
+}
+
 func (s *Service) processTaskboxRows(rows []map[string]interface{}) []map[string]interface{} {
 	result := []map[string]interface{}{}
 	for _, row := range rows {

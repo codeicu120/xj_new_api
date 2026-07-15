@@ -68,6 +68,21 @@ func (h *UCPHandler) TaskboxIndex(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) TaskboxLog(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, retcode, errmsg, err := h.service.TaskboxLogListing(c.Request.Context(), authToken(c), page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *UCPHandler) AffCenter(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.AffCenter(c.Request.Context(), authToken(c))
 	c.Header("X-Served-By", "newbie")
@@ -99,6 +114,34 @@ func (h *UCPHandler) Index(c *gin.Context) {
 	}
 	if retcode != 0 {
 		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) UserIndex(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.UserIndex(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) BankcardIndex(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.BankcardIndex(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))

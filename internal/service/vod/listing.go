@@ -470,6 +470,18 @@ func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]inte
 	return s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix()), nil
 }
 
+func (s *ListingService) ProcessRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	return s.processRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100), nil
+}
+
 func (s *ListingService) ProcessRowsPlain(_ context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
 	empty := []map[string]interface{}{}
 	return s.processRowsWithDiscount(rows, processEnv(empty, empty, empty, empty, empty), isH5Request, s.now().Unix(), 100), nil

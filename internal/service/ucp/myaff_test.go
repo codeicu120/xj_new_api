@@ -23,6 +23,8 @@ type fakeUserStore struct {
 	taskboxes          []map[string]interface{}
 	taskboxLog         map[string]interface{}
 	taskboxLogs        []map[string]interface{}
+	bankcards          []map[string]interface{}
+	banks              []map[string]interface{}
 }
 
 func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -83,6 +85,14 @@ func (s fakeUserStore) TaskboxLog(context.Context, int, int, int) (map[string]in
 }
 
 func (s fakeUserStore) TaskboxCompletedLogs(context.Context, int) ([]map[string]interface{}, error) {
+	return s.taskboxLogs, nil
+}
+
+func (s fakeUserStore) CountTaskboxLogs(context.Context, int) (int, error) {
+	return len(s.taskboxLogs), nil
+}
+
+func (s fakeUserStore) TaskboxLogs(context.Context, int, int, int) ([]map[string]interface{}, error) {
 	return s.taskboxLogs, nil
 }
 
@@ -311,7 +321,18 @@ func (s fakeUserStore) MsgConversation(context.Context, int, int) (map[string]in
 }
 
 func (s fakeUserStore) UserByID(context.Context, int) (map[string]interface{}, error) {
+	if s.user != nil {
+		return s.user, nil
+	}
 	return map[string]interface{}{"uid": "7", "username": "peer"}, nil
+}
+
+func (s fakeUserStore) Bankcards(context.Context, int) ([]map[string]interface{}, error) {
+	return s.bankcards, nil
+}
+
+func (s fakeUserStore) Banks(context.Context) ([]map[string]interface{}, error) {
+	return s.banks, nil
 }
 
 func (s fakeUserStore) CountMessages(context.Context, int, int) (int, error) {
@@ -487,6 +508,43 @@ func TestTaskboxIndexGuest(t *testing.T) {
 	}
 }
 
+func TestTaskboxLogListingRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.TaskboxLogListing(context.Background(), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestTaskboxLogListingFormatsRowsAndPageInfo(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		taskboxLogs: []map[string]interface{}{
+			{"logid": "9", "username": "u", "nickname": "n", "avatar": "", "addtime": "1760000000", "taskid": "1", "addcoin": "3", "prize": "p", "taskstatus": "2"},
+		},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.TaskboxLogListing(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	logRows := data["logrows"].([]map[string]interface{})
+	if len(logRows) != 1 || logRows[0]["taskstatus"] != "已发放" {
+		t.Fatalf("logrows = %#v", logRows)
+	}
+	pageInfo := data["pageinfo"].(map[string]interface{})
+	if pageInfo["page_url"] != "/ucp/taskbox/taskboxlog?page=[?]" || pageInfo["pagesize"] != 20 {
+		t.Fatalf("pageinfo = %#v", pageInfo)
+	}
+}
+
 func TestMyAffRequiresLogin(t *testing.T) {
 	service := NewService(fakeUserStore{}, "https://res.example.test")
 	_, retcode, errmsg, err := service.MyAff(context.Background(), "", 1)
@@ -495,6 +553,89 @@ func TestMyAffRequiresLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "请登录后操作" {
 		t.Fatalf("unexpected auth response %d %q", retcode, errmsg)
+	}
+}
+
+func TestUserIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.UserIndex(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUserIndexReturnsProcessedUser(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{
+			"uid":             "5",
+			"uniqkey":         "1904908418",
+			"username":        "~1904908418",
+			"nickname":        "1400002",
+			"mobi":            "86.14012340002",
+			"email":           "~1904908418",
+			"sysgid":          "6",
+			"sysgid_exptime":  "0",
+			"gid":             "4",
+			"regtime":         "1547688484",
+			"gender":          "1",
+			"avatar":          "sysavatar/man/5.png",
+			"newmsg":          "0",
+			"recommend_total": "6",
+		},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.UserIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	user := data["user"].(map[string]interface{})
+	if user["uid"] != "5" || user["uniqkey"] != "VI4SQQ" || user["avatar_url"] != "https://res.example.test/sysavatar/man/5.png" {
+		t.Fatalf("user = %#v", user)
+	}
+}
+
+func TestBankcardIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.BankcardIndex(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestBankcardIndexReturnsCardsAndBanks(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user:      map[string]interface{}{"uid": "5"},
+		bankcards: []map[string]interface{}{{"cardid": "1", "uid": "5", "name": "张三", "bankname": "中国银行", "cardnum": "123", "isdef": "1", "type": "2"}},
+		banks:     []map[string]interface{}{{"bankid": "8", "bankname": "平安银行", "coverpic": ""}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.BankcardIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["maxallow"] != 3 || data["allowtype"] != 7 {
+		t.Fatalf("limits = %#v", data)
+	}
+	if len(data["cardrows"].([]map[string]interface{})) != 1 {
+		t.Fatalf("cardrows = %#v", data["cardrows"])
+	}
+	bankRows := data["bankRows"].([]map[string]interface{})
+	if bankRows[0]["bankid"] != 8 || bankRows[0]["bankname"] != "平安银行" {
+		t.Fatalf("bankRows = %#v", bankRows)
 	}
 }
 

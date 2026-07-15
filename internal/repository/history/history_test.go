@@ -28,3 +28,24 @@ func TestHistoryWhereDownTimeline(t *testing.T) {
 		t.Fatalf("args = %#v", args)
 	}
 }
+
+func TestMiniPlaySpecUsesPartitionTables(t *testing.T) {
+	userSpec := miniPlaySpec(101, "")
+	if userSpec.table != "minivod_viewlogs_01" || userSpec.owner != "uid" {
+		t.Fatalf("user spec = %#v", userSpec)
+	}
+	guestSpec := miniPlaySpec(0, "250f")
+	if guestSpec.table != "minivod_guestviewlogs_2" || guestSpec.owner != "sid" {
+		t.Fatalf("guest spec = %#v", guestSpec)
+	}
+}
+
+func TestHistoryWhereMiniPlayTimelineDoesNotFilterShowtype(t *testing.T) {
+	where, args := historyWhere(KindMiniPlay, tableSpec{owner: "uid", timeField: "playtime"}, 7, "", 2, 1700000000)
+	if where != "uid=? AND playtime BETWEEN ? AND ?" {
+		t.Fatalf("where = %q", where)
+	}
+	if args[1] != int64(1697408000) || args[2] != int64(1699395200) {
+		t.Fatalf("args = %#v", args)
+	}
+}

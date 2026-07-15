@@ -16,9 +16,21 @@ type fakeStore struct {
 	roomRecords    []map[string]interface{}
 	rankWinCoins   []map[string]interface{}
 	userWins       []map[string]interface{}
+	userOrders     []map[string]interface{}
+	periodOrders   []map[string]interface{}
+	record         map[string]interface{}
+	rankBetCoins   []map[string]interface{}
 	user           map[string]interface{}
 	bot            map[string]interface{}
 	err            error
+}
+
+type fakeAuth struct {
+	user map[string]interface{}
+}
+
+func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}, error) {
+	return a.user, nil
 }
 
 func (s fakeStore) Rules(context.Context) (map[string]interface{}, error) {
@@ -55,6 +67,22 @@ func (s fakeStore) RankWinCoins(context.Context) ([]map[string]interface{}, erro
 
 func (s fakeStore) UserWins(context.Context, int) ([]map[string]interface{}, error) {
 	return s.userWins, s.err
+}
+
+func (s fakeStore) UserOrdersGrouped(context.Context, int, int, int) ([]map[string]interface{}, error) {
+	return s.userOrders, s.err
+}
+
+func (s fakeStore) UserOrdersByPeriod(context.Context, string, int, int) ([]map[string]interface{}, error) {
+	return s.periodOrders, s.err
+}
+
+func (s fakeStore) RecordByPeriod(context.Context, string, int) (map[string]interface{}, error) {
+	return s.record, s.err
+}
+
+func (s fakeStore) RankBetCoins(context.Context, string, int, int, int) ([]map[string]interface{}, error) {
+	return s.rankBetCoins, s.err
 }
 
 func (s fakeStore) UserByID(context.Context, int) (map[string]interface{}, error) {
@@ -257,6 +285,82 @@ func TestLuckyEmptyRanks(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("expected empty ranks, got %#v", rows)
+	}
+}
+
+func TestHistoryRequiresLogin(t *testing.T) {
+	service := NewService(fakeStore{})
+
+	_, retcode, errmsg, err := service.History(context.Background(), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestHistoryBuildsUserBetRows(t *testing.T) {
+	service := NewService(fakeStore{
+		userOrders: []map[string]interface{}{
+			{"id": "1", "uid": "5", "period": "2026071401", "room_id": "2", "bet_coins": "20"},
+		},
+		periodOrders: []map[string]interface{}{
+			{"bet_no": "1,2"},
+			{"bet_no": "3"},
+		},
+		record: map[string]interface{}{"open_no": "2", "awards": "100"},
+	}, fakeAuth{user: map[string]interface{}{"uid": "5"}})
+
+	data, retcode, errmsg, err := service.History(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	rows := data.Data.([]map[string]interface{})
+	if rows[0]["id"] != 1 || rows[0]["win_no"] != 2 || rows[0]["win_coins"] != 100 {
+		t.Fatalf("row = %#v", rows[0])
+	}
+	betNos := rows[0]["bet_no"].([]string)
+	if len(betNos) != 3 || betNos[2] != "3" {
+		t.Fatalf("bet_no = %#v", betNos)
+	}
+}
+
+func TestBetRanksValidatesRoomAndPeriod(t *testing.T) {
+	service := NewService(fakeStore{})
+	if _, err := service.BetRanks(context.Background(), "", 0, 1); !errors.Is(err, ErrInvalidRoom) {
+		t.Fatalf("expected ErrInvalidRoom, got %v", err)
+	}
+
+	service = NewService(fakeStore{room: map[string]interface{}{"id": "2"}})
+	if _, err := service.BetRanks(context.Background(), "2026071401", 2, 1); !errors.Is(err, ErrInvalidPeriod) {
+		t.Fatalf("expected ErrInvalidPeriod, got %v", err)
+	}
+}
+
+func TestBetRanksFormatsOrderRows(t *testing.T) {
+	service := NewService(fakeStore{
+		room:   map[string]interface{}{"id": "2", "name": "初级场", "coins": "10"},
+		record: map[string]interface{}{"id": "10", "period": "2026071401"},
+		rankBetCoins: []map[string]interface{}{
+			{"uid": "5", "room_id": "2", "total_coins": "30", "total_bets": "2"},
+		},
+		user: map[string]interface{}{"uid": "5", "username": "bettor", "avatar": ""},
+	})
+
+	data, err := service.BetRanks(context.Background(), "2026071401", 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := data.Data.([]map[string]interface{})
+	if rows[0]["uid"] != 5 || rows[0]["total_coins"] != 30 || rows[0]["total_bets"] != 3 || rows[0]["room_name"] != "初级场" {
+		t.Fatalf("rank row = %#v", rows[0])
+	}
+	if rows[0]["user"].(map[string]interface{})["username"] != "bettor" {
+		t.Fatalf("user = %#v", rows[0]["user"])
 	}
 }
 
