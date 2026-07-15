@@ -22,6 +22,14 @@ func (s *Service) TaskSharePic(ctx context.Context) (map[string]interface{}, err
 }
 
 func (s *Service) TaskQRLink(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
+	return s.taskQRLink(ctx, token, pid, "global.qrcode.link")
+}
+
+func (s *Service) TaskboxQRLink(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
+	return s.taskQRLink(ctx, token, pid, "taskbox.qrcode.link")
+}
+
+func (s *Service) taskQRLink(ctx context.Context, token string, pid string, uuid string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
 		return nil, -9999, "您还没有登录", err
@@ -30,7 +38,7 @@ func (s *Service) TaskQRLink(ctx context.Context, token string, pid string) (map
 		return nil, -9999, "您还没有登录", nil
 	}
 	pid = sanitizeTaskPID(pid)
-	url, err := s.taskCallCode(ctx, pid, "global.qrcode.link")
+	url, err := s.taskCallCode(ctx, pid, uuid)
 	if err != nil {
 		return nil, -1, "获取二维码链接失败", err
 	}

@@ -932,6 +932,17 @@
 - 兼容规则：返回 `data.taskrows` 和 `data.logrows`；任务状态复刻推广任务、每日 22:00 五分钟、每周六 22:00 五分钟规则；缺失用户的 `username/nickname` 保持 `null`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/taskbox/index`，忽略动态 `xxx_api_auth` 后字段和状态一致；旧 PHP `/ucp/taskbox` 为空响应，Go 未注册该路径。
 
+### `/ucp/taskbox/qrlink`
+
+- PHP: `c.api.ucp.taskbox->qrlink`
+- Go: `internal/handler.UCPHandler.TaskboxQRLink`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/index.SettingsRepository` 通过 `ucpStore` 只读注入。
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `maintain_calldata.uuid=(pid.)taskbox.qrcode.link` 和 `settings.uuid=baseset`；渠道配置缺失时回退默认 `taskbox.qrcode.link`。
+- 兼容规则：与 `/ucp/task/qrlink` 相同的 pid 校验、每日 inviteUrls 分组和 `{inviteCode}` 替换；不生成 PNG，也不写 keylimit 或发奖励。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/taskbox/qrlink` 未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
+
 ### `/community/{list,recommend,hot,latest,favorite}`、`/community/*-:params`
 
 - PHP: `c.api.topic->list`

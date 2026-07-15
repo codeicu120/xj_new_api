@@ -101,7 +101,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
 | `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
 | `/ucp/task/qrlink` | ANY | `UCPHandler.TaskQRLink` |
-| `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog` |
+| `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxQRLink` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
 | `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
@@ -350,6 +350,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | `UCPHandler.TaskQRLink` | 已重构，对比通过；登录只读推广二维码链接，读取推广 URL 和邀请码，不生成图片、不写 keylimit |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
+| `/ucp/taskbox/qrlink` | `c.api.ucp.taskbox->qrlink` | `UCPHandler.TaskboxQRLink` | 已重构，对比通过；登录只读任务宝箱推广二维码链接，不生成图片、不发奖励 |
 
 ### 个人中心公开只读
 
@@ -436,7 +437,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到、二维码图片生成或 keylimit 写入等 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
-| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen` 涉及奖励写入 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/share/qrcode` 涉及奖励写入或图片生成 |
 | `/ucp/vippkg/:action?` | `c.api.ucp.vippkg->$action` | 未重构；会员套餐/订单 |
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |

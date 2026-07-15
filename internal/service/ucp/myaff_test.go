@@ -618,6 +618,30 @@ func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {
 	}
 }
 
+func TestTaskboxQRLinkUsesTaskboxConfig(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5", "uniqkey": "12345"},
+		settings: map[string]map[string]interface{}{
+			"baseset": {"value": "a:1:{s:10:\"inviteUrls\";s:14:\"https://a.test\";}"},
+		},
+		calldata: map[string]map[string]interface{}{
+			"taskbox.qrcode.link": {"type": "code", "content": "https://box.test?u={inviteUrl}&c={inviteCode}"},
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) }
+
+	data, retcode, errmsg, err := service.TaskboxQRLink(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["qrlink"] != "https://box.test?u=https://a.test&c=9IX" {
+		t.Fatalf("qrlink = %#v", data["qrlink"])
+	}
+}
+
 func TestTaskboxIndexGuest(t *testing.T) {
 	service := NewService(fakeUserStore{
 		taskboxes: []map[string]interface{}{
