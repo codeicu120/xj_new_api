@@ -76,6 +76,40 @@ func (h *MiniVODHandler) ReqLong(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html", []byte(body))
 }
 
+func (h *MiniVODHandler) ReqPlay(c *gin.Context) {
+	h.reqMedia(c, true)
+}
+
+func (h *MiniVODHandler) ReqDown(c *gin.Context) {
+	h.reqMedia(c, false)
+}
+
+func (h *MiniVODHandler) reqMedia(c *gin.Context, play bool) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	playIndex, _ := strconv.Atoi(c.Query("playindex"))
+	var (
+		data    map[string]interface{}
+		retcode int
+		errmsg  string
+		err     error
+	)
+	if play {
+		data, retcode, errmsg, err = h.service.ReqPlay(c.Request.Context(), authToken(c), vodID, playIndex)
+	} else {
+		data, retcode, errmsg, err = h.service.ReqDown(c.Request.Context(), authToken(c), vodID, playIndex)
+	}
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
+}
+
 func (h *MiniVODHandler) vote(c *gin.Context, up bool) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
 	retcode, errmsg, err := h.service.Vote(c.Request.Context(), authToken(c), vodID, up)

@@ -337,6 +337,18 @@
 - 兼容规则：视频不存在或 `showtype!=1` 返回 `记录不存在或已被删除`；赞/踩/取消赞/取消踩返回 PHP 同款 `errmsg`。
 - 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；PHP-Go live 对比 `/minivod/up/0`、`/minivod/down/0` 无效视频分支一致；状态切换成功/重复分支由 service fake 覆盖。
 
+### `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid`
+
+- PHP: `c.api.minivod->reqplay/reqdown`
+- Go: `internal/handler.MiniVODHandler.ReqPlay/ReqDown`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 登录用户通过 `x-cookie-auth`/`xxx_api_auth` 读取用户和权限；游客必须有 sid，否则保持旧 PHP `客户端游客请先携带信息`。
+- DB: 读取 `vods(showtype=1)`、`vod_servers`、`minivod_favorites`、`vod_updowns`、`minivod_viewlogs/minivod_guestviewlogs`；只读判断已播放/已下载和当日额度。
+- 兼容规则：已接管记录不存在、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全。
+- 风险边界：本批不执行金币扣减、播放/下载日志写入、播放任务金币、每 10 部奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
+- 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝和免费下载；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
+
 ### `/minivod/reqlong/:vodid`
 
 - PHP: `c.api.minivod->getLong2Mini`

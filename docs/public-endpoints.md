@@ -67,6 +67,7 @@
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | 本轮完成 | 小视频赞踩；登录用户写 `vod_updowns`，游客用进程内 limiter，无效视频分支 live 对比通过。 |
+| `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | 本轮完成 | 小视频播放/下载地址请求的可控路径；记录/权限/地址错误、免费/限免、已观看和权限额度内提供地址已接管，扣金币和任务奖励分支后续事务化迁移。 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 本轮完成 | 长视频转小视频播放地址；成功直接返回 `text/html` URL，错误分支 live 对比通过。 |
 | `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | 本轮完成 | 作者主页小视频列表；`/my/1` 关键字段 live 对比通过，用户不存在分支一致。 |
@@ -132,6 +133,6 @@
 | `/payment/*`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付下单、外部平台请求或回调，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
-| `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
+| `/minivod/reqlist`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、播放/下载可控路径和长视频地址转换已完成；剩余多涉及金币事务、奖励或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

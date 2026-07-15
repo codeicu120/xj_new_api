@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -44,6 +45,9 @@ type Store interface {
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
 	IncrementVODCounter(ctx context.Context, vodID int, field string, delta int) error
 	RecountUpDown(ctx context.Context, vodID int) error
+	FavoriteCount(ctx context.Context, uid int, vodID int) (int, error)
+	MiniViewLog(ctx context.Context, uid int, sid string, vodID int) (map[string]interface{}, error)
+	CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error)
 }
 
 type VODProcessor interface {
@@ -319,6 +323,145 @@ func (s *Service) ReqLong(ctx context.Context, token string, vodID int) (string,
 		httpURL = strings.TrimRight(host, "/") + "/" + strings.TrimLeft(httpURL, "/")
 	}
 	return httpURL, 0, "", nil
+}
+
+func (s *Service) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {
+	return s.reqMedia(ctx, token, vodID, playIndex, true)
+}
+
+func (s *Service) ReqDown(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {
+	return s.reqMedia(ctx, token, vodID, playIndex, false)
+}
+
+func (s *Service) reqMedia(ctx context.Context, token string, vodID int, playIndex int, play bool) (map[string]interface{}, int, string, error) {
+	row, err := s.store.VODByID(ctx, vodID)
+	if err != nil {
+		return nil, -1, mediaFailMessage(play), err
+	}
+	if len(row) == 0 || atoi(row["showtype"]) != 1 {
+		return map[string]interface{}{}, 1, "记录不存在或已被删除", nil
+	}
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return nil, -1, mediaFailMessage(play), err
+	}
+	if retcode, errmsg := s.checkMiniPerm(row, user); retcode != 0 {
+		return map[string]interface{}{}, retcode, errmsg, nil
+	}
+	mediaURL, price, serverID := mediaSource(row, playIndex, play)
+	if mediaURL == "" {
+		if play {
+			return map[string]interface{}{}, 2, "播放地址不存在", nil
+		}
+		return map[string]interface{}{}, 2, "下载地址不存在", nil
+	}
+	if atoi(user["uid"]) == 0 && str(user["sid"]) == "" {
+		if play {
+			return map[string]interface{}{}, -9999, "客户端游客请先携带信息", nil
+		}
+		return map[string]interface{}{}, -9999, "客户端游客请先携带信息", nil
+	}
+	servers, err := s.store.Servers(ctx)
+	if err != nil {
+		return nil, -1, mediaFailMessage(play), err
+	}
+	httpURL := sanitizePlayURL(mediaURL)
+	if play {
+		httpURL = signCDNURL(httpURL, row, servers, user, s.now().Unix())
+	}
+	if !hasURLScheme(httpURL) {
+		host := strings.TrimRight(serverHost(servers, serverID), "/")
+		httpURL = host + "/" + strings.TrimLeft(httpURL, "/")
+	}
+	data := map[string]interface{}{}
+	if play {
+		isFavorite, err := s.store.FavoriteCount(ctx, atoi(user["uid"]), vodID)
+		if err != nil {
+			return nil, -1, mediaFailMessage(play), err
+		}
+		data["isfavorite"] = boolInt(isFavorite > 0)
+		data["iszan"] = 0
+		if atoi(user["uid"]) > 0 {
+			updown, err := s.store.UpDownByUser(ctx, atoi(user["uid"]), vodID)
+			if err != nil {
+				return nil, -1, mediaFailMessage(play), err
+			}
+			data["iszan"] = atoi(updown["updown"])
+		}
+		data["playtask"] = map[string]interface{}{"playnum": 0, "tasknum": 0, "taskcoin": 0, "logid": 0}
+	}
+	viewrow, err := s.store.MiniViewLog(ctx, atoi(user["uid"]), str(user["sid"]), vodID)
+	if err != nil {
+		return nil, -1, mediaFailMessage(play), err
+	}
+	viewedField := "playtime"
+	if !play {
+		viewedField = "downtime"
+	}
+	if atoi(viewrow[viewedField]) > 0 {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			data["jumpId"] = 0
+			data["jumpOffset"] = 0
+			return data, 0, "已观看过继续提供", nil
+		}
+		return data, 0, "本周已下载过继续提供", nil
+	}
+	now := s.now().Unix()
+	if price == 0 || (atoi64(row["free_sdate"]) < now && now < atoi64(row["free_edate"])) {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			data["jumpId"] = 0
+			data["jumpOffset"] = 0
+			if price == 0 {
+				return data, 0, "免费观看", nil
+			}
+			return data, 0, "限时免费观看", nil
+		}
+		if price == 0 {
+			return data, 0, "免费观看提供下载", nil
+		}
+		return data, 0, "限时免费观看提供下载", nil
+	}
+	daynumKey := "max.minivod.play.daynum"
+	action := 1
+	if !play {
+		daynumKey = "max.minivod.down.daynum"
+		action = 2
+	}
+	daycount, err := s.store.CountMiniViewLogsSince(ctx, atoi(user["uid"]), str(user["sid"]), dayStart(s.now), action)
+	if err != nil {
+		return nil, -1, mediaFailMessage(play), err
+	}
+	if daycount < getMiniPermInt(user["perms"], daynumKey) {
+		data["httpurl"] = httpURL
+		if play {
+			data["httpurls"] = []map[string]interface{}{{"hdtype": "默认", "httpurl": httpURL}}
+			data["jumpId"] = 0
+			data["jumpOffset"] = 0
+			if atoi(user["uid"]) > 0 {
+				return data, 0, "用户权限范围内免费播放", nil
+			}
+			return data, 0, "游客权限范围内免费播放", nil
+		}
+		if atoi(user["uid"]) > 0 {
+			return data, 0, "用户权限范围内免费下载", nil
+		}
+		return data, 0, "游客权限范围内免费下载", nil
+	}
+	if play {
+		data["httpurl_preview"] = httpURL + "?300"
+		if atoi(user["uid"]) > 0 {
+			return data, 4, "今日观影次数已用完，是否去免费增加次数？", nil
+		}
+		return data, 3, "今日观看次数已看完，请点击免费注册会员获取更多影片观看次数。", nil
+	}
+	if atoi(user["uid"]) > 0 {
+		return data, 4, "今日下载次数已用完，是否去免费增加次数？", nil
+	}
+	return data, 3, "今日下载次数已用完，请点击免费注册会员获取更多影片下载次数。", nil
 }
 
 func (s *Service) voteGuest(ctx context.Context, vodID string, up bool) (int, string, error) {
@@ -743,6 +886,92 @@ func hasURLScheme(value string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Service) checkMiniPerm(row map[string]interface{}, user map[string]interface{}) (int, string) {
+	perms := user["perms"]
+	if atoi(row["isvip"]) == 1 && getMiniPermInt(perms, "allow.minivod.vip") != 1 {
+		return 5, "VIP独享内容，请升级"
+	}
+	if atoi(row["islimit"]) > 0 && getMiniPermInt(perms, "allow.minivod.limit") != 1 {
+		return 6, "此内容仅提供给高级别用户，请升级或做任务推广吧"
+	}
+	if atoi(row["islimitv3"]) > 0 && getMiniPermInt(perms, "allow.minivod.limitv3") != 1 {
+		return 6, "此内容仅提供给高级别用户，请升级或做任务推广吧"
+	}
+	return 0, ""
+}
+
+func mediaFailMessage(play bool) string {
+	if play {
+		return "请求小视频播放地址失败"
+	}
+	return "请求小视频下载地址失败"
+}
+
+func mediaSource(row map[string]interface{}, playIndex int, play bool) (string, int, int) {
+	if playIndex < 0 {
+		playIndex = 0
+	}
+	if playIndex > 0 {
+		field := "playlist"
+		if !play {
+			field = "downlist"
+		}
+		if item := playlistItem(str(row[field]), playIndex); len(item) > 0 {
+			price := atoi(item["view_price"])
+			if price == -1 {
+				price = atoi(row["view_price"])
+			}
+			serverID := atoi(row["play_srvid"])
+			if !play {
+				serverID = atoi(row["down_srvid"])
+			}
+			return str(item["play_url"]), price, serverID
+		}
+		return "", 0, 0
+	}
+	if play {
+		return str(row["play_url"]), atoi(row["view_price"]), atoi(row["play_srvid"])
+	}
+	return str(row["down_url"]), atoi(row["view_price"]), atoi(row["down_srvid"])
+}
+
+func playlistItem(raw string, index int) map[string]interface{} {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || index <= 0 {
+		return map[string]interface{}{}
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &rows); err == nil && index <= len(rows) {
+		return rows[index-1]
+	}
+	return map[string]interface{}{}
+}
+
+func dayStart(now func() time.Time) int64 {
+	t := now()
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Unix()
+}
+
+func boolInt(ok bool) int {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func getMiniPermInt(perms interface{}, key string) int {
+	switch typed := perms.(type) {
+	case map[string]interface{}:
+		return atoi(typed[key])
+	case string:
+		values := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(typed), &values); err == nil {
+			return atoi(values[key])
+		}
+	}
+	return 0
 }
 
 func categoryParents(categories []map[string]interface{}, cateID int) []map[string]interface{} {

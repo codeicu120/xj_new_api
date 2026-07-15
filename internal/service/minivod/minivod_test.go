@@ -17,9 +17,11 @@ type fakeStore struct {
 	user       map[string]interface{}
 	vod        map[string]interface{}
 	updown     map[string]interface{}
+	viewlog    map[string]interface{}
 	saved      int
 	deleted    bool
 	counters   []string
+	daycount   int
 }
 
 func (s *fakeStore) Categories(context.Context) ([]map[string]interface{}, error) {
@@ -126,6 +128,21 @@ func (s *fakeStore) IncrementVODCounter(_ context.Context, _ int, field string, 
 
 func (s *fakeStore) RecountUpDown(context.Context, int) error {
 	return nil
+}
+
+func (s *fakeStore) FavoriteCount(context.Context, int, int) (int, error) {
+	return 1, nil
+}
+
+func (s *fakeStore) MiniViewLog(context.Context, int, string, int) (map[string]interface{}, error) {
+	if s.viewlog != nil {
+		return s.viewlog, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeStore) CountMiniViewLogsSince(context.Context, int, string, int64, int) (int, error) {
+	return s.daycount, nil
 }
 
 type fakeProcessor struct{}
@@ -306,6 +323,68 @@ func TestReqLongRejectsMiniVOD(t *testing.T) {
 	}
 	if retcode != 1 || errmsg != "记录不存在或已被删除" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestReqPlayFreeMiniVOD(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{
+		"vodid":      "9",
+		"showtype":   "1",
+		"play_url":   "p/index.m3u8",
+		"play_srvid": "3",
+		"view_price": "0",
+		"isvip":      "0",
+		"islimit":    "0",
+		"islimitv3":  "0",
+		"free_sdate": "0",
+		"free_edate": "0",
+	}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s", "perms": map[string]interface{}{}, "uniqkey": "9"}}
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 9, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看" || data["httpurl"] != "https://cdn.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if data["isfavorite"] != 1 || data["iszan"] != 0 {
+		t.Fatalf("flags=%#v", data)
+	}
+}
+
+func TestReqPlayRejectsVIPWithoutPerm(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "1", "isvip": "1"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s", "perms": map[string]interface{}{}}}
+
+	_, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 9, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 5 || errmsg != "VIP独享内容，请升级" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestReqDownFreeMiniVOD(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{
+		"vodid":      "9",
+		"showtype":   "1",
+		"down_url":   "d/file.mp4",
+		"down_srvid": "3",
+		"view_price": "0",
+	}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s", "perms": map[string]interface{}{}}}
+
+	data, retcode, errmsg, err := service.ReqDown(context.Background(), "token", 9, 0)
+	if err != nil {
+		t.Fatalf("reqdown: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看提供下载" || data["httpurl"] != "https://cdn.test/d/file.mp4" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
 	}
 }
 

@@ -277,6 +277,68 @@ func (r *Repository) RecountUpDown(ctx context.Context, vodID int) error {
 	return nil
 }
 
+func (r *Repository) FavoriteCount(ctx context.Context, uid int, vodID int) (int, error) {
+	if r.db == nil || uid <= 0 || vodID <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_favorites WHERE uid=? AND vodid=?", uid, vodID).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count minivod favorite: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) MiniViewLog(ctx context.Context, uid int, sid string, vodID int) (map[string]interface{}, error) {
+	if r.db == nil || vodID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	if uid > 0 {
+		rows, err := r.queryRows(ctx, "SELECT * FROM minivod_viewlogs WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
+		return firstRow(rows, err)
+	}
+	if sid != "" {
+		rows, err := r.queryRows(ctx, "SELECT * FROM minivod_guestviewlogs WHERE sid=? AND vodid=? LIMIT 1", sid, vodID)
+		return firstRow(rows, err)
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	field := "playtime"
+	if action == 2 {
+		field = "downtime"
+	}
+	var total int
+	if uid > 0 {
+		err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_viewlogs WHERE uid=? AND showtype=1 AND "+field+">=?", uid, since).Scan(&total)
+		if err != nil {
+			return 0, fmt.Errorf("count minivod viewlogs: %w", err)
+		}
+		return total, nil
+	}
+	if sid == "" {
+		return 0, nil
+	}
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_guestviewlogs WHERE sid=? AND showtype=1 AND "+field+">=?", sid, since).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("count minivod guest viewlogs: %w", err)
+	}
+	return total, nil
+}
+
+func firstRow(rows []map[string]interface{}, err error) (map[string]interface{}, error) {
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
 func buildWhere(filter Filter, now int64) (string, []interface{}) {
 	where := " AND showtype=1"
 	args := []interface{}{}
