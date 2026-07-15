@@ -37,6 +37,13 @@ func (f fakeStore) ByID(context.Context, int) (map[string]interface{}, error) {
 	return map[string]interface{}{}, nil
 }
 
+func (f fakeStore) ByUIDImage(context.Context, int, string) (map[string]interface{}, error) {
+	if f.row != nil {
+		return f.row, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
 func (f fakeStore) SettingByUUID(context.Context, string) (string, error) {
 	return f.setting, nil
 }
@@ -74,6 +81,34 @@ func TestRequireLoginEdge(t *testing.T) {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "请先登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUndressEdgeInvalidImagePath(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, fakeStore{}, "https://res.example")
+
+	retcode, errmsg, err := service.UndressEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", "ai_undress/missing.jpg", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "无效图片路径" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUndressEdgeExistingImageStopsBeforeGeneration(t *testing.T) {
+	service := NewService(
+		fakeAuth{user: map[string]interface{}{"uid": "7"}},
+		fakeStore{row: map[string]interface{}{"id": "10", "uid": "7", "image": "ai_undress/a.jpg", "module": "0"}},
+		"https://res.example",
+	)
+
+	retcode, errmsg, err := service.UndressEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", "ai_undress/a.jpg", 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "AI 生成成功分支暂未迁移" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }

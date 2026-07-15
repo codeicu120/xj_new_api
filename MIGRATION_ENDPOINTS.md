@@ -433,7 +433,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` | 已重构；只读外部资源查询，第三方 host/key 通过 `AIUNDRESS_THIRD_HOST`/`AIUNDRESS_THIRD_KEY` 注入，缺配置或外部请求失败返回 `retcode=-1 errmsg=请求失败` |
-| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->$action` | `AIUndressHandler.Upload/Undress/Delete` | 部分已重构；未登录返回 `retcode=-1 errmsg=请先登录`，`delete` 记录不存在空 OK 分支已迁移，文件保存/R2 上传/Redis 锁/金豆扣减/第三方生成/删除写入暂未接管 |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->$action` | `AIUndressHandler.Upload/Undress/Delete` | 部分已重构；未登录返回 `retcode=-1 errmsg=请先登录`，`undress` 无效图片路径和 `delete` 记录不存在空 OK 分支已迁移，文件保存/R2 上传/Redis 锁/金豆扣减/第三方生成/删除写入暂未接管 |
 | `/starLive/index` | `c.api.starlive->index` | `StarLiveHandler.Index` | 已重构；直播初始化，兼容登录用户或游客 sid，读取 `starlive_info`，按 PHP AES-128-CBC/base64 生成 `encryptUid` 并返回嵌套 `data.data` |
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | `StarLiveHandler.QueryCoinBalance` | 已重构；直播平台余额查询 raw JSON 响应，游客长 memberId 返回 0，用户金币余额按 `goldcoin*10` 返回 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | `StarLiveHandler.GameBet/GameWin/Translate/TryAgain` | 部分已重构；raw JSON 游客长 `memberId`、空/非法 memberId 和未知 `busiType` 安全失败分支已迁移，下注/中奖/钻石兑换资产事务和重复订单查询暂未接管 |
@@ -597,7 +597,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 部分未重构；upload/undress/delete 未登录分支和 delete 记录不存在空 OK 分支已迁移，上传保存、R2、Redis 锁、第三方 AI、金豆扣减和删除写入仍需迁移 |
+| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 部分未重构；upload/undress/delete 未登录分支、undress 无效图片路径和 delete 记录不存在空 OK 分支已迁移，上传保存、R2、Redis 锁、第三方 AI、金豆扣减和删除写入仍需迁移 |
 
 ### 图片、附件和通配资源
 

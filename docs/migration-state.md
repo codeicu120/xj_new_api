@@ -1700,3 +1700,12 @@
 - 未迁移：普通提现兑换事务后的最终余额不足、提现记录创建、冻结余额事务和 Telegram 通知。
 - Subagent：`Planck` 先前标注游戏余额不足可迁但需注明最终冻结仍由后续事务兜底；主线按前置失败分支接管，不迁写入。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### AI 脱衣生成无效图片路径分支
+
+- 已迁移：`/aiundress/undress` 登录后按 `uid + uri` 查询 `ai_undress`，记录不存在时返回 `retcode=-1 errmsg=无效图片路径`。
+- PHP: `src/c/api/aiundress.php::undress/undressLocked`。
+- Go: `internal/handler.AIUndressHandler.Undress`、`internal/service/aiundress.Service.UndressEdge`、`internal/repository/aiundress.Repository.ByUIDImage`。
+- 未迁移：PHP 用户级 Redis 并发锁、row 级锁、金豆扣减、第三方 AI commit、任务状态写入和成功生成路径；并发时 PHP 可能先返回 `请求过于频繁`，Go 当前只覆盖低风险 DB 不存在错误分支。
+- Subagent：`Darwin` 只读核对该分支位于第三方请求、金豆扣减、事务和 DB 写入之前，但 PHP 在此前会短暂获取用户级 Redis 锁；主线记录该兼容差异。
+- 测试：`go test ./internal/service/aiundress ./internal/repository/aiundress ./internal/server` 通过。

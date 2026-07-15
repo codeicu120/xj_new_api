@@ -24,6 +24,7 @@ type Store interface {
 	Count(ctx context.Context, uid int, module int) (int, error)
 	List(ctx context.Context, uid int, module int, total int, page int, pageSize int) ([]map[string]interface{}, error)
 	ByID(ctx context.Context, id int) (map[string]interface{}, error)
+	ByUIDImage(ctx context.Context, uid int, image string) (map[string]interface{}, error)
 	SettingByUUID(ctx context.Context, uuid string) (string, error)
 }
 
@@ -164,6 +165,28 @@ func (s *Service) RequireLoginEdge(ctx context.Context, token string, pendingMes
 		pendingMessage = "AI 成功分支暂未迁移"
 	}
 	return -1, pendingMessage, nil
+}
+
+func (s *Service) UndressEdge(ctx context.Context, token string, uri string, module int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "请先登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -1, "请先登录", nil
+	}
+	if module <= 0 || module > 6 {
+		module = 4
+	}
+	row, err := s.store.ByUIDImage(ctx, uid, uri)
+	if err != nil {
+		return -1, "AI 生成失败", err
+	}
+	if len(row) == 0 {
+		return -1, "无效图片路径", nil
+	}
+	return -1, "AI 生成成功分支暂未迁移", nil
 }
 
 func (s *Service) DeleteEdge(ctx context.Context, token string, id int) (int, string, error) {

@@ -31,7 +31,8 @@ func (h *AIUndressHandler) Upload(c *gin.Context) {
 }
 
 func (h *AIUndressHandler) Undress(c *gin.Context) {
-	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 生成成功分支暂未迁移")
+	module, _ := strconv.Atoi(inputValue(c, "module"))
+	retcode, errmsg, err := h.service.UndressEdge(c.Request.Context(), authToken(c), inputValue(c, "uri"), module)
 	respondLegacy(c, nil, retcode, errmsg, err)
 }
 

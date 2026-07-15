@@ -71,6 +71,28 @@ func (r *Repository) ByID(ctx context.Context, id int) (map[string]interface{}, 
 	return result[0], nil
 }
 
+func (r *Repository) ByUIDImage(ctx context.Context, uid int, image string) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || image == "" {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM ai_undress WHERE uid=? AND image=? LIMIT 1", uid, image)
+	if err != nil {
+		if isMissingTable(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("query ai undress row by image: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return result[0], nil
+}
+
 func (r *Repository) SettingByUUID(ctx context.Context, uuid string) (string, error) {
 	if r.db == nil || uuid == "" {
 		return "", nil
