@@ -2,6 +2,7 @@ package ucp
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +115,62 @@ func (s *Service) WithdrawRule(ctx context.Context) (map[string]interface{}, err
 		content = strings.TrimSpace(str(row["content"]))
 	}
 	return map[string]interface{}{"content": content}, nil
+}
+
+func (s *Service) WithdrawCreateEdge(ctx context.Context, token string, cardID int, wdType int, withdrawAmount int) (int, string, error) {
+	user, err := s.authenticatedPaymentUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	settingRow, err := s.store.SettingByUUID(ctx, "setting")
+	if err != nil {
+		return -1, "提现申请失败", err
+	}
+	setting := parseTaskPHPSerializedMap(str(settingRow["value"]))
+	gameSettingRow, err := s.store.SettingByUUID(ctx, "game.setting")
+	if err != nil {
+		return -1, "提现申请失败", err
+	}
+	gameSetting := parseTaskPHPSerializedMap(str(gameSettingRow["value"]))
+	topupMin := atoi(setting["topupmin"])
+	if topupMin < 5000 {
+		topupMin = 5000
+	}
+	if withdrawAmount < 1 {
+		return -1, "请填写提现金额", nil
+	}
+	if withdrawAmount > 999999999 {
+		return -1, "提现金额异常", nil
+	}
+	if wdType == 1 {
+		gameWithdrawMin := atoi(gameSetting["withdrawmin"])
+		if withdrawAmount < gameWithdrawMin {
+			return -1, "提现金额最小为" + formatRMB(gameWithdrawMin) + "元", nil
+		}
+	} else {
+		if withdrawAmount < topupMin {
+			return -1, "提现金额最小为" + formatRMB(topupMin) + "元", nil
+		}
+		if atoi(user["withdraw_deny"]) > 0 {
+			return -1, "您已被限制提现", nil
+		}
+		limitNum := getPermInt(user["perms"], "min.withdraw.recommend.num")
+		if atoi(user["recommend_total"]) < limitNum {
+			return -1, fmt.Sprintf("提现最少需邀请%d人", limitNum), nil
+		}
+	}
+	cardrow, err := s.store.BankcardByID(ctx, uid, cardID)
+	if err != nil {
+		return -1, "提现申请失败", err
+	}
+	if len(cardrow) == 0 {
+		return -1, "请选择一个收款账号", nil
+	}
+	return -1, "提现申请成功分支暂未迁移", nil
 }
 
 func processWithdrawRows(rows []map[string]interface{}) []map[string]interface{} {

@@ -383,7 +383,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/withdraw/index", ucpHandler.WithdrawIndex)
 	router.Any("/ucp/withdraw/listing", ucpHandler.WithdrawListing)
 	router.Any("/ucp/withdraw/rule", ucpHandler.WithdrawRule)
-	router.Any("/ucp/withdraw/create", ucpHandler.HighRiskAction("提现申请成功分支暂未迁移"))
+	router.Any("/ucp/withdraw/create", ucpHandler.WithdrawCreate)
 	router.Any("/ucp/coinlog", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/index", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/bonuslog", ucpHandler.CoinLogBonusLog)

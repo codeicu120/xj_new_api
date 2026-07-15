@@ -1664,3 +1664,12 @@
 - 未迁移：金币扣减、`user_coinlogs`、会员组与过期时间写入成功分支仍需事务化迁移。
 - Subagent：`Maxwell` 核对 UCP 剩余前置失败分支，主线先采纳 upgrade 小切口。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### UCP 提现创建参数/只读前置失败分支
+
+- 已迁移：`/ucp/withdraw/create` 的未登录、提现金额缺失、金额异常、游戏/普通提现最小金额、用户被限制提现、邀请人数不足和收款账号不存在分支。
+- PHP: `src/c/api/ucp/withdraw.php::create`。
+- Go: `internal/handler.UCPHandler.WithdrawCreate`、`internal/service/ucp.Service.WithdrawCreateEdge`。
+- 未迁移：当天提现次数限制、支付宝/银行卡提现范围、账户余额、金币兑换、提现记录创建、冻结余额事务和 Telegram 通知。
+- Subagent：`Maxwell` 核对提现 create 可迁前置分支；主线先采纳不会进入账户/冻结事务的前半段。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。

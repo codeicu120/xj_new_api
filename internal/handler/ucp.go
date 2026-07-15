@@ -157,6 +157,14 @@ func (h *UCPHandler) CoinLogExchange(c *gin.Context) {
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
+func (h *UCPHandler) WithdrawCreate(c *gin.Context) {
+	cardID, _ := strconv.Atoi(inputValue(c, "cardid"))
+	wdType, _ := strconv.Atoi(inputValue(c, "wdtype"))
+	amount, _ := strconv.Atoi(inputValue(c, "withdraw_amount"))
+	retcode, errmsg, err := h.service.WithdrawCreateEdge(c.Request.Context(), authToken(c), cardID, wdType, amount)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) VODOrderCreate(c *gin.Context) {
 	coins, _ := strconv.Atoi(inputValue(c, "coins"))
 	retcode, errmsg, err := h.service.VODOrderCreateEdge(c.Request.Context(), authToken(c), inputValue(c, "vodserial"), inputValue(c, "vodname"), coins)

@@ -2498,6 +2498,102 @@ func TestWithdrawListingFormatsRows(t *testing.T) {
 	}
 }
 
+func TestWithdrawCreateEdgePrechecks(t *testing.T) {
+	baseSettings := map[string]map[string]interface{}{
+		"setting": {
+			"value": `a:6:{s:8:"topupmin";i:5000;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:200000;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:500000;}`,
+		},
+		"game.setting": {
+			"value": `a:1:{s:11:"withdrawmin";i:6000;}`,
+		},
+	}
+	service := NewService(fakeUserStore{
+		user:     map[string]interface{}{"uid": "5", "perms": `{}`},
+		settings: baseSettings,
+	}, "https://res.example.test")
+
+	retcode, errmsg, err := service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请填写提现金额" {
+		t.Fatalf("amount retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 1000000000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提现金额异常" {
+		t.Fatalf("large retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 1, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提现金额最小为60.00元" {
+		t.Fatalf("game min retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 4000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提现金额最小为50.00元" {
+		t.Fatalf("min retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:     map[string]interface{}{"uid": "5", "withdraw_deny": "1", "perms": `{}`},
+		settings: baseSettings,
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您已被限制提现" {
+		t.Fatalf("deny retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:     map[string]interface{}{"uid": "5", "recommend_total": "1", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings: baseSettings,
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提现最少需邀请2人" {
+		t.Fatalf("recommend retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:     map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings: baseSettings,
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 0, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请选择一个收款账号" {
+		t.Fatalf("card retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    baseSettings,
+		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提现申请成功分支暂未迁移" {
+		t.Fatalf("pending retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestWithdrawRule(t *testing.T) {
 	service := NewService(fakeUserStore{
 		calldata: map[string]map[string]interface{}{

@@ -153,7 +153,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/withdraw`、`/ucp/withdraw/index` | ANY | `UCPHandler.WithdrawIndex` |
 | `/ucp/withdraw/listing` | ANY | `UCPHandler.WithdrawListing` |
 | `/ucp/withdraw/rule` | ANY | `UCPHandler.WithdrawRule` |
-| `/ucp/withdraw/create` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/withdraw/create` | ANY | `UCPHandler.WithdrawCreate` |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | ANY | `UCPHandler.CoinLogIndex` |
 | `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
@@ -493,7 +493,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/taskbox/taskboxopen` | `c.api.ucp.taskbox->taskboxopen` | `UCPHandler.TaskboxOpen` | 部分已重构；未登录、任务不存在/停用、宝箱赠送金币为 0 分支已迁移，领奖写入暂未接管 |
 | `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，二维码图片生成暂未接管 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.Upgrade` | 部分已重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支暂未接管 |
-| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
+| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.WithdrawCreate` | 部分已重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足和收款账号缺失前置分支已迁移，日次数、渠道范围、余额/金币兑换、提现申请事务、冻结金额和通知暂未接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币和计算为 0 前置分支已迁移，金币/余额互换事务写入暂未接管 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.VIPPkgPlaceOrder/VIPPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，`placeorder` 额外接管 `rmbprice=3800` 仅支持金币兑换分支；支付下单、金币兑换成功和会员资产写入暂未接管 |
@@ -565,7 +565,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支仍需事务化迁移 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
-| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录分支已迁移，提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
+| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足和收款账号缺失前置分支已迁移，日次数、支付宝/银行卡范围、余额、金币兑换、冻结金额事务和 Telegram 通知仍需迁移 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足和 `rmbprice=3800` 前置失败分支已迁移，支付下单、金币兑换成功和会员资产仍需迁移 |
