@@ -23,6 +23,7 @@ type AuthStore interface {
 type Store interface {
 	Count(ctx context.Context, uid int, module int) (int, error)
 	List(ctx context.Context, uid int, module int, total int, page int, pageSize int) ([]map[string]interface{}, error)
+	ByID(ctx context.Context, id int) (map[string]interface{}, error)
 	SettingByUUID(ctx context.Context, uuid string) (string, error)
 }
 
@@ -163,6 +164,24 @@ func (s *Service) RequireLoginEdge(ctx context.Context, token string, pendingMes
 		pendingMessage = "AI 成功分支暂未迁移"
 	}
 	return -1, pendingMessage, nil
+}
+
+func (s *Service) DeleteEdge(ctx context.Context, token string, id int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "请先登录", err
+	}
+	if atoi(user["uid"]) == 0 {
+		return -1, "请先登录", nil
+	}
+	row, err := s.store.ByID(ctx, id)
+	if err != nil {
+		return -1, "AI 删除失败", err
+	}
+	if len(row) == 0 {
+		return 0, "", nil
+	}
+	return -1, "AI 删除成功分支暂未迁移", nil
 }
 
 func (s *Service) ModuleList(ctx context.Context) (domain.AIUndressExternalData, int, string, error) {

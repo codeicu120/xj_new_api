@@ -49,6 +49,28 @@ func (r *Repository) List(ctx context.Context, uid int, module int, total int, p
 	return scanRows(rows)
 }
 
+func (r *Repository) ByID(ctx context.Context, id int) (map[string]interface{}, error) {
+	if r.db == nil || id <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM ai_undress WHERE id=? LIMIT 1", id)
+	if err != nil {
+		if isMissingTable(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("query ai undress row: %w", err)
+	}
+	defer rows.Close()
+	result, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return result[0], nil
+}
+
 func (r *Repository) SettingByUUID(ctx context.Context, uuid string) (string, error) {
 	if r.db == nil || uuid == "" {
 		return "", nil

@@ -81,6 +81,7 @@
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | 本轮完成 | 小视频播放/下载地址请求的可控路径；记录/权限/地址错误、免费/限免、已观看和权限额度内提供地址已接管，扣金币和任务奖励分支后续事务化迁移。 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | 本轮完成 | 小视频请求列表的现有 viewlog 读取路径；返回 `rows[].vodrow/user`，拉取推荐、标记已浏览和广告插入副作用后续迁移。 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 本轮完成 | 长视频转小视频播放地址；成功直接返回 `text/html` URL，错误分支 live 对比通过。 |
+| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 本轮完成 | 接管媒体 CDN 请求前的记录不存在和播放地址不存在错误分支；m3u8 拉取与裁剪成功分支未接管。 |
 | `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | 本轮完成 | 作者主页小视频列表；`/my/1` 关键字段 live 对比通过，用户不存在分支一致。 |
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` 及 `-params` | `c.api.topic->list` | 本轮完成 | 社区主题列表；`favorite` 未登录分支、列表主结构和媒体字段 live 对比通过。 |
@@ -144,7 +145,7 @@
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | 本轮完成 | 登录只读 AI 任务历史；未登录错误、`module/page` 分页、字段集合和 test 环境 R2 资源域名 live 对比通过。 |
 | `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | 本轮完成 | 只读第三方资源查询；`channel_key` 不硬编码，需通过 `AIUNDRESS_THIRD_KEY` 注入，缺配置按旧 PHP 外部请求失败返回 `retcode=-1 errmsg=请求失败`。 |
-| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->upload/undress/delete` | 本轮完成 | 仅接管未登录失败分支，返回 `retcode=-1 errmsg=请先登录`；图片上传、AI 生成、删除外部资源和金豆扣减未接管。 |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->upload/undress/delete` | 本轮完成 | 接管未登录失败分支，`delete` 额外接管记录不存在空 OK 分支；图片上传、AI 生成、删除外部资源和金豆扣减未接管。 |
 | `/starLive/index` | `c.api.starlive->index` | 本轮完成 | 直播初始化；支持登录用户或游客 sid，读取 `starlive_info`，兼容 PHP AES-128-CBC/base64 的 `encryptUid` 和 `md5(appId_userId_secKey)` token。 |
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | 本轮完成 | 直播余额查询；返回 raw JSON `{code,data}`，游客长 memberId 余额为 0，用户余额按 `users_quota.goldcoin*10`。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | 本轮完成 | 接管 raw JSON 安全失败分支：游客长 `memberId`、未知用户和 `tryAgain` 未知业务类型；资产变更、下注结算、翻译扣款和外部回调未接管。 |
@@ -170,6 +171,6 @@
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数和 topup 余额不足前置失败已迁；剩余游戏资产、外部平台调用需要登录、事务、灰度和回滚策略。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
-| `/minivod/throwcoin` 成功路径、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
+| `/minivod/throwcoin` 成功路径、`/minivod/parselong` 成功路径，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支、长视频地址转换和 parselong 前置错误已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |
-| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询和未登录失败分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、删除外部资源和金豆扣减。 |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询、未登录失败和 delete 空记录 OK 分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、删除外部资源和金豆扣减。 |

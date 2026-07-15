@@ -36,7 +36,8 @@ func (h *AIUndressHandler) Undress(c *gin.Context) {
 }
 
 func (h *AIUndressHandler) Delete(c *gin.Context) {
-	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 删除成功分支暂未迁移")
+	id, _ := strconv.Atoi(inputValue(c, "id"))
+	retcode, errmsg, err := h.service.DeleteEdge(c.Request.Context(), authToken(c), id)
 	respondLegacy(c, nil, retcode, errmsg, err)
 }
 

@@ -90,6 +90,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/throwcoin/:vodid` | ANY | `MiniVODHandler.ThrowCoin` |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | ANY | `MiniVODHandler.ReqPlay/ReqDown` |
 | `/minivod/reqcoin` | ANY | `MiniVODHandler.ReqCoin` |
+| `/minivod/reqlong/:vodid` | ANY | `MiniVODHandler.ReqLong` |
+| `/minivod/parselong/:vodid/index.m3u8` | ANY | `MiniVODHandler.ParseLongM3U8` |
 | `/my/:authorid`、`/my/:authorid/:action` | ANY | `MiniVODHandler.Author` |
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` | ANY | `CommunityHandler.Listing` |
 | `/community/*-:params`（上述 action） | ANY | `CommunityHandler.Listing` |
@@ -392,6 +394,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录、视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST 非正数和范围校验分支已迁移，金币打赏事务暂未接管 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已接管可控读取路径；从现有待展示 viewlog 读取小视频并包装作者/收藏状态，拉取推荐、标记已浏览和广告插入副作用暂不执行 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
+| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | `MiniVODHandler.ParseLongM3U8` | 部分已重构；复用长转短前置校验，记录不存在 `retcode=1` 和播放地址不存在 `retcode=2` 分支已迁移，媒体 CDN 拉取和 m3u8 裁剪成功分支暂未接管 |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
 | `/miniplaylog/remove` | `c.api.minivod->historyDelete` | `HistoryHandler.MiniPlayRemove` | 已重构；按 PHP 模型语义用输入 `vodid/vodids` 删除 `logid`，空参数 live 对比通过 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | `MiniVODHandler.Author` | 已重构，对比通过；作者主页小视频列表，返回 `now/userrow/vodrows/pageinfo/orders` |
@@ -429,7 +432,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | `AIUndressHandler.ModuleList/ResourceTypeList/ResourceList` | 已重构；只读外部资源查询，第三方 host/key 通过 `AIUNDRESS_THIRD_HOST`/`AIUNDRESS_THIRD_KEY` 注入，缺配置或外部请求失败返回 `retcode=-1 errmsg=请求失败` |
-| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->$action` | `AIUndressHandler.Upload/Undress/Delete` | 部分已重构；未登录返回 `retcode=-1 errmsg=请先登录`，文件保存/R2 上传/Redis 锁/金豆扣减/第三方生成/删除写入暂未接管 |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->$action` | `AIUndressHandler.Upload/Undress/Delete` | 部分已重构；未登录返回 `retcode=-1 errmsg=请先登录`，`delete` 记录不存在空 OK 分支已迁移，文件保存/R2 上传/Redis 锁/金豆扣减/第三方生成/删除写入暂未接管 |
 | `/starLive/index` | `c.api.starlive->index` | `StarLiveHandler.Index` | 已重构；直播初始化，兼容登录用户或游客 sid，读取 `starlive_info`，按 PHP AES-128-CBC/base64 生成 `encryptUid` 并返回嵌套 `data.data` |
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | `StarLiveHandler.QueryCoinBalance` | 已重构；直播平台余额查询 raw JSON 响应，游客长 memberId 返回 0，用户金币余额按 `goldcoin*10` 返回 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | `StarLiveHandler.GameBet/GameWin/Translate/TryAgain` | 部分已重构；raw JSON 游客长 `memberId`、空/非法 memberId 和未知 `busiType` 安全失败分支已迁移，下注/中奖/钻石兑换资产事务和重复订单查询暂未接管 |
@@ -535,7 +538,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/reqlist` 的拉取/标记/广告副作用 | `c.api.minivod->reqlist` | 部分未重构；`pullViewLogs`、`mUpdate(showtype=1)` 和随机广告插入仍需单独迁移 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录、视频/作者只读校验、GET 初始化和 POST 参数校验已迁移，金币打赏事务仍需迁移 |
-| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
+| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 部分未重构；记录不存在和播放地址不存在前置失败已迁移，媒体 CDN 拉取和 m3u8 裁剪成功分支仍需迁移 |
 
 ### 用户账号
 
@@ -592,7 +595,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 部分未重构；upload/undress/delete 未登录分支已迁移，上传保存、R2、Redis 锁、第三方 AI、金豆扣减和删除写入仍需迁移 |
+| `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`、`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`、`/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList`） | `c.api.aiundress->$action` | 部分未重构；upload/undress/delete 未登录分支和 delete 记录不存在空 OK 分支已迁移，上传保存、R2、Redis 锁、第三方 AI、金豆扣减和删除写入仍需迁移 |
 
 ### 图片、附件和通配资源
 

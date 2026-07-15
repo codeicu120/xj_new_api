@@ -1624,3 +1624,12 @@
 - Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`、`internal/repository/ucp.Repository.PackageByID`。
 - Subagent：`Sartre` 核对 VIP/金币/金豆套餐前置失败顺序，确认这些分支位于支付、资产写入和事务成功路径之前。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### Minivod 媒体前置错误与 AI 删除空记录
+
+- 已迁移：`/minivod/parselong/:vodid/index.m3u8` 在媒体 CDN 请求前的两个错误分支：记录不存在或已删除返回 `retcode=1`，播放地址不存在返回 `retcode=2`；真正拉取 m3u8 与裁剪输出仍未接管。
+- 已迁移：`/aiundress/delete` 登录后记录不存在分支，按 PHP 直接返回 `retcode=0 errmsg=""`，不触碰文件删除和状态更新。
+- PHP: `src/c/api/minivod.php::parseM3u8/getLong2Mini`、`src/c/api/aiundress.php::delete`。
+- Go: `internal/handler.MiniVODHandler.ParseLongM3U8`、`internal/service/minivod.Service.ReqLong`、`internal/handler.AIUndressHandler.Delete`、`internal/service/aiundress.Service.DeleteEdge`、`internal/repository/aiundress.Repository.ByID`。
+- Subagent：`Feynman` 核对媒体/AI/游戏剩余边界，确认 parselong 两个错误在 `getM3U8Content()` 前，AI delete 空记录在 `unlink()` 和 `update(status=5)` 前；`Fermat` 核对账号和 `explore/signtask`，其中 `signtask/sign` 已签到分支发生在 `db->begin()` 与 lock 之后，本批不接管。
+- 测试：`go test ./internal/service/aiundress ./internal/service/minivod ./internal/server` 通过。

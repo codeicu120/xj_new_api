@@ -86,6 +86,21 @@ func (h *MiniVODHandler) ReqLong(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html", []byte(body))
 }
 
+func (h *MiniVODHandler) ParseLongM3U8(c *gin.Context) {
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	_, retcode, errmsg, err := h.service.ReqLong(c.Request.Context(), authToken(c), vodID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Error("m3u8解析成功分支暂未迁移"))
+}
+
 func (h *MiniVODHandler) ReqCoin(c *gin.Context) {
 	logid, _ := strconv.Atoi(inputValue(c, "logid"))
 	retcode, errmsg, err := h.service.ReqCoin(c.Request.Context(), authToken(c), logid)

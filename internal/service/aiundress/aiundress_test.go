@@ -19,6 +19,7 @@ func (f fakeAuth) UserBySession(context.Context, string) (map[string]interface{}
 type fakeStore struct {
 	setting string
 	rows    []map[string]interface{}
+	row     map[string]interface{}
 }
 
 func (f fakeStore) Count(context.Context, int, int) (int, error) {
@@ -27,6 +28,13 @@ func (f fakeStore) Count(context.Context, int, int) (int, error) {
 
 func (f fakeStore) List(context.Context, int, int, int, int, int) ([]map[string]interface{}, error) {
 	return f.rows, nil
+}
+
+func (f fakeStore) ByID(context.Context, int) (map[string]interface{}, error) {
+	if f.row != nil {
+		return f.row, nil
+	}
+	return map[string]interface{}{}, nil
 }
 
 func (f fakeStore) SettingByUUID(context.Context, string) (string, error) {
@@ -66,6 +74,34 @@ func TestRequireLoginEdge(t *testing.T) {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "请先登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestDeleteEdgeMissingRowReturnsOK(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, fakeStore{}, "https://res.example")
+
+	retcode, errmsg, err := service.DeleteEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestDeleteEdgeExistingRowStopsBeforeWrite(t *testing.T) {
+	service := NewService(
+		fakeAuth{user: map[string]interface{}{"uid": "7"}},
+		fakeStore{row: map[string]interface{}{"id": "99", "image": "a.jpg", "output": "b.jpg"}},
+		"https://res.example",
+	)
+
+	retcode, errmsg, err := service.DeleteEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "AI 删除成功分支暂未迁移" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
