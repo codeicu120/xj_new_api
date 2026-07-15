@@ -1264,6 +1264,32 @@ func TestUCPTaskIndexRequiresLoginWithoutToken(t *testing.T) {
 	}
 }
 
+func TestUCPVODOrderIndexRequiresLoginWithoutToken(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/ucp/vodorder", "/ucp/vodorder/index"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+				t.Fatalf("unexpected response %#v", body)
+			}
+		})
+	}
+}
+
 func TestUCPRollTitle(t *testing.T) {
 	router := newTestRouter()
 

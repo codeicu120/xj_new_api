@@ -524,6 +524,11 @@ func (h *UCPHandler) VODOrderMyOrders(c *gin.Context) {
 	h.vodOrderList(c, page, h.service.VODOrderMyOrders)
 }
 
+func (h *UCPHandler) VODOrderIndex(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	h.vodOrderList(c, page, h.service.VODOrderIndex)
+}
+
 func (h *UCPHandler) VODOrderMySupports(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	h.vodOrderList(c, page, h.service.VODOrderMySupports)

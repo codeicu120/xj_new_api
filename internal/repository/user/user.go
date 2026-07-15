@@ -75,6 +75,20 @@ func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interfac
 	return row, nil
 }
 
+func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM bot_users WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query bot user by id: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
 func (r *Repository) CountRecommended(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil

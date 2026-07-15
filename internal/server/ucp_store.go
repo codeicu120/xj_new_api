@@ -23,6 +23,10 @@ func (s ucpStore) UserByID(ctx context.Context, uid int) (map[string]interface{}
 	return s.user.UserByID(ctx, uid)
 }
 
+func (s ucpStore) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
+	return s.user.BotByID(ctx, uid)
+}
+
 func (s ucpStore) Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error) {
 	return s.ucp.Bankcards(ctx, uid)
 }
@@ -287,6 +291,18 @@ func (s ucpStore) VODOrders(ctx context.Context, uid int, status *int, page int,
 	return s.ucp.VODOrders(ctx, uid, status, page, pageSize, orderBy)
 }
 
+func (s ucpStore) LatestVODIssue(ctx context.Context) (map[string]interface{}, error) {
+	return s.ucp.LatestVODIssue(ctx)
+}
+
+func (s ucpStore) CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error) {
+	return s.ucp.CountVODOrdersByCreateTime(ctx, start, end)
+}
+
+func (s ucpStore) VODOrdersByCreateTime(ctx context.Context, start int64, end int64, page int, pageSize int) ([]map[string]interface{}, error) {
+	return s.ucp.VODOrdersByCreateTime(ctx, start, end, page, pageSize)
+}
+
 func (s ucpStore) SumVODOrderCoins(ctx context.Context, uid int, status int) (int, error) {
 	return s.ucp.SumVODOrderCoins(ctx, uid, status)
 }
@@ -297,6 +313,14 @@ func (s ucpStore) CountVODSupports(ctx context.Context, uid int) (int, error) {
 
 func (s ucpStore) VODSupports(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.VODSupports(ctx, uid, page, pageSize)
+}
+
+func (s ucpStore) MaxVODSupport(ctx context.Context, orderID int) (map[string]interface{}, error) {
+	return s.ucp.MaxVODSupport(ctx, orderID)
+}
+
+func (s ucpStore) MyVODSupportCoins(ctx context.Context, orderID int, uid int) (int, error) {
+	return s.ucp.MyVODSupportCoins(ctx, orderID, uid)
 }
 
 func (s ucpStore) SumVODSupportCoins(ctx context.Context, uid int, onlyFrozen bool) (int, error) {

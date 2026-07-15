@@ -279,6 +279,43 @@ func (r *Repository) VODOrders(ctx context.Context, uid int, status *int, page i
 	return scanRows(rows)
 }
 
+func (r *Repository) LatestVODIssue(ctx context.Context) (map[string]interface{}, error) {
+	if r.db == nil {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM user_vod_issue ORDER BY issue DESC LIMIT 1")
+	if err != nil {
+		return nil, fmt.Errorf("query latest vod issue: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_vod_order WHERE create_time>=? AND create_time<?", start, end).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count vod orders by create time: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) VODOrdersByCreateTime(ctx context.Context, start int64, end int64, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM user_vod_order WHERE create_time>=? AND create_time<? ORDER BY (coins+support_coins) DESC, id DESC LIMIT ? OFFSET ?", start, end, pageSize, limitOffset(page, pageSize))
+	if err != nil {
+		return nil, fmt.Errorf("query vod orders by create time: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
 func (r *Repository) SumVODOrderCoins(ctx context.Context, uid int, status int) (int, error) {
 	if r.db == nil || uid <= 0 {
 		return 0, nil
@@ -324,6 +361,34 @@ ORDER BY a.support_time DESC`, uid, pageSize, limitOffset(page, pageSize))
 	}
 	defer rows.Close()
 	return scanRows(rows)
+}
+
+func (r *Repository) MaxVODSupport(ctx context.Context, orderID int) (map[string]interface{}, error) {
+	if r.db == nil || orderID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT uid, SUM(coins) AS total_coins FROM user_vod_support WHERE void=? GROUP BY uid ORDER BY total_coins DESC LIMIT 1", orderID)
+	if err != nil {
+		return nil, fmt.Errorf("query max vod support: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) MyVODSupportCoins(ctx context.Context, orderID int, uid int) (int, error) {
+	if r.db == nil || orderID <= 0 || uid <= 0 {
+		return 0, nil
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, "SELECT SUM(coins) FROM user_vod_support WHERE void=? AND uid=?", orderID, uid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("sum my vod support: %w", err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
 }
 
 func (r *Repository) SumVODSupportCoins(ctx context.Context, uid int, onlyFrozen bool) (int, error) {

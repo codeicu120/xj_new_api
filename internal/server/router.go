@@ -296,6 +296,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/coinpkg/index", ucpHandler.CoinPkgIndex)
 	router.Any("/ucp/beanpkg", ucpHandler.BeanPkgIndex)
 	router.Any("/ucp/beanpkg/index", ucpHandler.BeanPkgIndex)
+	router.Any("/ucp/vodorder", ucpHandler.VODOrderIndex)
+	router.Any("/ucp/vodorder/index", ucpHandler.VODOrderIndex)
 	router.Any("/ucp/vodorder/myorders", ucpHandler.VODOrderMyOrders)
 	router.Any("/ucp/vodorder/mysupports", ucpHandler.VODOrderMySupports)
 	router.Any("/ucp/vodorder/historyorders", ucpHandler.VODOrderHistoryOrders)

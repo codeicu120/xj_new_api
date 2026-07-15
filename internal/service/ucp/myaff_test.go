@@ -40,6 +40,11 @@ type fakeUserStore struct {
 	payments           []map[string]interface{}
 	vodOrders          []map[string]interface{}
 	vodSupports        []map[string]interface{}
+	latestVODIssue     map[string]interface{}
+	maxVODSupport      map[string]interface{}
+	myVODSupportCoins  int
+	userByID           map[string]interface{}
+	botByID            map[string]interface{}
 	sentMessage        map[string]interface{}
 }
 
@@ -360,10 +365,20 @@ func (s fakeUserStore) MsgConversation(context.Context, int, int) (map[string]in
 }
 
 func (s fakeUserStore) UserByID(context.Context, int) (map[string]interface{}, error) {
+	if s.userByID != nil {
+		return s.userByID, nil
+	}
 	if s.user != nil {
 		return s.user, nil
 	}
 	return map[string]interface{}{"uid": "7", "username": "peer"}, nil
+}
+
+func (s fakeUserStore) BotByID(context.Context, int) (map[string]interface{}, error) {
+	if s.botByID != nil {
+		return s.botByID, nil
+	}
+	return map[string]interface{}{}, nil
 }
 
 func (s fakeUserStore) Bankcards(context.Context, int) ([]map[string]interface{}, error) {
@@ -588,6 +603,21 @@ func (s fakeUserStore) VODOrders(context.Context, int, *int, int, int, string) (
 	return s.vodOrders, nil
 }
 
+func (s fakeUserStore) LatestVODIssue(context.Context) (map[string]interface{}, error) {
+	if s.latestVODIssue != nil {
+		return s.latestVODIssue, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) CountVODOrdersByCreateTime(context.Context, int64, int64) (int, error) {
+	return len(s.vodOrders), nil
+}
+
+func (s fakeUserStore) VODOrdersByCreateTime(context.Context, int64, int64, int, int) ([]map[string]interface{}, error) {
+	return s.vodOrders, nil
+}
+
 func (s fakeUserStore) SumVODOrderCoins(_ context.Context, _ int, status int) (int, error) {
 	if status == 1 {
 		return 100, nil
@@ -601,6 +631,17 @@ func (s fakeUserStore) CountVODSupports(context.Context, int) (int, error) {
 
 func (s fakeUserStore) VODSupports(context.Context, int, int, int) ([]map[string]interface{}, error) {
 	return s.vodSupports, nil
+}
+
+func (s fakeUserStore) MaxVODSupport(context.Context, int) (map[string]interface{}, error) {
+	if s.maxVODSupport != nil {
+		return s.maxVODSupport, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) MyVODSupportCoins(context.Context, int, int) (int, error) {
+	return s.myVODSupportCoins, nil
 }
 
 func (s fakeUserStore) SumVODSupportCoins(_ context.Context, _ int, onlyFrozen bool) (int, error) {
@@ -1120,6 +1161,68 @@ func TestVODOrderMyOrdersRequiresLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "您还没有登录" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestVODOrderIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.VODOrderIndex(context.Background(), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestVODOrderIndexReturnsRanking(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		settings: map[string]map[string]interface{}{
+			"setting": {"value": `a:1:{s:16:"vod_order_period";i:7;}`},
+		},
+		latestVODIssue: map[string]interface{}{"issue": time.Date(2026, 7, 1, 0, 0, 0, 0, loc).Unix()},
+		vodOrders: []map[string]interface{}{
+			{"id": "9", "uid": "6", "coins": "100", "support_coins": "30"},
+		},
+		maxVODSupport:     map[string]interface{}{"uid": "7", "total_coins": "88"},
+		myVODSupportCoins: 12,
+		userByID: map[string]interface{}{
+			"uid":             "7",
+			"username":        "helper",
+			"nickname":        "Helper Nick",
+			"gid":             "4",
+			"sysgid":          "0",
+			"regtime":         "1760000000",
+			"avatar":          "",
+			"newmsg":          "0",
+			"recommend_total": "0",
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC) }
+
+	data, retcode, errmsg, err := service.VODOrderIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["issue"] != "260708" {
+		t.Fatalf("issue = %#v", data["issue"])
+	}
+	rows := data["data"].([]map[string]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("rows = %#v", rows)
+	}
+	if rows[0]["my_support"] != 12 {
+		t.Fatalf("my_support = %#v", rows[0]["my_support"])
+	}
+	top := rows[0]["top"].(map[string]interface{})
+	if top["uid"] != "7" || top["total_coins"] != "88" || top["username"] != "helper" || top["nickname"] != "helper" {
+		t.Fatalf("top = %#v", top)
 	}
 }
 
