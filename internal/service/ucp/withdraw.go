@@ -3,6 +3,7 @@ package ucp
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -193,6 +194,28 @@ func (s *Service) WithdrawCreateEdge(ctx context.Context, token string, cardID i
 		maxAmount := atoi(setting["bankcard_withdraw_max"])
 		if withdrawAmount < minAmount || withdrawAmount > maxAmount {
 			return -1, "银行卡提现范围为 ¥" + formatRMB(minAmount) + "~" + formatRMB(maxAmount), nil
+		}
+	}
+	account, err := s.store.Account(ctx, uid)
+	if err != nil {
+		return -1, "提现申请失败", err
+	}
+	if wdType == 1 {
+		if withdrawAmount > atoi(account["game_available_balance"]) {
+			return -1, "余额不足", nil
+		}
+	} else if withdrawAmount > atoi(account["available_balance"]) {
+		exrate := atoi(setting["exrate"])
+		if exrate == 0 {
+			return -1, "系统已关闭兑换功能", nil
+		}
+		amount := withdrawAmount - atoi(account["available_balance"])
+		coinNum := int(math.Ceil((float64(amount) / 100) * float64(exrate)))
+		if coinNum == 0 {
+			return -1, "兑换金币数量为0", nil
+		}
+		if coinNum > 1000000 {
+			return -1, "兑换数量100万以上请分次兑换", nil
 		}
 	}
 	return -1, "提现申请成功分支暂未迁移", nil

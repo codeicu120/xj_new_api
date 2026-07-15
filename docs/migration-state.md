@@ -1689,5 +1689,14 @@
 - PHP: `src/c/api/ucp/withdraw.php::create`。
 - Go: `internal/handler.UCPHandler.WithdrawCreate`、`internal/service/ucp.Service.WithdrawCreateEdge`、`internal/repository/ucp.Repository.CountWithdrawsSince`。
 - 未迁移：账户余额、游戏余额、金币兑换、提现申请写入、冻结余额事务和 Telegram 通知。
-- Subagent：`Planck` 先前只读复核这些分支位于账户读取、兑换和冻结事务之前；`Pauli` 正在做提交前 CR 复核。
+- Subagent：`Planck` 先前只读复核这些分支位于账户读取、兑换和冻结事务之前；`Pauli` 提交前 CR 复核通过。
 - 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过。
+
+### UCP 提现创建余额和兑换前置失败分支
+
+- 已迁移：`/ucp/withdraw/create` 的游戏余额不足、普通提现兑换关闭、兑换金币数量为 0 和兑换数量超过 100 万分支；仅读取账户余额，不执行金币扣减、人民币入账或提现冻结。
+- PHP: `src/c/api/ucp/withdraw.php::create`。
+- Go: `internal/handler.UCPHandler.WithdrawCreate`、`internal/service/ucp.Service.WithdrawCreateEdge`。
+- 未迁移：普通提现兑换事务后的最终余额不足、提现记录创建、冻结余额事务和 Telegram 通知。
+- Subagent：`Planck` 先前标注游戏余额不足可迁但需注明最终冻结仍由后续事务兜底；主线按前置失败分支接管，不迁写入。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。

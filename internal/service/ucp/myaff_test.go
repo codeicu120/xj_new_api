@@ -12,6 +12,7 @@ import (
 type fakeUserStore struct {
 	user               map[string]interface{}
 	guest              map[string]interface{}
+	account            map[string]interface{}
 	quota              map[string]interface{}
 	missingGuest       bool
 	coinLogTypes       []int
@@ -195,6 +196,9 @@ func (s fakeUserStore) PaymentsSince(context.Context, int, int64, int) ([]map[st
 }
 
 func (s fakeUserStore) Account(context.Context, int) (map[string]interface{}, error) {
+	if s.account != nil {
+		return s.account, nil
+	}
 	return map[string]interface{}{
 		"uid":                    "5",
 		"balance":                "1000",
@@ -2626,6 +2630,7 @@ func TestWithdrawCreateEdgePrechecks(t *testing.T) {
 		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
 		settings:    baseSettings,
 		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+		account:     map[string]interface{}{"uid": "5", "available_balance": "5000"},
 	}, "https://res.example.test")
 	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 250000)
 	if err != nil {
@@ -2652,6 +2657,58 @@ func TestWithdrawCreateEdgePrechecks(t *testing.T) {
 		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
 		settings:    baseSettings,
 		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+		account:     map[string]interface{}{"uid": "5", "game_available_balance": "3000", "available_balance": "800"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 1, 7000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "余额不足" {
+		t.Fatalf("game balance retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	wideSettings := map[string]map[string]interface{}{
+		"setting": {
+			"value": `a:7:{s:8:"topupmin";i:5000;s:14:"withdraw_limit";i:2;s:6:"exrate";i:0;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:999999999;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:999999999;}`,
+		},
+		"game.setting": {
+			"value": `a:1:{s:11:"withdrawmin";i:6000;}`,
+		},
+	}
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    wideSettings,
+		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+		account:     map[string]interface{}{"uid": "5", "available_balance": "800"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "系统已关闭兑换功能" {
+		t.Fatalf("exchange closed retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	wideSettings["setting"]["value"] = `a:7:{s:8:"topupmin";i:5000;s:14:"withdraw_limit";i:2;s:6:"exrate";i:100000;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:999999999;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:999999999;}`
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    wideSettings,
+		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+		account:     map[string]interface{}{"uid": "5", "available_balance": "800"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 500000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "兑换数量100万以上请分次兑换" {
+		t.Fatalf("exchange too large retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:    baseSettings,
+		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
+		account:     map[string]interface{}{"uid": "5", "available_balance": "5000"},
 	}, "https://res.example.test")
 	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 5000)
 	if err != nil {
