@@ -12,6 +12,7 @@ import (
 type fakeUserStore struct {
 	user               map[string]interface{}
 	guest              map[string]interface{}
+	quota              map[string]interface{}
 	missingGuest       bool
 	coinLogTypes       []int
 	coinLogOrderBy     string
@@ -44,6 +45,7 @@ type fakeUserStore struct {
 	withdrawTotal      int
 	exrate             *int
 	vodOrders          []map[string]interface{}
+	vodOrderRow        map[string]interface{}
 	vodSupports        []map[string]interface{}
 	latestVODIssue     map[string]interface{}
 	maxVODSupport      map[string]interface{}
@@ -204,6 +206,9 @@ func (s fakeUserStore) Account(context.Context, int) (map[string]interface{}, er
 }
 
 func (s fakeUserStore) Quota(context.Context, int) (map[string]interface{}, error) {
+	if s.quota != nil {
+		return s.quota, nil
+	}
 	return map[string]interface{}{"uid": "5", "goldcoin": "625"}, nil
 }
 
@@ -646,6 +651,10 @@ func (s fakeUserStore) VODOrders(context.Context, int, *int, int, int, string) (
 	return s.vodOrders, nil
 }
 
+func (s fakeUserStore) VODOrderByID(context.Context, int) (map[string]interface{}, error) {
+	return s.vodOrderRow, nil
+}
+
 func (s fakeUserStore) LatestVODIssue(context.Context) (map[string]interface{}, error) {
 	if s.latestVODIssue != nil {
 		return s.latestVODIssue, nil
@@ -946,12 +955,50 @@ func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 		t.Fatalf("vodorder create coins retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.VODOrderSupportEdge(context.Background(), "token", 0)
+	lowGold := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, quota: map[string]interface{}{"goldcoin": "120"}}, "https://res.example.test")
+	retcode, errmsg, err = lowGold.VODOrderCreateEdge(context.Background(), "token", "ABC-001", "", 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币不足:120" {
+		t.Fatalf("vodorder create balance retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.VODOrderSupportEdge(context.Background(), "token", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "您助力的求片记录不存在" {
 		t.Fatalf("vodorder support retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service.now = func() time.Time { return time.Unix(1000, 0) }
+	supportStore := fakeUserStore{
+		user:        map[string]interface{}{"uid": "5"},
+		quota:       map[string]interface{}{"goldcoin": "10"},
+		vodOrderRow: map[string]interface{}{"id": "7", "uid": "8", "start_time": "1200", "stop_time": "1300"},
+	}
+	support := NewService(supportStore, "https://res.example.test")
+	support.now = service.now
+	retcode, errmsg, err = support.VODOrderSupportEdge(context.Background(), "token", 7, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantWindow := "该求片助力时间为" + formatUnixTime(1200) + "~" + formatUnixTime(1300)
+	if retcode != -1 || errmsg != wantWindow {
+		t.Fatalf("vodorder support time retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	supportStore.vodOrderRow = map[string]interface{}{"id": "7", "uid": "8", "start_time": "900", "stop_time": "1300"}
+	supportStore.quota = map[string]interface{}{"goldcoin": "1"}
+	support = NewService(supportStore, "https://res.example.test")
+	support.now = service.now
+	retcode, errmsg, err = support.VODOrderSupportEdge(context.Background(), "token", 7, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币不足:1" {
+		t.Fatalf("vodorder support balance retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
 

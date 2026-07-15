@@ -1606,3 +1606,11 @@
 - Go: `internal/service/invite.Service.BindEdge`、`internal/service/game.WaliService.TopupEdge`、`internal/service/onego.Service.BetEdge`、`internal/service/ucp.Service.CoinLogExchangeEdge` 及对应 repository/handler。
 - Subagent：`Carson` 核对 invite/game/onego 的可迁顺序和错误文案；`Franklin` 核对 UCP 剩余项，建议优先做 coinlog exchange 与 vodorder 只读失败，暂缓支付通道复杂 placeorder。
 - 测试：`go test ./internal/service/invite ./internal/service/game ./internal/service/onego ./internal/service/ucp ./internal/server` 通过。
+
+### UCP 求片前置失败补齐
+
+- 已迁移：`/ucp/vodorder/create` 金币不足分支，沿 PHP 文案返回 `金币不足:{goldcoin}`，仍不执行 issue 写入、金币扣减、求片订单创建或通知。
+- 已迁移：`/ucp/vodorder/support` 真实订单不存在、本人求片已停止助力、他人求片时间窗口、助力金币低于 1 和金币不足分支；只读 `user_vod_order` 与 `users_quota`，停止于金币扣减和助力记录写入前。
+- PHP: `src/c/api/ucp/vodorder.php::create/support`。
+- Go: `internal/service/ucp.Service.VODOrderCreateEdge/VODOrderSupportEdge`、`internal/repository/ucp.Repository.VODOrderByID`、`internal/handler.UCPHandler.VODOrderSupport`。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。

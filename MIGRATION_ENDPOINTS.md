@@ -502,7 +502,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vodorder/myorders` | `c.api.ucp.vodorder->myorders` | `UCPHandler.VODOrderMyOrders` | 已重构，对比通过；登录只读我的求片记录、累计消耗和当前冻结金币 |
 | `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
 | `/ucp/vodorder/historyorders` | `c.api.ucp.vodorder->historyorders` | `UCPHandler.VODOrderHistoryOrders` | 已重构，对比通过；登录只读成功的历史求片记录 |
-| `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->$action` | `UCPHandler.VODOrderCreate/VODOrderSupport` | 部分已重构；未登录、缺番号/名称、求片金币下限和缺失助力记录前置分支已迁移，求片金币扣减和助力写入成功分支暂未接管 |
+| `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->$action` | `UCPHandler.VODOrderCreate/VODOrderSupport` | 部分已重构；未登录、缺番号/名称、求片金币下限、求片金币不足、助力记录不存在、助力时间窗口、助力金币下限和助力金币不足前置分支已迁移，求片金币扣减和助力写入成功分支暂未接管 |
 | `/vod/breaking` | `c.api.vod->breaking` | `VODHandler.Breaking` | 已重构，对比通过；公共只读每日爆料，返回当天 cateid=99 的 vodid/title |
 | `/vod/errorreport`、`/v2/vod/errorreport` | `c.api.vod->errorreport`、`c.apiv2.vod->errorreport` | `VODHandler.ErrorReport` | 已重构；视频报错反馈写入 `vod_errors`，不涉及金币、支付或播放权限 |
 
@@ -568,7 +568,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金币兑换和会员资产仍需迁移 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录分支已迁移，支付下单和金币资产仍需迁移 |
 | `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金豆和金币兑换仍需迁移 |
-| `/ucp/vodorder/:action?`（除 `/ucp/vodorder`、`/ucp/vodorder/index`、`/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`） | `c.api.ucp.vodorder->$action` | 部分未重构；`create/support` 未登录分支已迁移，求片金币扣减或助力写入仍需迁移 |
+| `/ucp/vodorder/:action?`（除 `/ucp/vodorder`、`/ucp/vodorder/index`、`/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`） | `c.api.ucp.vodorder->$action` | 部分未重构；`create/support` 参数、余额、记录和时间窗口失败分支已迁移，求片金币扣减或助力写入仍需迁移 |
 
 ### 活动、邀请、发现页
 

@@ -243,10 +243,21 @@ func (s *Service) VODOrderCreateEdge(ctx context.Context, token string, vodseria
 	if coins < 100 {
 		return -1, "求片金币不能低于100", nil
 	}
+	quota, err := s.store.Quota(ctx, atoi(user["uid"]))
+	if err != nil {
+		return -1, "求片创建失败", err
+	}
+	goldcoin := ""
+	if quota["goldcoin"] != nil {
+		goldcoin = str(quota["goldcoin"])
+	}
+	if len(quota) == 0 || atoi(goldcoin) < coins {
+		return -1, "金币不足:" + goldcoin, nil
+	}
 	return -1, "求片创建成功分支暂未迁移", nil
 }
 
-func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID int) (int, string, error) {
+func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID int, coins int) (int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
 		return -9999, "您还没有登录", err
@@ -257,7 +268,40 @@ func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID
 	if orderID <= 0 {
 		return -1, "您助力的求片记录不存在", nil
 	}
+	order, err := s.store.VODOrderByID(ctx, orderID)
+	if err != nil {
+		return -1, "求片助力失败", err
+	}
+	if len(order) == 0 || atoi(order["id"]) == 0 {
+		return -1, "您助力的求片记录不存在", nil
+	}
+	now := s.now().Unix()
+	if atoi(order["uid"]) == atoi(user["uid"]) {
+		if now > int64(atoi(order["stop_time"])) {
+			return -1, "该求片已停止助力", nil
+		}
+	} else if now < int64(atoi(order["start_time"])) || now > int64(atoi(order["stop_time"])) {
+		return -1, "该求片助力时间为" + formatUnixTime(atoi(order["start_time"])) + "~" + formatUnixTime(atoi(order["stop_time"])), nil
+	}
+	if coins < 1 {
+		return -1, "助力求片金币不能低于1", nil
+	}
+	quota, err := s.store.Quota(ctx, atoi(user["uid"]))
+	if err != nil {
+		return -1, "求片助力失败", err
+	}
+	goldcoin := ""
+	if quota["goldcoin"] != nil {
+		goldcoin = str(quota["goldcoin"])
+	}
+	if len(quota) == 0 || atoi(goldcoin) < coins {
+		return -1, "金币不足:" + goldcoin, nil
+	}
 	return -1, "求片助力成功分支暂未迁移", nil
+}
+
+func formatUnixTime(ts int) string {
+	return time.Unix(int64(ts), 0).Format("2006-01-02 15:04:05")
 }
 
 func validEmail(email string) bool {

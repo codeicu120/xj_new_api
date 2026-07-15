@@ -323,6 +323,10 @@ func (s ucpStore) VODOrders(ctx context.Context, uid int, status *int, page int,
 	return s.ucp.VODOrders(ctx, uid, status, page, pageSize, orderBy)
 }
 
+func (s ucpStore) VODOrderByID(ctx context.Context, orderID int) (map[string]interface{}, error) {
+	return s.ucp.VODOrderByID(ctx, orderID)
+}
+
 func (s ucpStore) LatestVODIssue(ctx context.Context) (map[string]interface{}, error) {
 	return s.ucp.LatestVODIssue(ctx)
 }

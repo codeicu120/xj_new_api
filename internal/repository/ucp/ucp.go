@@ -300,6 +300,20 @@ func (r *Repository) VODOrders(ctx context.Context, uid int, status *int, page i
 	return scanRows(rows)
 }
 
+func (r *Repository) VODOrderByID(ctx context.Context, orderID int) (map[string]interface{}, error) {
+	if r.db == nil || orderID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM user_vod_order WHERE id=?", orderID)
+	if err != nil {
+		return nil, fmt.Errorf("query vod order by id: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
 func (r *Repository) LatestVODIssue(ctx context.Context) (map[string]interface{}, error) {
 	if r.db == nil {
 		return map[string]interface{}{}, nil

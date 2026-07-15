@@ -81,6 +81,7 @@ type UserStore interface {
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
 	CountVODOrders(ctx context.Context, uid int, status *int) (int, error)
 	VODOrders(ctx context.Context, uid int, status *int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
+	VODOrderByID(ctx context.Context, orderID int) (map[string]interface{}, error)
 	LatestVODIssue(ctx context.Context) (map[string]interface{}, error)
 	CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error)
 	VODOrdersByCreateTime(ctx context.Context, start int64, end int64, page int, pageSize int) ([]map[string]interface{}, error)

@@ -159,7 +159,8 @@ func (h *UCPHandler) VODOrderCreate(c *gin.Context) {
 
 func (h *UCPHandler) VODOrderSupport(c *gin.Context) {
 	orderID, _ := strconv.Atoi(inputValue(c, "orderid"))
-	retcode, errmsg, err := h.service.VODOrderSupportEdge(c.Request.Context(), authToken(c), orderID)
+	coins, _ := strconv.Atoi(inputValue(c, "coins"))
+	retcode, errmsg, err := h.service.VODOrderSupportEdge(c.Request.Context(), authToken(c), orderID, coins)
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
