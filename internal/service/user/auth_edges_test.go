@@ -64,12 +64,68 @@ func TestRegisterEdgeBranches(t *testing.T) {
 		t.Fatalf("unexpected v2 email response %d %q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Password: "123"}, true)
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Username: "abcdef", Password: "123"}, true)
 	if err != nil {
 		t.Fatalf("v2 register password: %v", err)
 	}
 	if retcode != -1 || errmsg != "密码6-16位" {
 		t.Fatalf("unexpected v2 password response %d %q", retcode, errmsg)
+	}
+}
+
+func TestRegisterReadOnlyValidationBranches(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{})
+
+	retcode, errmsg, err := service.Register(context.Background(), AuthEdgeRequest{AUP: 1, Mobi: "13800138000"}, false)
+	if err != nil {
+		t.Fatalf("v1 register mobi: %v", err)
+	}
+	if retcode != -1 || errmsg != "注册成功分支暂未迁移" {
+		t.Fatalf("unexpected v1 mobi response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byMobi: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, Mobi: "13800138000"}, false)
+	if err != nil {
+		t.Fatalf("v1 register duplicate mobi: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机号码已被注册" {
+		t.Fatalf("unexpected duplicate mobi response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{})
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Username: "123456", Password: "123456"}, true)
+	if err != nil {
+		t.Fatalf("v2 register numeric username: %v", err)
+	}
+	if retcode != -1 || errmsg != "用户名不能是纯数字" {
+		t.Fatalf("unexpected numeric username response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Username: "bad!", Password: "123456"}, true)
+	if err != nil {
+		t.Fatalf("v2 register invalid username: %v", err)
+	}
+	if retcode != -1 || errmsg != "用户名2-8个汉字，英文6-16个字符" {
+		t.Fatalf("unexpected invalid username response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byUser: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 1, Username: "abcdef", Password: "123456"}, true)
+	if err != nil {
+		t.Fatalf("v2 register duplicate username: %v", err)
+	}
+	if retcode != -1 || errmsg != "用户名已存在" {
+		t.Fatalf("unexpected duplicate username response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byEmail: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Register(context.Background(), AuthEdgeRequest{AUP: 1, RegType: 3, Email: "used@example.com"}, true)
+	if err != nil {
+		t.Fatalf("v2 register duplicate email: %v", err)
+	}
+	if retcode != -1 || errmsg != "该邮箱已经被注册，您可以通过邮箱找回密码" {
+		t.Fatalf("unexpected duplicate email response %d %q", retcode, errmsg)
 	}
 }
 

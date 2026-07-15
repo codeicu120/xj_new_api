@@ -44,7 +44,7 @@
 | `/payment/reqpay`、`/payment/pay12req` | `c.api.payment->reqpay/pay12req` | 本轮完成 | 接管缺失/已支付/过期/非本人和 known payway 支付方式不允许前置失败分支；`pay12req` 错误分支返回 payerror HTML，成功请求网关暂未接管。 |
 | `/respond/*` 常见支付 provider 失败分支 | `c.respond.*` | 本轮完成 | 空请求/解析失败分支返回旧 provider `echoErr()` 文本；成功验签、锁单入账和 `payment->doAction()` 未接管。 |
 | `/respond/chan1` | `c.respond.chan1` | 本轮完成 | 仅接管 `mobi|secret` token 校验失败分支，返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理未接管。 |
-| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号格式、空账号、无效 step、v2 注册格式、v2 账号不存在、v2 空密码、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |
+| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号/邮箱/用户名格式和查重、空账号、无效 step、v2 账号不存在、v2 空密码、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |

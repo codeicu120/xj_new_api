@@ -215,9 +215,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | `UserHandler.SysAvatar` | 已重构，对比通过 |
 | `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
-| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议、已登录、v2 手机注册手机号格式、v2 邮箱注册邮箱格式和 v2 账号注册密码长度，不执行验证码、注册写库、邀请奖励或 session |
+| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议、已登录、v1/v2 手机注册手机号格式和查重、v2 邮箱格式/查重、v2 用户名格式/查重、v2 账号注册密码长度，不执行验证码、注册写库、邀请奖励或 session |
 | `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录、v2 空账号、v2 手机/邮箱/用户名未注册和 v2 已存在账号空密码，不执行密码校验、验证码校验或 session 写入 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在和 step1 推进，不执行验证码或改密 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在和 step1 推进，不执行验证码或改密 |
 | `/delete` | `c.api.user2->delAccount` | `UserHandler.Delete` | 部分已重构；未登录 `retcode=-9999` 分支，不写 Redis 注销申请、不删除 session |
 | `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式、步骤错误、相同手机号、手机号已存在和 step1 推进分支，不执行验证码或换绑事务 |
 | `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body |
@@ -544,9 +544,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议/已登录/v2 参数格式等失败分支已迁移，成功注册、验证码、IP 频控、邀请奖励和写库仍未迁移 |
+| `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议、已登录、手机号/邮箱/用户名格式和查重等失败分支已迁移，注册关闭、IP 频控、验证码、成功注册、邀请奖励和写库仍未迁移 |
 | `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v2 空账号、v2 账号不存在和 v2 空密码失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式/空手机号邮箱/无效 step、step1 查用户和 step1 推进已迁移，step2 验证码和 step3 改密仍未迁移 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 查用户和 step1 推进已迁移，step2 验证码和 step3 改密仍未迁移 |
 | `/delete` | `c.api.user2->delAccount` | 部分未重构；未登录分支已迁移，验证码、Redis 注销申请和退出登录仍未迁移 |
 | `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误、手机号存在校验和 step1 推进已迁移，step2 验证码和事务换绑仍未迁移 |
 

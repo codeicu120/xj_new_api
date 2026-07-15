@@ -1633,3 +1633,13 @@
 - Go: `internal/handler.MiniVODHandler.ParseLongM3U8`、`internal/service/minivod.Service.ReqLong`、`internal/handler.AIUndressHandler.Delete`、`internal/service/aiundress.Service.DeleteEdge`、`internal/repository/aiundress.Repository.ByID`。
 - Subagent：`Feynman` 核对媒体/AI/游戏剩余边界，确认 parselong 两个错误在 `getM3U8Content()` 前，AI delete 空记录在 `unlink()` 和 `update(status=5)` 前；`Fermat` 核对账号和 `explore/signtask`，其中 `signtask/sign` 已签到分支发生在 `db->begin()` 与 lock 之后，本批不接管。
 - 测试：`go test ./internal/service/aiundress ./internal/service/minivod ./internal/server` 通过。
+
+### 账号注册查重与邮箱找回前置校验
+
+- 已迁移：`/register` v1 的手机号格式和手机号已注册分支；`/v2/register` 的账号注册用户名格式/查重、手机注册查重、邮箱注册查重分支。
+- 已迁移：`/v2/forgot` 邮箱找回时邮箱格式错误分支，发生在验证码校验和改密之前。
+- PHP: `src/c/api/user.php::register`、`src/c/apiv2/user.php::register/forgot`、`src/m/user/user.php::checkMobi/checkEmail/checkUsername`。
+- Go: `internal/service/user.AuthEdgeService.Register/Forgot`，复用 `AuthEdgeLookupStore.UserByMobi/UserByEmail/UserByUsername`，仍不接触验证码、session、Redis 或写库成功路径。
+- 未迁移：注册关闭、IP 频控和注销重复申请等分支需要 settings/keylimit/Redis 只读接口；`explore/signtask/sign` 的已签到分支在 PHP begin/lock 之后，本批不接。
+- Subagent：`Fermat` 梳理账号可迁前置校验，主线采纳无需新增基础设施的格式/查重分支。
+- 测试：`go test ./internal/service/user` 通过。
