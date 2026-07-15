@@ -34,6 +34,8 @@ type fakeUserStore struct {
 	deletedBankcard    map[string]interface{}
 	defaultBankcard    map[string]interface{}
 	banks              []map[string]interface{}
+	settings           map[string]map[string]interface{}
+	calldata           map[string]map[string]interface{}
 	sentMessage        map[string]interface{}
 }
 
@@ -536,6 +538,24 @@ func (s fakeUserStore) SettingExRate(context.Context) (int, error) {
 	return 10, nil
 }
 
+func (s fakeUserStore) SettingByUUID(_ context.Context, uuid string) (map[string]interface{}, error) {
+	if s.settings != nil {
+		if row, ok := s.settings[uuid]; ok {
+			return row, nil
+		}
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) CalldataByUUID(_ context.Context, uuid string) (map[string]interface{}, error) {
+	if s.calldata != nil {
+		if row, ok := s.calldata[uuid]; ok {
+			return row, nil
+		}
+	}
+	return map[string]interface{}{}, nil
+}
+
 func TestTaskSharePicEmpty(t *testing.T) {
 	service := NewService(fakeUserStore{}, "https://res.example.test")
 
@@ -559,6 +579,42 @@ func TestTaskSharePicReturnsPoster(t *testing.T) {
 	row, ok := data["data"].(map[string]interface{})
 	if !ok || row["pic"] != "a.png" {
 		t.Fatalf("data = %#v", data)
+	}
+}
+
+func TestTaskQRLinkRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.TaskQRLink(context.Background(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5", "uniqkey": "12345"},
+		settings: map[string]map[string]interface{}{
+			"baseset": {"value": "a:1:{s:10:\"inviteUrls\";s:29:\"https://a.test\n-\nhttps://b.test\";}"},
+		},
+		calldata: map[string]map[string]interface{}{
+			"global.qrcode.link": {"type": "code", "content": "https://qr.test?u={inviteUrl}&c={inviteCode}"},
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC) }
+
+	data, retcode, errmsg, err := service.TaskQRLink(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", "bad-pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["qrlink"] != "https://qr.test?u=https://b.test&c=9IX" {
+		t.Fatalf("qrlink = %#v", data["qrlink"])
 	}
 }
 

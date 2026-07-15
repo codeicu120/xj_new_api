@@ -910,6 +910,17 @@
 - 兼容规则：保持旧 PHP `data.data` 包装；随机行不做逐条完全一致，只要求字段 shape 和 `retcode/errmsg` 对齐。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/task/sharepic` 成功分支，忽略动态 `xxx_api_auth` 和随机行差异后一致。
 
+### `/ucp/task/qrlink`
+
+- PHP: `c.api.ucp.task->qrlink`
+- Go: `internal/handler.UCPHandler.TaskQRLink`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/index.SettingsRepository` 通过 `ucpStore` 只读注入。
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `maintain_calldata.uuid=(pid.)global.qrcode.link` 和 `settings.uuid=baseset`；渠道配置缺失时回退默认 `global.qrcode.link`。
+- 兼容规则：`pid` 只允许英文数字；`inviteUrls` 按旧 PHP 的 `-` 分组并按当月日期选择，替换 `{inviteUrl}` 和 `{inviteCode}`，邀请码为用户 `uniqkey` 的大写 base36。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/task/qrlink` 未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
+
 ### `/ucp/taskbox/index`
 
 - PHP: `c.api.ucp.taskbox->index`

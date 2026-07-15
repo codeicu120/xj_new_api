@@ -100,6 +100,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/myaff` | ANY | `UCPHandler.MyAff` |
 | `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
 | `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
+| `/ucp/task/qrlink` | ANY | `UCPHandler.TaskQRLink` |
 | `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
@@ -346,6 +347,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/bankcard/delete` | `c.api.ucp.bankcard->delete` | `UCPHandler.BankcardDelete` | 已重构；登录删除本人提款地址，返回 `操作成功` |
 | `/ucp/bankcard/:action?`（除已列 action） | `c.api.ucp.bankcard->$action` | 不接管 | PHP `ucp/bankcard.php` 仅定义 `index/create/modify/delete`，均已覆盖 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | `UCPHandler.TaskSharePic` | 已重构，对比通过；公共随机推广海报，只读无奖励写入 |
+| `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | `UCPHandler.TaskQRLink` | 已重构，对比通过；登录只读推广二维码链接，读取推广 URL 和邀请码，不生成图片、不写 keylimit |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
 
@@ -431,7 +433,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
-| `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
+| `/ucp/task/:action?`（除 `/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到、二维码图片生成或 keylimit 写入等 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen` 涉及奖励写入 |

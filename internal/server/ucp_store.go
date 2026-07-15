@@ -4,13 +4,15 @@ import (
 	"context"
 
 	"xj_comp/internal/domain"
+	indexRepo "xj_comp/internal/repository/index"
 	ucpRepo "xj_comp/internal/repository/ucp"
 	userRepo "xj_comp/internal/repository/user"
 )
 
 type ucpStore struct {
-	user *userRepo.Repository
-	ucp  *ucpRepo.Repository
+	user  *userRepo.Repository
+	ucp   *ucpRepo.Repository
+	index *indexRepo.SettingsRepository
 }
 
 func (s ucpStore) UserBySession(ctx context.Context, sid string) (map[string]interface{}, error) {
@@ -247,4 +249,12 @@ func (s ucpStore) CountBalanceLogs(ctx context.Context, uid int) (int, error) {
 
 func (s ucpStore) SettingExRate(ctx context.Context) (int, error) {
 	return s.ucp.SettingExRate(ctx)
+}
+
+func (s ucpStore) SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	return s.index.SettingByUUID(ctx, uuid)
+}
+
+func (s ucpStore) CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	return s.index.CalldataByUUID(ctx, uuid)
 }
