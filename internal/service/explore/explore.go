@@ -22,6 +22,7 @@ type Store interface {
 	Tabs(ctx context.Context) ([]map[string]interface{}, error)
 	UpdateUserNotificationAll(ctx context.Context, uid int, value string) error
 	UpdateGuestNotificationAll(ctx context.Context, sid string, value string) error
+	SignTask(ctx context.Context, user map[string]interface{}, now int64) (int, int, string, error)
 	VodTaskByID(ctx context.Context, vid int) (map[string]interface{}, error)
 	UserVodTaskLog(ctx context.Context, uid int, today int64, vid int) (map[string]interface{}, error)
 	GuestVodTaskLog(ctx context.Context, sid string, today int64, vid int) (map[string]interface{}, error)
@@ -124,6 +125,21 @@ func (s *Service) CleanNotification(ctx context.Context, token string, tabKey st
 		dataValue = notificationAll
 	}
 	return map[string]interface{}{"notification_all": dataValue}, 0, "", nil
+}
+
+func (s *Service) SignTaskSign(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
+	user, err := s.userWithPerms(ctx, token)
+	if err != nil {
+		return nil, -1, "签到失败", err
+	}
+	taskDone, retcode, errmsg, err := s.store.SignTask(ctx, user, s.now().Unix())
+	if err != nil {
+		return nil, -1, "签到失败", err
+	}
+	if retcode != 0 {
+		return nil, retcode, errmsg, nil
+	}
+	return map[string]interface{}{"taskdone": taskDone}, 0, "签到成功", nil
 }
 
 func (s *Service) VodTaskShow(ctx context.Context, token string, vid int) (map[string]interface{}, int, string, error) {

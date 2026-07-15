@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-const coinTypeExploreVODTask = 23
+const (
+	coinTypeExploreVODTask  = 23
+	coinTypeExploreSignTask = 24
+	vipGID                  = 6
+)
 
 type Repository struct {
 	db *sql.DB
@@ -44,6 +48,139 @@ func (r *Repository) UpdateGuestNotificationAll(ctx context.Context, sid string,
 		return fmt.Errorf("update guest notification_all: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) SignTask(ctx context.Context, user map[string]interface{}, now int64) (int, int, string, error) {
+	if r.db == nil {
+		return 0, -1, "记录写入失败，请重试3", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, -1, "", fmt.Errorf("begin sign task: %w", err)
+	}
+	defer tx.Rollback()
+
+	uid := atoi(user["uid"])
+	var row map[string]interface{}
+	if uid > 0 {
+		row, err = queryOneTx(ctx, tx, "SELECT * FROM users WHERE uid=? FOR UPDATE", uid)
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("lock sign user: %w", err)
+		}
+	} else {
+		row, err = queryOneTx(ctx, tx, "SELECT * FROM user_guests WHERE sid=? FOR UPDATE", str(user["sid"]))
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("lock sign guest: %w", err)
+		}
+	}
+	if len(row) == 0 {
+		return 0, -1, "记录写入失败，请重试3", nil
+	}
+	for key, value := range user {
+		if _, ok := row[key]; !ok {
+			row[key] = value
+		}
+	}
+
+	today := dayStartUnix(time.Unix(now, 0))
+	yesterday := today - 86400
+	if atoi64(row["signed_lasttime"]) >= today {
+		return 0, -1, "您今天已经签过到了", nil
+	}
+
+	signedContDays := 1
+	signedUnitDays := 1
+	if atoi64(row["signed_lasttime"]) >= yesterday {
+		signedContDays = atoi(row["signed_contdays"]) + 1
+		signedUnitDays = atoi(row["signed_unitdays"]) + 1
+		if signedUnitDays > 7 {
+			signedUnitDays = 1
+		}
+	}
+	signedPeakDays := atoi(row["signed_peakdays"])
+	if signedContDays > signedPeakDays {
+		signedPeakDays = signedContDays
+	}
+	coinNum := getPermInt(row["perms"], fmt.Sprintf("max.signtask.coinnum%d", signedUnitDays))
+
+	if uid > 0 {
+		if coinNum > 1000 {
+			dayLen := coinNum - 1000
+			sysgidExpTime := now + int64(dayLen)*86400
+			if atoi(row["sysgid"]) == vipGID && atoi64(row["sysgid_exptime"]) > now {
+				sysgidExpTime = atoi64(row["sysgid_exptime"]) + int64(dayLen)*86400
+			}
+			result, err := tx.ExecContext(ctx, "UPDATE users SET sysgid=?, sysgid_exptime=? WHERE uid=?", vipGID, sysgidExpTime, uid)
+			if err != nil {
+				return 0, -1, "", fmt.Errorf("update sign vip: %w", err)
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return 0, -1, "VIP赠送失败，请重试", nil
+			}
+		} else if coinNum > 0 {
+			var balance int
+			if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+				if err == sql.ErrNoRows {
+					return 0, -1, "记录写入失败，请重试1", nil
+				}
+				return 0, -1, "", fmt.Errorf("lock sign quota: %w", err)
+			}
+			newBalance := balance + coinNum
+			result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+			if err != nil {
+				return 0, -1, "", fmt.Errorf("update sign quota: %w", err)
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return 0, -1, "记录写入失败，请重试1", nil
+			}
+			result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, '')", coinTypeExploreSignTask, uid, coinNum, newBalance, now)
+			if err != nil {
+				return 0, -1, "", fmt.Errorf("insert sign coinlog: %w", err)
+			}
+			if affected, _ := result.RowsAffected(); affected == 0 {
+				return 0, -1, "记录写入失败，请重试1", nil
+			}
+		}
+		result, err := tx.ExecContext(ctx, "INSERT INTO explore_signlogs(uid, signtime) VALUES(?, ?)", uid, now)
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("insert sign log: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return 0, -1, "记录写入失败，请重试2", nil
+		}
+		result, err = tx.ExecContext(ctx, "UPDATE users SET signed_peakdays=?, signed_contdays=?, signed_unitdays=?, signed_lasttime=? WHERE uid=?", signedPeakDays, signedContDays, signedUnitDays, now, uid)
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("update sign user fields: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return 0, -1, "记录写入失败，请重试3", nil
+		}
+	} else {
+		sid := str(row["sid"])
+		if coinNum > 0 && coinNum <= 1000 {
+			if _, err := tx.ExecContext(ctx, "UPDATE user_guests SET goldcoin=goldcoin+? WHERE sid=?", coinNum, sid); err != nil {
+				return 0, -1, "", fmt.Errorf("update sign guest goldcoin: %w", err)
+			}
+		}
+		result, err := tx.ExecContext(ctx, "INSERT INTO explore_guestsignlogs(sid, signtime) VALUES(?, ?)", sid, now)
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("insert guest sign log: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return 0, -1, "记录写入失败，请重试2", nil
+		}
+		result, err = tx.ExecContext(ctx, "UPDATE user_guests SET signed_peakdays=?, signed_contdays=?, signed_unitdays=?, signed_lasttime=? WHERE sid=?", signedPeakDays, signedContDays, signedUnitDays, now, sid)
+		if err != nil {
+			return 0, -1, "", fmt.Errorf("update sign guest fields: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected == 0 {
+			return 0, -1, "记录写入失败，请重试3", nil
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, -1, "", fmt.Errorf("commit sign task: %w", err)
+	}
+	return coinNum, 0, "签到成功", nil
 }
 
 func (r *Repository) VodTaskByID(ctx context.Context, vid int) (map[string]interface{}, error) {
@@ -316,6 +453,31 @@ func atoi(value interface{}) int {
 	var n int
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+func atoi64(value interface{}) int64 {
+	var n int64
+	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
+	return n
+}
+
+func dayStartUnix(t time.Time) int64 {
+	loc := t.Location()
+	y, m, d := t.In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc).Unix()
+}
+
+func getPermInt(perms interface{}, key string) int {
+	values := map[string]interface{}{}
+	switch v := perms.(type) {
+	case string:
+		_ = json.Unmarshal([]byte(v), &values)
+	case []byte:
+		_ = json.Unmarshal(v, &values)
+	case map[string]interface{}:
+		values = v
+	}
+	return atoi(values[key])
 }
 
 func str(value interface{}) string {

@@ -272,7 +272,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/comment`、`/comment/index` | `c.api.comment->index` | `handler.EmptyHTML` | 已重构；旧 PHP 空方法，返回 `200 text/html` 空 body |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
 | `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 不接管 | PHP `notification` 仅定义 `index/clean`，未发现其他稳定 action |
-| `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，签到写入 action 未接管 |
+| `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK |
+| `/explore/signtask/sign` | `c.api.explore.signtask->sign` | `ExploreHandler.SignTaskSign` | 已重构；登录用户/游客签到事务，锁定 `users/user_guests`，按连续天数发金币或 VIP、写 `explore_signlogs/explore_guestsignlogs` 并更新签到状态 |
 | `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK |
 | `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | `ExploreHandler.VodTaskShow` | 已重构；激励视频展示并创建/复用当日领取日志，错误分支 live 对比通过，成功分支 fake 覆盖 |
 | `/explore/vodtask/reqcoin` | `c.api.explore.vodtask->reqcoin` | `ExploreHandler.VodTaskReqCoin` | 已重构；领取激励视频金币，事务锁定日志，登录用户写 `users_quota/user_coinlogs`，游客更新 `user_guests.goldcoin` |
@@ -531,7 +532,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的扣费/日志/奖励分支 | `c.api.vod->reqplay/reqdown` | 部分未重构；超限扣金币、播放/下载日志写入、播放/下载任务奖励、推荐奖励仍需事务化迁移 |
-| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 未重构；剩余 `reqplay/reqdown` 资产副作用涉及扣费、日志写入或奖励 |
+| `/vod/:action?`（除已列 action） | `c.api.vod->$action` | 阻断未重构；剩余 `reqplay/reqdown` 资产副作用涉及用户/游客扣金币、播放/下载日志、任务奖励、推广奖励、Redis 频控和 keylimits，需完整资产事务设计后迁移 |
 
 ### 小视频、作者页
 
@@ -557,7 +558,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 部分未重构；`reqpay/pay12req` 失败分支、known payway 支付方式不允许、unknown payway 选择支付方式返回、常见 public 成功回调文案和支付页面已迁移，钱包支付扣费、第三方网关请求、订单状态写入和成功跳转仍需 provider 配置与网关接口 |
-| `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 未重构；已注册常见 provider 的失败分支，成功分支仍需先补 `SELECT ... FOR UPDATE` 锁单、幂等入账、`payment->doAction()` 和 provider 验签适配 |
+| `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 阻断未重构；已注册常见 provider 的失败分支，成功分支需要 provider 密钥/RSA 配置注入、验签适配、`trade_payments SELECT ... FOR UPDATE` 锁单、幂等入账和 `payment->doAction()` 事务 |
 | `/respond/chan1` | `c.respond.chan1` | 部分未重构；token 校验失败、用户不存在、已送过会员、套餐不存在或停用分支已迁移，合法 token 后下单、充值入账、支付记录变更和赠送 VIP 仍需事务化迁移 |
 
 ### 个人中心
@@ -580,7 +581,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 部分未重构；`bind` 未登录、已绑定、缺邀请码、无效邀请码和无法绑定自己分支已迁移，绑定关系、VIP/金币奖励写入成功分支仍需事务化迁移 |
-| `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`） | `c.api.explore.signtask->$action` | 未重构；签到任务 |
+| `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`、`/explore/signtask/sign`） | `c.api.explore.signtask->$action` | 不接管；PHP `explore/signtask.php` 仅定义 `index/sign`，均已覆盖 |
 
 ### 游戏、直播、一元购
 

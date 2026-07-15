@@ -311,6 +311,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/explore/notification/clean", exploreHandler.CleanNotification)
 	router.Any("/explore/signtask", exploreHandler.EmptyOK)
 	router.Any("/explore/signtask/index", exploreHandler.EmptyOK)
+	router.Any("/explore/signtask/sign", exploreHandler.SignTaskSign)
 	router.Any("/explore/vodtask", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask/index", exploreHandler.EmptyOK)
 	router.Any("/explore/vodtask/show/:vid", exploreHandler.VodTaskShow)

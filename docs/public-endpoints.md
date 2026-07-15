@@ -48,7 +48,7 @@
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
-| `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；签到写入 action 未接管。 |
+| `/explore/signtask`、`/explore/signtask/index`、`/explore/signtask/sign` | `c.api.explore.signtask->index/sign` | 本轮完成 | 空入口按旧 PHP 返回 OK；`sign` 已接管登录用户/游客签到事务、金币或 VIP 奖励、签到日志和连续天数更新。 |
 | `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口。 |
 | `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 本轮完成 | 激励视频展示和当日领取日志创建/复用；错误分支 live 对比通过。 |
 | `/explore/vodtask/reqcoin` | `c.api.explore.vodtask->reqcoin` | 本轮完成 | 激励视频金币领取；登录用户写金币日志，游客更新游客金币，重复领取和越权错误对齐。 |

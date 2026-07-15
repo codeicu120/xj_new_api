@@ -961,7 +961,7 @@
 - Go: `internal/handler.ExploreHandler.EmptyOK`
 - Service: `internal/service/explore.Service`
 - Auth: 公共接口，不要求登录；旧 PHP 会带动态游客 token，Go 不生成该字段。
-- 兼容规则：默认 `index` 空入口包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`signtask/sign` 仍未接管。
+- 兼容规则：默认 `index` 空入口包括 `/explore/notification`、`/explore/notification/index`、`/explore/signtask`、`/explore/signtask/index`、`/explore/vodtask`、`/explore/vodtask/index`；响应为 `retcode=0`、`errmsg=""`，不带业务 `data`。`signtask/sign` 已在后续批次迁移。
 - 测试：聚焦 `go test ./internal/server` 通过；PHP-Go 对比 `/explore/notification`、`/explore/signtask`、`/explore/vodtask` 忽略动态 `xxx_api_auth` 后一致。
 
 ### `/explore/vodtask/show/:vid`
@@ -1640,7 +1640,7 @@
 - 已迁移：`/v2/forgot` 邮箱找回时邮箱格式错误分支，发生在验证码校验和改密之前。
 - PHP: `src/c/api/user.php::register`、`src/c/apiv2/user.php::register/forgot`、`src/m/user/user.php::checkMobi/checkEmail/checkUsername`。
 - Go: `internal/service/user.AuthEdgeService.Register/Forgot`，复用 `AuthEdgeLookupStore.UserByMobi/UserByEmail/UserByUsername`，仍不接触验证码、session、Redis 或写库成功路径。
-- 未迁移：注册关闭、IP 频控和注销重复申请等分支需要 settings/keylimit/Redis 只读接口；`explore/signtask/sign` 的已签到分支在 PHP begin/lock 之后，本批不接。
+- 未迁移：注册关闭、IP 频控和注销重复申请等分支需要 settings/keylimit/Redis 只读接口；`explore/signtask/sign` 当时因 begin/lock 后分支暂缓，已在后续批次按完整事务迁移。
 - Subagent：`Fermat` 梳理账号可迁前置校验，主线采纳无需新增基础设施的格式/查重分支。
 - 测试：`go test ./internal/service/user` 通过。
 
@@ -1709,3 +1709,17 @@
 - 未迁移：PHP 用户级 Redis 并发锁、row 级锁、金豆扣减、第三方 AI commit、任务状态写入和成功生成路径；并发时 PHP 可能先返回 `请求过于频繁`，Go 当前只覆盖低风险 DB 不存在错误分支。
 - Subagent：`Darwin` 只读核对该分支位于第三方请求、金豆扣减、事务和 DB 写入之前，但 PHP 在此前会短暂获取用户级 Redis 锁；主线记录该兼容差异。
 - 测试：`go test ./internal/service/aiundress ./internal/repository/aiundress ./internal/server` 通过。
+
+### Explore 签到任务完整迁移
+
+- 已迁移：`/explore/signtask/sign` 登录用户与游客签到成功/失败路径；事务内锁定 `users` 或 `user_guests`，今日已签到返回 `您今天已经签过到了`，成功时返回 `errmsg=签到成功` 和 `data.taskdone`。
+- PHP: `src/c/api/explore/signtask.php::sign`。
+- Go: `internal/handler.ExploreHandler.SignTaskSign`、`internal/service/explore.Service.SignTaskSign`、`internal/repository/explore.Repository.SignTask`。
+- DB: 登录用户发金币写 `users_quota/user_coinlogs`，VIP 奖励更新 `users.sysgid/sysgid_exptime`，游客金币更新 `user_guests.goldcoin`；两类用户分别写 `explore_signlogs/explore_guestsignlogs` 并更新 `signed_peakdays/signed_contdays/signed_unitdays/signed_lasttime`。
+- Subagent：`Aristotle` 未在等待窗口内返回，已关闭；主线按 PHP 源码和既有 explore 事务模式实现。
+- 测试：`go test ./internal/service/explore ./internal/repository/explore ./internal/server` 通过。
+
+### VOD 与 Respond 阻断说明
+
+- `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 剩余资产副作用经 `Lorentz` 只读核对，涉及用户/游客扣金币、播放/下载日志、任务奖励、推广奖励、Redis 频控、keylimits 和多处非统一事务；当前不作为普通路由补齐。
+- `/respond/:action` 成功验签/入账经 `Heisenberg` 只读核对，涉及数十个 provider 的 MD5/RSA/raw JSON 验签、缺失密钥配置注入、`trade_payments FOR UPDATE` 锁单、账户入账和 `payment->doAction()` 二段事务；没有安全配置和统一事务接口前不能硬迁成功分支。

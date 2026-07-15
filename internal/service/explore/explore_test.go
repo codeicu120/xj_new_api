@@ -20,6 +20,10 @@ type fakeStore struct {
 	reqCoinCall   map[string]interface{}
 	reqCoinRet    int
 	reqCoinMsg    string
+	signTaskDone  int
+	signRet       int
+	signMsg       string
+	signCall      map[string]interface{}
 }
 
 func (s fakeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -42,6 +46,11 @@ func (s *fakeStore) UpdateUserNotificationAll(_ context.Context, _ int, value st
 func (s *fakeStore) UpdateGuestNotificationAll(_ context.Context, _ string, value string) error {
 	s.guestNotified = value
 	return nil
+}
+
+func (s *fakeStore) SignTask(_ context.Context, user map[string]interface{}, now int64) (int, int, string, error) {
+	s.signCall = map[string]interface{}{"user": user, "now": now}
+	return s.signTaskDone, s.signRet, s.signMsg, nil
 }
 
 func (s *fakeStore) VodTaskByID(context.Context, int) (map[string]interface{}, error) {
@@ -149,6 +158,48 @@ func TestCleanNotificationRequiresTabKey(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "请提供频道键名" {
 		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+}
+
+func TestSignTaskSignSuccess(t *testing.T) {
+	store := &fakeStore{
+		user: map[string]interface{}{"uid": "5", "gid": "0", "sysgid": "0", "sysgid_exptime": "0", "gids": ""},
+		groups: []map[string]interface{}{
+			{"gid": "0", "weight": "0", "perms": `{"max.signtask.coinnum1":6}`},
+		},
+		signTaskDone: 6,
+		signRet:      0,
+		signMsg:      "签到成功",
+	}
+	service := NewService(store, store, "")
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.SignTaskSign(context.Background(), "token")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if retcode != 0 || errmsg != "签到成功" || data["taskdone"] != 6 {
+		t.Fatalf("data=%#v retcode=%d errmsg=%q", data, retcode, errmsg)
+	}
+	if store.signCall["now"] != int64(1770000000) {
+		t.Fatalf("sign call=%#v", store.signCall)
+	}
+}
+
+func TestSignTaskSignAlreadySigned(t *testing.T) {
+	store := &fakeStore{
+		groups:  []map[string]interface{}{{"gid": "0", "weight": "0", "perms": `{}`}},
+		signRet: -1,
+		signMsg: "您今天已经签过到了",
+	}
+	service := NewService(store, store, "")
+
+	data, retcode, errmsg, err := service.SignTaskSign(context.Background(), "")
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if data != nil || retcode != -1 || errmsg != "您今天已经签过到了" {
+		t.Fatalf("data=%#v retcode=%d errmsg=%q", data, retcode, errmsg)
 	}
 }
 
