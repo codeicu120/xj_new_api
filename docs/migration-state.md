@@ -400,11 +400,12 @@
 - Go: `internal/handler.MiniVODHandler.ReqList`
 - Service: `internal/service/minivod.Service`
 - Repository: `internal/repository/minivod.Repository`
-- Auth: 不强制登录；有有效 token 时按 uid 读取 `minivod_viewlogs`，否则按 sid 读取 `minivod_guestviewlogs`，无 sid 时返回空 rows。
-- DB: 读取现有 `showtype=0` 的待展示小视频 viewlog，按 `logid DESC` 取 10 条，再读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理。
-- 兼容规则：返回 `data.rows`，每行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0。
-- 风险边界：本批不执行 `pullViewLogs` 拉取推荐、不执行 `mUpdate(showtype=1)` 标记已浏览，也不随机插入 `minivod.ads` 广告行；这些副作用仍保留在未重构清单。
-- 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖现有 viewlog 组装 rows，server 测试覆盖空 rows 响应壳。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
+- Auth: 不强制登录；有有效 token 时按 uid 读取 `minivod_viewlogs_{uid%100}`，否则按 sid 读取 `minivod_guestviewlogs_{sid首字符}`，无 sid 时返回空 rows。
+- DB: 读取现有 `showtype=0` 的待展示小视频 viewlog，按 `logid DESC` 取 10 条，再读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理；返回前按当前 uid/sid 批量更新本次 logid 的 `reqtime` 和 `showtype=1`。
+- 兼容规则：返回 `data.rows`，每行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0；默认请求对齐 PHP `debug=0`，会标记已展示；`debug=1` 会跳过标记，便于重复调试同一批记录。
+- 风险边界：本批不执行 `pullViewLogs` 拉取推荐，也不随机插入 `minivod.ads` 广告行；这些推荐/广告副作用仍留在未重构清单。
+- Subagent：`Hypatia` 只读核对 PHP `reqlist` 标记时机和 debug 边界，确认只迁移 `mUpdate(reqtime/showtype=1)` 是可控增量。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；service fake 覆盖现有 viewlog 组装 rows、已展示标记和 `debug=1` 跳过标记，server 测试覆盖空 rows 响应壳。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
 
 ### `/minivod/reqlong/:vodid`
 

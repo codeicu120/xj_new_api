@@ -54,7 +54,8 @@ func (h *MiniVODHandler) Show(c *gin.Context) {
 }
 
 func (h *MiniVODHandler) ReqList(c *gin.Context) {
-	data, err := h.service.ReqList(c.Request.Context(), authToken(c), c.GetHeader("x-cookie-auth") != "")
+	debug, _ := strconv.Atoi(c.Query("debug"))
+	data, err := h.service.ReqList(c.Request.Context(), authToken(c), c.GetHeader("x-cookie-auth") != "", debug)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取小视频请求列表失败"))

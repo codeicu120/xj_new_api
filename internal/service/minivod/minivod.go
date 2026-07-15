@@ -43,6 +43,7 @@ type Store interface {
 	UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
 	VODsByIDs(ctx context.Context, ids []int, orderByField bool) ([]map[string]interface{}, error)
 	PendingViewLogs(ctx context.Context, uid int, sid string, limit int) ([]map[string]interface{}, error)
+	MarkViewLogsShown(ctx context.Context, uid int, sid string, logIDs []int, now int64) error
 	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
 	DeleteUpDown(ctx context.Context, uid int, vodID int) error
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
@@ -179,7 +180,7 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.MiniV
 	}, nil
 }
 
-func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool) (map[string]interface{}, error) {
+func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, debug int) (map[string]interface{}, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return nil, err
@@ -189,6 +190,7 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool) (
 		return nil, err
 	}
 	vodIDs := rowIDs(logs, "vodid")
+	logIDs := rowIDs(logs, "logid")
 	rows, err := s.store.VODsByIDs(ctx, vodIDs, true)
 	if err != nil {
 		return nil, err
@@ -233,6 +235,11 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool) (
 			author = found
 		}
 		out = append(out, map[string]interface{}{"vodrow": row, "user": author})
+	}
+	if debug == 0 {
+		if err := s.store.MarkViewLogsShown(ctx, atoi(user["uid"]), str(user["sid"]), logIDs, s.now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]interface{}{"rows": out}, nil
 }

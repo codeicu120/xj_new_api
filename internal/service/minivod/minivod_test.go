@@ -19,6 +19,7 @@ type fakeStore struct {
 	updown     map[string]interface{}
 	viewlog    map[string]interface{}
 	viewlogs   []map[string]interface{}
+	marked     map[string]interface{}
 	saved      int
 	deleted    bool
 	counters   []string
@@ -140,6 +141,11 @@ func (s *fakeStore) PendingViewLogs(context.Context, int, string, int) ([]map[st
 	return []map[string]interface{}{}, nil
 }
 
+func (s *fakeStore) MarkViewLogsShown(_ context.Context, uid int, sid string, logIDs []int, now int64) error {
+	s.marked = map[string]interface{}{"uid": uid, "sid": sid, "logids": logIDs, "now": now}
+	return nil
+}
+
 func (s *fakeStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
 	if s.updown != nil {
 		return s.updown, nil
@@ -245,8 +251,9 @@ func TestReqListReturnsRowsFromPendingLogs(t *testing.T) {
 	store := &fakeStore{viewlogs: []map[string]interface{}{{"logid": "1", "vodid": "9"}}}
 	service := NewService(store, fakeProcessor{}, "https://res.test")
 	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}}
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
 
-	data, err := service.ReqList(context.Background(), "token", false)
+	data, err := service.ReqList(context.Background(), "token", false, 0)
 	if err != nil {
 		t.Fatalf("reqlist: %v", err)
 	}
@@ -260,6 +267,23 @@ func TestReqListReturnsRowsFromPendingLogs(t *testing.T) {
 	}
 	if rows[0]["user"] == nil {
 		t.Fatalf("expected user wrapper, got %#v", rows[0])
+	}
+	logIDs, ok := store.marked["logids"].([]int)
+	if !ok || len(logIDs) != 1 || logIDs[0] != 1 || store.marked["uid"] != 7 || store.marked["now"] != int64(1770000000) {
+		t.Fatalf("marked=%#v", store.marked)
+	}
+}
+
+func TestReqListDebugSkipsMarkingViewLogs(t *testing.T) {
+	store := &fakeStore{viewlogs: []map[string]interface{}{{"logid": "1", "vodid": "9"}}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}}
+
+	if _, err := service.ReqList(context.Background(), "token", false, 1); err != nil {
+		t.Fatalf("reqlist: %v", err)
+	}
+	if store.marked != nil {
+		t.Fatalf("expected debug request not to mark viewlogs, got %#v", store.marked)
 	}
 }
 

@@ -247,12 +247,48 @@ func (r *Repository) PendingViewLogs(ctx context.Context, uid int, sid string, l
 		return []map[string]interface{}{}, nil
 	}
 	if uid > 0 {
-		return r.queryRows(ctx, "SELECT * FROM minivod_viewlogs WHERE uid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", uid, limit)
+		return r.queryRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", uid, limit)
 	}
 	if sid == "" {
 		return []map[string]interface{}{}, nil
 	}
-	return r.queryRows(ctx, "SELECT * FROM minivod_guestviewlogs WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
+	return r.queryRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
+}
+
+func (r *Repository) MarkViewLogsShown(ctx context.Context, uid int, sid string, logIDs []int, now int64) error {
+	if r.db == nil || len(logIDs) == 0 {
+		return nil
+	}
+	cleanIDs := make([]int, 0, len(logIDs))
+	for _, id := range logIDs {
+		if id > 0 {
+			cleanIDs = append(cleanIDs, id)
+		}
+	}
+	if len(cleanIDs) == 0 {
+		return nil
+	}
+	table := miniGuestViewLogTable(sid)
+	actorColumn := "sid"
+	var actor interface{} = sid
+	if uid > 0 {
+		table = miniUserViewLogTable(uid)
+		actorColumn = "uid"
+		actor = uid
+	} else if strings.TrimSpace(sid) == "" {
+		return nil
+	}
+	placeholders := make([]string, 0, len(cleanIDs))
+	args := []interface{}{now, actor}
+	for _, id := range cleanIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	query := "UPDATE " + table + " SET reqtime=?, showtype=1 WHERE " + actorColumn + "=? AND logid IN(" + strings.Join(placeholders, ",") + ")"
+	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("mark minivod viewlogs shown: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error) {
@@ -337,11 +373,11 @@ func (r *Repository) MiniViewLog(ctx context.Context, uid int, sid string, vodID
 		return map[string]interface{}{}, nil
 	}
 	if uid > 0 {
-		rows, err := r.queryRows(ctx, "SELECT * FROM minivod_viewlogs WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
+		rows, err := r.queryRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
 		return firstRow(rows, err)
 	}
 	if sid != "" {
-		rows, err := r.queryRows(ctx, "SELECT * FROM minivod_guestviewlogs WHERE sid=? AND vodid=? LIMIT 1", sid, vodID)
+		rows, err := r.queryRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND vodid=? LIMIT 1", sid, vodID)
 		return firstRow(rows, err)
 	}
 	return map[string]interface{}{}, nil
@@ -357,7 +393,7 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	}
 	var total int
 	if uid > 0 {
-		err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_viewlogs WHERE uid=? AND showtype=1 AND "+field+">=?", uid, since).Scan(&total)
+		err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=1 AND "+field+">=?", uid, since).Scan(&total)
 		if err != nil {
 			return 0, fmt.Errorf("count minivod viewlogs: %w", err)
 		}
@@ -366,7 +402,7 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	if sid == "" {
 		return 0, nil
 	}
-	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_guestviewlogs WHERE sid=? AND showtype=1 AND "+field+">=?", sid, since).Scan(&total)
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=1 AND "+field+">=?", sid, since).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("count minivod guest viewlogs: %w", err)
 	}
@@ -390,11 +426,11 @@ func (r *Repository) RecordMiniMedia(ctx context.Context, uid int, sid string, v
 		return fmt.Errorf("increment minivod media counter: %w", err)
 	}
 	if uid > 0 {
-		if err := recordMiniViewLog(ctx, tx, "minivod_viewlogs", "uid", uid, vodID, play, deduct, now); err != nil {
+		if err := recordMiniViewLog(ctx, tx, miniUserViewLogTable(uid), "uid", uid, vodID, play, deduct, now); err != nil {
 			return fmt.Errorf("record minivod user media: %w", err)
 		}
 	} else if strings.TrimSpace(sid) != "" {
-		if err := recordMiniViewLog(ctx, tx, "minivod_guestviewlogs", "sid", sid, vodID, play, deduct, now); err != nil {
+		if err := recordMiniViewLog(ctx, tx, miniGuestViewLogTable(sid), "sid", sid, vodID, play, deduct, now); err != nil {
 			return fmt.Errorf("record minivod guest media: %w", err)
 		}
 	}
@@ -723,6 +759,18 @@ func sameWeek(a int64, b int64) bool {
 	ay, aw := at.ISOWeek()
 	by, bw := bt.ISOWeek()
 	return ay == by && aw == bw
+}
+
+func miniUserViewLogTable(uid int) string {
+	return fmt.Sprintf("minivod_viewlogs_%02d", uid%100)
+}
+
+func miniGuestViewLogTable(sid string) string {
+	suffix := "0"
+	if sid != "" {
+		suffix = sid[:1]
+	}
+	return "minivod_guestviewlogs_" + suffix
 }
 
 func atoi(value interface{}) int {
