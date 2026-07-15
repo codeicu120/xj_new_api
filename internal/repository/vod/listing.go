@@ -2,7 +2,9 @@ package vod
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -18,6 +20,10 @@ type ListingFilter struct {
 	Mosaic     int
 	LangVoice  int
 	Recommend  bool
+}
+
+type SpecialFilter struct {
+	SPType int
 }
 
 type ListingRepository struct {
@@ -158,6 +164,407 @@ func (r *ListingRepository) TagsByNames(ctx context.Context, names []string) ([]
 	return r.queryRows(ctx, "SELECT * FROM vod_tags WHERE tagname IN("+strings.Join(placeholders, ",")+")", args...)
 }
 
+func (r *ListingRepository) CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(uuid) == "" {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM maintain_calldata WHERE uuid=?", uuid)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) VODsByIDsLimited(ctx context.Context, ids []int, freeOnly bool, limit int, orderByField bool) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	idList := intListSQL(ids)
+	if idList == "NULL" {
+		return []map[string]interface{}{}, nil
+	}
+	where := "vodid IN(" + idList + ") AND showtype=0"
+	if freeOnly {
+		where += " AND isvip=0"
+	}
+	orderBy := "upnum DESC"
+	if orderByField {
+		orderBy = "FIELD(vodid, " + idList + ")"
+	}
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE "+where+" ORDER BY "+orderBy+" LIMIT ?", limit)
+}
+
+func (r *ListingRepository) SearchVODs(ctx context.Context, keyword string, freeOnly bool, limit int) ([]map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(keyword) == "" || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	where := "showtype=0 AND (title LIKE ? OR tags LIKE ? OR actor_tags LIKE ? OR vodkey LIKE ?)"
+	if freeOnly {
+		where += " AND isvip=0"
+	}
+	like := "%" + keyword + "%"
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE "+where+" ORDER BY upnum DESC LIMIT ?", like, like, like, like, limit)
+}
+
+func (r *ListingRepository) SearchLog(ctx context.Context, keyword string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_schlogs WHERE schwd=?", keyword)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) UpsertSearchLog(ctx context.Context, keyword string, now int64, total int, vodIDs []int) error {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return nil
+	}
+	if err := r.updateOrInsertSearchLog(ctx, "vod_schlogs", keyword, now, total, vodIDs); err != nil {
+		return fmt.Errorf("upsert search log: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) updateOrInsertSearchLog(ctx context.Context, table string, keyword string, now int64, total int, vodIDs []int) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		"UPDATE "+table+" SET schtime=?, total=?, vodids=? WHERE schwd=?",
+		now,
+		total,
+		joinInts(vodIDs),
+		keyword,
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	_, err = r.db.ExecContext(
+		ctx,
+		"INSERT INTO "+table+"(schwd,schtime,total,vodids) VALUES(?,?,?,?)",
+		keyword,
+		now,
+		total,
+		joinInts(vodIDs),
+	)
+	return err
+}
+
+func (r *ListingRepository) IncrementSearchLog(ctx context.Context, keyword string, previous int64, now int64) error {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return nil
+	}
+	monthValue := "sch_month+1"
+	if !sameMonth(previous, now) {
+		monthValue = "1"
+	}
+	dayValue := "sch_day+1"
+	if !sameDay(previous, now) {
+		dayValue = "1"
+	}
+	weekValue := "sch_week+1"
+	if !sameWeek(previous, now) {
+		weekValue = "1"
+	}
+	_, err := r.db.ExecContext(
+		ctx,
+		"UPDATE vod_schlogs SET sch_lasttime=?, sch_total=sch_total+1, sch_month="+monthValue+", sch_day="+dayValue+", sch_week="+weekValue+" WHERE schwd=?",
+		now,
+		keyword,
+	)
+	if err != nil {
+		return fmt.Errorf("increment search log: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) TopSearchVODIDs(ctx context.Context) (string, error) {
+	if r.db == nil {
+		return "", nil
+	}
+	var value sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT vodids FROM vod_schlogs WHERE 1=1 ORDER BY total DESC LIMIT 1").Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("top search vodids: %w", err)
+	}
+	return value.String, nil
+}
+
+func (r *ListingRepository) MiniVODsByIDsLimited(ctx context.Context, ids []int, limit int, orderByField bool) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	idList := intListSQL(ids)
+	if idList == "NULL" {
+		return []map[string]interface{}{}, nil
+	}
+	orderBy := "upnum DESC"
+	if orderByField {
+		orderBy = "FIELD(vodid, " + idList + ")"
+	}
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy+" LIMIT ?", limit)
+}
+
+func (r *ListingRepository) MiniVODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	idList := intListSQL(ids)
+	if idList == "NULL" {
+		return []map[string]interface{}{}, nil
+	}
+	if strings.TrimSpace(orderBy) == "" {
+		orderBy = "vodid DESC"
+	}
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy)
+}
+
+func (r *ListingRepository) MiniSearchVODs(ctx context.Context, keyword string, limit int) ([]map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(keyword) == "" || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	like := "%" + keyword + "%"
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE showtype=1 AND (title LIKE ? OR tags LIKE ? OR actor_tags LIKE ? OR vodkey LIKE ?) ORDER BY upnum DESC LIMIT ?", like, like, like, like, limit)
+}
+
+func (r *ListingRepository) MiniSearchLog(ctx context.Context, keyword string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM minivod_schlogs WHERE schwd=?", keyword)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) UpsertMiniSearchLog(ctx context.Context, keyword string, now int64, total int, vodIDs []int) error {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return nil
+	}
+	if err := r.updateOrInsertSearchLog(ctx, "minivod_schlogs", keyword, now, total, vodIDs); err != nil {
+		return fmt.Errorf("upsert mini search log: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error {
+	if r.db == nil || strings.TrimSpace(keyword) == "" {
+		return nil
+	}
+	monthValue := "sch_month+1"
+	if !sameMonth(previous, now) {
+		monthValue = "1"
+	}
+	dayValue := "sch_day+1"
+	if !sameDay(previous, now) {
+		dayValue = "1"
+	}
+	weekValue := "sch_week+1"
+	if !sameWeek(previous, now) {
+		weekValue = "1"
+	}
+	_, err := r.db.ExecContext(
+		ctx,
+		"UPDATE minivod_schlogs SET sch_lasttime=?, sch_total=sch_total+1, sch_month="+monthValue+", sch_day="+dayValue+", sch_week="+weekValue+" WHERE schwd=?",
+		now,
+		keyword,
+	)
+	if err != nil {
+		return fmt.Errorf("increment mini search log: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) TopMiniSearchVODIDs(ctx context.Context) (string, error) {
+	if r.db == nil {
+		return "", nil
+	}
+	var value sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT vodids FROM minivod_schlogs WHERE 1=1 ORDER BY total DESC LIMIT 1").Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("top mini search vodids: %w", err)
+	}
+	return value.String, nil
+}
+
+func (r *ListingRepository) CountSpecials(ctx context.Context, filter SpecialFilter) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	where, args := buildSpecialWhere(filter)
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM vod_specials WHERE 1=1 "+where, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count specials: %w", err)
+	}
+	return total, nil
+}
+
+func (r *ListingRepository) ListSpecials(ctx context.Context, filter SpecialFilter, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	where, args := buildSpecialWhere(filter)
+	offset := limitOffset(total, pageSize, page)
+	args = append(args, pageSize, offset)
+	return r.queryRows(ctx, "SELECT * FROM vod_specials WHERE 1=1 "+where+" ORDER BY "+orderBy+" LIMIT ? OFFSET ?", args...)
+}
+
+func (r *ListingRepository) ListActorSpecials(ctx context.Context, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT * FROM vod_specials WHERE 1=1 AND sptype=1 ORDER BY updatetime DESC LIMIT ? OFFSET 0", pageSize)
+}
+
+func (r *ListingRepository) SpecialByID(ctx context.Context, spid int) (map[string]interface{}, error) {
+	if r.db == nil || spid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vod_specials WHERE spid=?", spid)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) VODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	placeholders := make([]string, 0, len(ids))
+	args := make([]interface{}, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	if len(args) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	if strings.TrimSpace(orderBy) == "" {
+		orderBy = "vodid DESC"
+	}
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+strings.Join(placeholders, ",")+") AND showtype=0 ORDER BY "+orderBy, args...)
+}
+
+func (r *ListingRepository) UpdateSpecialRand(ctx context.Context, minSPID int) error {
+	if r.db == nil {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vod_specials SET randnum=FLOOR(1+RAND()*65534) WHERE spid>? LIMIT 10", minSPID); err != nil {
+		return fmt.Errorf("update special rand: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) IncrementSpecialViews(ctx context.Context, spid int, viewsLastTime int64, now int64) error {
+	if r.db == nil || spid <= 0 {
+		return nil
+	}
+	updates := []string{"views_lasttime=?", "views_total=views_total+1"}
+	args := []interface{}{now}
+	if sameMonth(viewsLastTime, now) {
+		updates = append(updates, "views_month=views_month+1")
+	} else {
+		updates = append(updates, "views_month=1")
+	}
+	if sameDay(viewsLastTime, now) {
+		updates = append(updates, "views_day=views_day+1")
+	} else {
+		updates = append(updates, "views_day=1")
+	}
+	if sameWeek(viewsLastTime, now) {
+		updates = append(updates, "views_week=views_week+1")
+	} else {
+		updates = append(updates, "views_week=1")
+	}
+	args = append(args, spid)
+	if _, err := r.db.ExecContext(ctx, "UPDATE vod_specials SET "+strings.Join(updates, ",")+" WHERE spid=?", args...); err != nil {
+		return fmt.Errorf("increment special views: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) GuestBySID(ctx context.Context, sid string) (map[string]interface{}, error) {
+	if r.db == nil || !validGuestSID(sid) {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM user_guests WHERE sid=?", sid)
+	if err != nil {
+		return nil, fmt.Errorf("query guest: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *ListingRepository) KeylimitCount(ctx context.Context, key string) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, "SELECT SUM(keynum) FROM keylimits WHERE keyid=?", md5Hex(key)).Scan(&total); err != nil {
+		return 0, fmt.Errorf("query keylimit: %w", err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
+}
+
+func (r *ListingRepository) SetKeylimit(ctx context.Context, key string, keynum int, keydata string, now int64) error {
+	if r.db == nil {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "INSERT INTO keylimits(keyid, keynum, keydata, ctimestamp) VALUES(?, ?, ?, ?)", md5Hex(key), keynum, keydata, now); err != nil {
+		return fmt.Errorf("insert keylimit: %w", err)
+	}
+	return nil
+}
+
+func (r *ListingRepository) IncrementSpecialVote(ctx context.Context, spid int, field string) error {
+	if r.db == nil || spid <= 0 {
+		return nil
+	}
+	if field != "upnum" && field != "downnum" {
+		return fmt.Errorf("invalid special vote field %q", field)
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vod_specials SET "+field+"="+field+"+1 WHERE spid=?", spid); err != nil {
+		return fmt.Errorf("increment special vote: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE vod_specials SET scorenum=IF(upnum+downnum=0, 9.9, ROUND(upnum/(upnum+downnum)*10, 1)) WHERE spid=?", spid); err != nil {
+		return fmt.Errorf("recount special score: %w", err)
+	}
+	return nil
+}
+
 func (r *ListingRepository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
 	if r.db == nil {
 		return []map[string]interface{}{}, nil
@@ -220,6 +627,17 @@ func buildWhere(filter ListingFilter) (string, []interface{}) {
 	return " AND " + strings.Join(parts, " AND "), args
 }
 
+func buildSpecialWhere(filter SpecialFilter) (string, []interface{}) {
+	parts := []string{}
+	args := []interface{}{}
+	if filter.SPType > 0 {
+		parts = append(parts, "sptype=?")
+		args = append(args, filter.SPType)
+	}
+	parts = append(parts, "showtype=0", "itemcount>=4")
+	return " AND " + strings.Join(parts, " AND "), args
+}
+
 func limitOffset(total int, pageSize int, page int) int {
 	if pageSize < 1 {
 		pageSize = 1
@@ -275,4 +693,64 @@ func normalizeSQLValue(value interface{}) interface{} {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func sameMonth(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	return at.Year() == bt.Year() && at.Month() == bt.Month()
+}
+
+func sameDay(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	return at.Year() == bt.Year() && at.YearDay() == bt.YearDay()
+}
+
+func sameWeek(a int64, b int64) bool {
+	at := time.Unix(a, 0)
+	bt := time.Unix(b, 0)
+	ay, aw := at.ISOWeek()
+	by, bw := bt.ISOWeek()
+	return ay == by && aw == bw
+}
+
+func intListSQL(ids []int) string {
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id > 0 {
+			parts = append(parts, fmt.Sprint(id))
+		}
+	}
+	if len(parts) == 0 {
+		return "NULL"
+	}
+	return strings.Join(parts, ",")
+}
+
+func joinInts(ids []int) string {
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id > 0 {
+			parts = append(parts, fmt.Sprint(id))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+func md5Hex(value string) string {
+	sum := md5.Sum([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func validGuestSID(sid string) bool {
+	if len(sid) != 32 {
+		return false
+	}
+	for _, ch := range sid {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
+			return false
+		}
+	}
+	return true
 }

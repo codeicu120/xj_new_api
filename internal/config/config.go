@@ -19,6 +19,7 @@ const (
 	defaultIPDBPath        = "/Users/canavs/xjProj/XJBackend/api/data/ipipfree.ipdb"
 	defaultMySQLDSN        = "xj_app:xj_app_123456@tcp(127.0.0.1:3306)/xj_comp?charset=utf8mb4&parseTime=true&loc=Local"
 	defaultGameResourceURL = "https://image.xjdev.one"
+	defaultUploadPath      = "/Users/canavs/xjProj/XJBackend/api/res"
 )
 
 type Config struct {
@@ -34,6 +35,7 @@ type Config struct {
 	MySQLDSN        string
 	GameResourceURL string
 	VIPDiscount     int
+	UploadPath      string
 }
 
 func FromEnv() Config {
@@ -50,6 +52,7 @@ func FromEnv() Config {
 		MySQLDSN:        envString("MYSQL_DSN", defaultMySQLDSN),
 		GameResourceURL: envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
 		VIPDiscount:     envInt("VIP_DISCOUNT", 50),
+		UploadPath:      envString("UPLOAD_PATH", defaultUploadPath),
 	}
 }
 

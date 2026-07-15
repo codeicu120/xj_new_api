@@ -2,9 +2,11 @@ package vod
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,8 +32,23 @@ type ListingStore interface {
 	RandomVODs(ctx context.Context, pageSize int) ([]map[string]interface{}, error)
 	RandomVODsExcept(ctx context.Context, pageSize int, excludeID int, cateID int) ([]map[string]interface{}, error)
 	VODByID(ctx context.Context, vodID int) (map[string]interface{}, error)
+	VODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error)
 	SimilarVODsByTagIDs(ctx context.Context, tagIDs []int, excludeID int, since int64, pageSize int) ([]map[string]interface{}, error)
 	TagsByNames(ctx context.Context, names []string) ([]map[string]interface{}, error)
+	CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
+	VODsByIDsLimited(ctx context.Context, ids []int, freeOnly bool, limit int, orderByField bool) ([]map[string]interface{}, error)
+	SearchVODs(ctx context.Context, keyword string, freeOnly bool, limit int) ([]map[string]interface{}, error)
+	SearchLog(ctx context.Context, keyword string) (map[string]interface{}, error)
+	UpsertSearchLog(ctx context.Context, keyword string, now int64, total int, vodIDs []int) error
+	IncrementSearchLog(ctx context.Context, keyword string, previous int64, now int64) error
+	TopSearchVODIDs(ctx context.Context) (string, error)
+	MiniVODsByIDsLimited(ctx context.Context, ids []int, limit int, orderByField bool) ([]map[string]interface{}, error)
+	MiniSearchVODs(ctx context.Context, keyword string, limit int) ([]map[string]interface{}, error)
+	MiniSearchLog(ctx context.Context, keyword string) (map[string]interface{}, error)
+	UpsertMiniSearchLog(ctx context.Context, keyword string, now int64, total int, vodIDs []int) error
+	IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error
+	TopMiniSearchVODIDs(ctx context.Context) (string, error)
+	MiniVODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error)
 }
 
 type ListingService struct {
@@ -150,6 +167,232 @@ func (s *ListingService) LikeRows(ctx context.Context, isH5Request bool) (domain
 	}, nil
 }
 
+func (s *ListingService) Search(ctx context.Context, keyword string, freeOnly bool, page int, isH5Request bool) (interface{}, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return s.searchIndex(ctx, freeOnly, isH5Request)
+	}
+	return s.searchList(ctx, keyword, freeOnly, page, isH5Request)
+}
+
+func (s *ListingService) MiniSearch(ctx context.Context, keyword string, page int, isH5Request bool) (interface{}, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return s.miniSearchIndex(ctx, isH5Request)
+	}
+	return s.miniSearchList(ctx, keyword, page, isH5Request)
+}
+
+func (s *ListingService) searchIndex(ctx context.Context, freeOnly bool, isH5Request bool) (domain.SearchIndexData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.SearchIndexData{}, err
+	}
+
+	hotWordsRow, err := s.store.CalldataByUUID(ctx, "search.hotwords")
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("get hotwords: %w", err)
+	}
+	hotWords := decodeCalldataJSON(hotWordsRow)
+
+	hotVODRow, err := s.store.CalldataByUUID(ctx, "search.hotvods")
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("get hot vods: %w", err)
+	}
+	ids := splitIDs(str(hotVODRow["content"]))
+	hotRows, err := s.store.VODsByIDsLimited(ctx, ids, freeOnly, 20, true)
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list hot vods: %w", err)
+	}
+
+	likeTags, err := s.searchLikeTags(ctx, freeOnly)
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list search like tags: %w", err)
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectFieldTagNames(hotRows, "tags"))
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list hot tags: %w", err)
+	}
+
+	return domain.SearchIndexData{
+		HotWords:    hotWords,
+		HotRows:     s.processRowsWithDiscount(hotRows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100),
+		YouMayLikes: likeTags,
+	}, nil
+}
+
+func (s *ListingService) miniSearchIndex(ctx context.Context, isH5Request bool) (domain.SearchIndexData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.SearchIndexData{}, err
+	}
+
+	hotWordsRow, err := s.store.CalldataByUUID(ctx, "search.minihotwords")
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("get mini hotwords: %w", err)
+	}
+	hotWords := decodeCalldataJSON(hotWordsRow)
+
+	hotVODRow, err := s.store.CalldataByUUID(ctx, "search.minihotvods")
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("get mini hot vods: %w", err)
+	}
+	ids := splitIDs(str(hotVODRow["content"]))
+	hotRows, err := s.store.MiniVODsByIDsLimited(ctx, ids, 20, true)
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list mini hot vods: %w", err)
+	}
+
+	likeTags, err := s.miniSearchLikeTags(ctx)
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list mini search like tags: %w", err)
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectFieldTagNames(hotRows, "tags"))
+	if err != nil {
+		return domain.SearchIndexData{}, fmt.Errorf("list mini hot tags: %w", err)
+	}
+	vodRows := s.processMiniRowsWithDiscount(hotRows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100)
+
+	return domain.SearchIndexData{
+		HotWords:    hotWords,
+		HotRows:     wrapVODRows(vodRows),
+		YouMayLikes: likeTags,
+	}, nil
+}
+
+func (s *ListingService) searchList(ctx context.Context, keyword string, freeOnly bool, page int, isH5Request bool) (domain.SearchListData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.SearchListData{}, err
+	}
+
+	now := s.now().Unix()
+	pageSize := 16
+	if page < 1 {
+		page = 1
+	}
+
+	searchLog, err := s.store.SearchLog(ctx, keyword)
+	if err != nil {
+		return domain.SearchListData{}, fmt.Errorf("get search log: %w", err)
+	}
+
+	total := 0
+	rows := []map[string]interface{}{}
+	if len(searchLog) == 0 || atoi64(str(searchLog["schtime"]))+3600 < now {
+		allRows, err := s.store.SearchVODs(ctx, keyword, false, 1000)
+		if err != nil {
+			return domain.SearchListData{}, fmt.Errorf("search vods: %w", err)
+		}
+		allIDs := rowIDs(allRows, "vodid")
+		if err := s.store.UpsertSearchLog(ctx, keyword, now, len(allIDs), allIDs); err != nil {
+			return domain.SearchListData{}, err
+		}
+		if freeOnly {
+			allRows, err = s.store.VODsByIDsLimited(ctx, allIDs, true, 1000, false)
+			if err != nil {
+				return domain.SearchListData{}, fmt.Errorf("search free vods: %w", err)
+			}
+		}
+		total = len(allRows)
+		rows = pageSlice(allRows, page, pageSize)
+	} else if atoi(str(searchLog["total"])) > 0 {
+		ids := splitIDs(str(searchLog["vodids"]))
+		total = len(ids)
+		ids = pageSliceInts(ids, page, pageSize)
+		rows, err = s.store.VODsByIDsLimited(ctx, ids, freeOnly, 1000, false)
+		if err != nil {
+			return domain.SearchListData{}, fmt.Errorf("list cached search vods: %w", err)
+		}
+	}
+
+	pageData := pageInfo(total, pageSize, page, "/search?wd="+url.QueryEscape(keyword)+"&page=[?]")
+	if atoi(str(pageData["page"])) == 1 {
+		prev := atoi64(str(searchLog["sch_lasttime"]))
+		if len(searchLog) == 0 {
+			prev = now
+		}
+		if err := s.store.IncrementSearchLog(ctx, keyword, prev, now); err != nil {
+			return domain.SearchListData{}, err
+		}
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return domain.SearchListData{}, fmt.Errorf("list search tags: %w", err)
+	}
+
+	return domain.SearchListData{
+		VODRows:  s.processRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, now, 100),
+		PageInfo: pageData,
+	}, nil
+}
+
+func (s *ListingService) miniSearchList(ctx context.Context, keyword string, page int, isH5Request bool) (domain.MiniSearchListData, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return domain.MiniSearchListData{}, err
+	}
+
+	now := s.now().Unix()
+	pageSize := 16
+	if page < 1 {
+		page = 1
+	}
+
+	searchLog, err := s.store.MiniSearchLog(ctx, keyword)
+	if err != nil {
+		return domain.MiniSearchListData{}, fmt.Errorf("get mini search log: %w", err)
+	}
+
+	total := 0
+	rows := []map[string]interface{}{}
+	if len(searchLog) == 0 || atoi64(str(searchLog["schtime"]))+3600 < now {
+		allRows, err := s.store.MiniSearchVODs(ctx, keyword, 1000)
+		if err != nil {
+			return domain.MiniSearchListData{}, fmt.Errorf("search mini vods: %w", err)
+		}
+		allIDs := rowIDs(allRows, "vodid")
+		if err := s.store.UpsertMiniSearchLog(ctx, keyword, now, len(allIDs), allIDs); err != nil {
+			return domain.MiniSearchListData{}, err
+		}
+		total = len(allRows)
+		rows = pageSlice(allRows, page, pageSize)
+	} else if atoi(str(searchLog["total"])) > 0 {
+		ids := splitIDs(str(searchLog["vodids"]))
+		total = len(ids)
+		ids = pageSliceInts(ids, page, pageSize)
+		rows, err = s.store.MiniVODsByIDsLimited(ctx, ids, 1000, false)
+		if err != nil {
+			return domain.MiniSearchListData{}, fmt.Errorf("list cached mini search vods: %w", err)
+		}
+	}
+
+	pageData := pageInfo(total, pageSize, page, "/search?wd="+url.QueryEscape(keyword)+"&page=[?]")
+	if atoi(str(pageData["page"])) == 1 {
+		prev := atoi64(str(searchLog["sch_lasttime"]))
+		if len(searchLog) == 0 {
+			prev = now
+		}
+		if err := s.store.IncrementMiniSearchLog(ctx, keyword, prev, now); err != nil {
+			return domain.MiniSearchListData{}, err
+		}
+	}
+
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return domain.MiniSearchListData{}, fmt.Errorf("list mini search tags: %w", err)
+	}
+	vodRows := s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, now, 100)
+
+	return domain.MiniSearchListData{
+		Rows:     wrapVODRows(vodRows),
+		PageInfo: pageData,
+	}, nil
+}
+
 func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) (domain.VODShowData, error) {
 	categories, areas, years, servers, err := s.listMetadata(ctx)
 	if err != nil {
@@ -213,6 +456,47 @@ func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) 
 		SimilarRows: s.processRows(similarRows, env, isH5Request, now),
 		LikeRows:    s.processRows(likeRows, env, isH5Request, now),
 	}, nil
+}
+
+func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	return s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix()), nil
+}
+
+func (s *ListingService) ProcessRowsPlain(_ context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
+	empty := []map[string]interface{}{}
+	return s.processRowsWithDiscount(rows, processEnv(empty, empty, empty, empty, empty), isH5Request, s.now().Unix(), 100), nil
+}
+
+func (s *ListingService) ProcessMiniRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	return s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), s.vipDiscount), nil
+}
+
+func (s *ListingService) ProcessMiniRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
+	categories, areas, years, servers, err := s.listMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	return s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100), nil
 }
 
 func (s *ListingService) listMetadata(ctx context.Context) ([]map[string]interface{}, []map[string]interface{}, []map[string]interface{}, []map[string]interface{}, error) {
@@ -294,6 +578,18 @@ func processEnv(categories, areas, years, servers, tags []map[string]interface{}
 }
 
 func (s *ListingService) processRows(rows []map[string]interface{}, env map[string]interface{}, isH5 bool, now int64) []map[string]interface{} {
+	return s.processRowsWithDiscount(rows, env, isH5, now, s.vipDiscount)
+}
+
+func (s *ListingService) processRowsWithDiscount(rows []map[string]interface{}, env map[string]interface{}, isH5 bool, now int64, vipDiscount int) []map[string]interface{} {
+	return s.processRowsWithMode(rows, env, isH5, now, vipDiscount, false)
+}
+
+func (s *ListingService) processMiniRowsWithDiscount(rows []map[string]interface{}, env map[string]interface{}, isH5 bool, now int64, vipDiscount int) []map[string]interface{} {
+	return s.processRowsWithMode(rows, env, isH5, now, vipDiscount, true)
+}
+
+func (s *ListingService) processRowsWithMode(rows []map[string]interface{}, env map[string]interface{}, isH5 bool, now int64, vipDiscount int, mini bool) []map[string]interface{} {
 	result := []map[string]interface{}{}
 	categories := env["categories"].(map[string]map[string]interface{})
 	areas := env["areas"].(map[string]map[string]interface{})
@@ -309,15 +605,19 @@ func (s *ListingService) processRows(rows []map[string]interface{}, env map[stri
 	}
 	for _, row := range rows {
 		vodid := str(row["vodid"])
+		urlPrefix := "/vod"
+		if mini {
+			urlPrefix = "/minivod"
+		}
 		playURL := ""
 		downURL := ""
 		previewURL := ""
 		if str(row["play_url"]) != "" {
-			playURL = "/vod/reqplay/" + vodid
-			previewURL = strings.TrimRight(previewBase, "/") + "/vod/preView/" + vodid + "/index.m3u8"
+			playURL = urlPrefix + "/reqplay/" + vodid
+			previewURL = strings.TrimRight(previewBase, "/") + urlPrefix + "/preView/" + vodid + "/index.m3u8"
 		}
 		if str(row["down_url"]) != "" {
-			downURL = "/vod/reqdown/" + vodid
+			downURL = urlPrefix + "/reqdown/" + vodid
 		}
 		coverRaw := cleanCover(str(row["coverpic"]))
 		item := map[string]interface{}{
@@ -344,7 +644,7 @@ func (s *ListingService) processRows(rows []map[string]interface{}, env map[stri
 			"mosaic":          str(row["mosaic"]),
 			"portrait":        str(row["portrait"]),
 			"view_price":      atoi(str(row["view_price"])),
-			"vip_price":       float64(atoi(str(row["view_price"]))*s.vipDiscount) / 100,
+			"vip_price":       float64(atoi(str(row["view_price"]))*vipDiscount) / 100,
 			"limit_free":      limitFree(now, atoi64(str(row["free_sdate"])), atoi64(str(row["free_edate"]))),
 			"need_buy":        0,
 			"isvip":           str(row["isvip"]),
@@ -397,6 +697,21 @@ func collectTagNames(rows []map[string]interface{}) []string {
 	names := []string{}
 	for _, row := range rows {
 		for _, field := range []string{"tags", "actor_tags"} {
+			for _, name := range strings.Split(str(row[field]), ",") {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	return names
+}
+
+func collectFieldTagNames(rows []map[string]interface{}, fields ...string) []string {
+	names := []string{}
+	for _, row := range rows {
+		for _, field := range fields {
 			for _, name := range strings.Split(str(row[field]), ",") {
 				name = strings.TrimSpace(name)
 				if name != "" {
@@ -507,6 +822,10 @@ func pageInfo(total int, pageSize int, page int, pageURL string) map[string]inte
 		"page_url":  pageURL,
 		"pages":     pageSelector(page, totalPage),
 	}
+}
+
+func PageInfo(total int, pageSize int, page int, pageURL string) map[string]interface{} {
+	return pageInfo(total, pageSize, page, pageURL)
 }
 
 func plist(page int, totalPage int, pageURL string) []map[string]interface{} {
@@ -718,7 +1037,10 @@ func formatDuration(seconds int) string {
 	if h > 0 {
 		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
 	}
-	return fmt.Sprintf("%d:%02d", m, s)
+	if m > 0 {
+		return fmt.Sprintf("%02d:%02d", m, s)
+	}
+	return fmt.Sprintf("%d", s)
 }
 
 func countValue(value int) interface{} {
@@ -733,11 +1055,11 @@ func cleanCover(value string) string {
 	return replacer.Replace(value)
 }
 
-func lookup(rows map[string]map[string]interface{}, id string, key string) string {
+func lookup(rows map[string]map[string]interface{}, id string, key string) interface{} {
 	if row, ok := rows[id]; ok {
 		return str(row[key])
 	}
-	return ""
+	return nil
 }
 
 func limitFree(now int64, start int64, end int64) int {
@@ -784,6 +1106,131 @@ func atoi(value string) int {
 func atoi64(value string) int64 {
 	parsed, _ := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 	return parsed
+}
+
+func decodeCalldataJSON(row map[string]interface{}) interface{} {
+	if str(row["type"]) != "json" {
+		return nil
+	}
+	content := str(row["content"])
+	if content == "" {
+		return nil
+	}
+	var decoded interface{}
+	if err := json.Unmarshal([]byte(content), &decoded); err != nil {
+		return nil
+	}
+	return decoded
+}
+
+func (s *ListingService) searchLikeTags(ctx context.Context, freeOnly bool) (interface{}, error) {
+	vodIDs, err := s.store.TopSearchVODIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.store.VODsByIDs(ctx, splitIDs(vodIDs), "vodid DESC")
+	if err != nil {
+		return nil, err
+	}
+	if freeOnly {
+		filtered := rows[:0]
+		for _, row := range rows {
+			if str(row["isvip"]) == "0" {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
+	}
+	tags := collectTagNames(rows)
+	if len(tags) > 10 {
+		return tags[:10], nil
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	return nil, nil
+}
+
+func (s *ListingService) miniSearchLikeTags(ctx context.Context) (interface{}, error) {
+	vodIDs, err := s.store.TopMiniSearchVODIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.store.MiniVODsByIDs(ctx, splitIDs(vodIDs), "vodid DESC")
+	if err != nil {
+		return nil, err
+	}
+	tags := collectTagNames(rows)
+	if len(tags) > 10 {
+		return tags[:10], nil
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	return nil, nil
+}
+
+func wrapVODRows(vodRows []map[string]interface{}) []map[string]interface{} {
+	rows := make([]map[string]interface{}, 0, len(vodRows))
+	for _, vodRow := range vodRows {
+		rows = append(rows, map[string]interface{}{"vodrow": vodRow})
+	}
+	return rows
+}
+
+func rowIDs(rows []map[string]interface{}, key string) []int {
+	ids := make([]int, 0, len(rows))
+	for _, row := range rows {
+		id := atoi(str(row[key]))
+		if id > 0 {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func pageSlice(rows []map[string]interface{}, page int, pageSize int) []map[string]interface{} {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	totalPage := int(math.Ceil(float64(len(rows)) / float64(pageSize)))
+	if totalPage < 1 {
+		totalPage = 1
+	}
+	if page > totalPage {
+		return []map[string]interface{}{}
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
+}
+
+func pageSliceInts(ids []int, page int, pageSize int) []int {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	totalPage := int(math.Ceil(float64(len(ids)) / float64(pageSize)))
+	if totalPage < 1 {
+		totalPage = 1
+	}
+	if page > totalPage {
+		return []int{}
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if end > len(ids) {
+		end = len(ids)
+	}
+	return ids[start:end]
 }
 
 func isNumeric(value string) bool {

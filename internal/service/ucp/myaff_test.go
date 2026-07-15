@@ -19,6 +19,10 @@ type fakeUserStore struct {
 	feedbackRow        map[string]interface{}
 	paymentRow         map[string]interface{}
 	attachRows         []map[string]interface{}
+	posters            []map[string]interface{}
+	taskboxes          []map[string]interface{}
+	taskboxLog         map[string]interface{}
+	taskboxLogs        []map[string]interface{}
 }
 
 func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -61,6 +65,25 @@ func (s fakeUserStore) RecommendedUsers(context.Context, int, int, int) ([]map[s
 
 func (s fakeUserStore) RollTitles(context.Context) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{{"id": "1", "message": "这是一条测试消息", "status": "1"}}, nil
+}
+
+func (s fakeUserStore) Posters(context.Context) ([]map[string]interface{}, error) {
+	return s.posters, nil
+}
+
+func (s fakeUserStore) Taskboxes(context.Context) ([]map[string]interface{}, error) {
+	return s.taskboxes, nil
+}
+
+func (s fakeUserStore) TaskboxLog(context.Context, int, int, int) (map[string]interface{}, error) {
+	if s.taskboxLog != nil {
+		return s.taskboxLog, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) TaskboxCompletedLogs(context.Context, int) ([]map[string]interface{}, error) {
+	return s.taskboxLogs, nil
 }
 
 func (s fakeUserStore) CountPayments(context.Context, int) (int, error) {
@@ -283,6 +306,43 @@ func (s fakeUserStore) MsgConversations(context.Context, int, int, int) ([]map[s
 	}, nil
 }
 
+func (s fakeUserStore) MsgConversation(context.Context, int, int) (map[string]interface{}, error) {
+	return map[string]interface{}{"uid": "5", "cid": "9", "ruid": "7", "newmsg": "1"}, nil
+}
+
+func (s fakeUserStore) UserByID(context.Context, int) (map[string]interface{}, error) {
+	return map[string]interface{}{"uid": "7", "username": "peer"}, nil
+}
+
+func (s fakeUserStore) CountMessages(context.Context, int, int) (int, error) {
+	return 1, nil
+}
+
+func (s fakeUserStore) Messages(context.Context, int, int, int, int) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{{
+		"uid":      "5",
+		"cid":      "9",
+		"msgid":    "11",
+		"senderid": "7",
+		"content":  `<a href="foo">foo</a>`,
+		"sendtime": "100",
+		"username": "peer",
+		"avatar":   "",
+	}}, nil
+}
+
+func (s fakeUserStore) SetMsgRead(context.Context, int, int) error {
+	return nil
+}
+
+func (s fakeUserStore) CleanMsgRead(context.Context, int) error {
+	return nil
+}
+
+func (s fakeUserStore) DeleteMsgConversations(context.Context, int, []int) error {
+	return nil
+}
+
 func (s fakeUserStore) BalanceLogs(context.Context, int, int, int) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{
 		{
@@ -373,6 +433,58 @@ func (s fakeUserStore) CountBalanceLogs(context.Context, int) (int, error) {
 
 func (s fakeUserStore) SettingExRate(context.Context) (int, error) {
 	return 10, nil
+}
+
+func TestTaskSharePicEmpty(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	data, err := service.TaskSharePic(context.Background())
+	if err != nil {
+		t.Fatalf("sharepic: %v", err)
+	}
+	rows, ok := data["data"].([]interface{})
+	if !ok || len(rows) != 0 {
+		t.Fatalf("data = %#v", data)
+	}
+}
+
+func TestTaskSharePicReturnsPoster(t *testing.T) {
+	service := NewService(fakeUserStore{posters: []map[string]interface{}{{"id": "1", "pic": "a.png"}}}, "https://res.example.test")
+
+	data, err := service.TaskSharePic(context.Background())
+	if err != nil {
+		t.Fatalf("sharepic: %v", err)
+	}
+	row, ok := data["data"].(map[string]interface{})
+	if !ok || row["pic"] != "a.png" {
+		t.Fatalf("data = %#v", data)
+	}
+}
+
+func TestTaskboxIndexGuest(t *testing.T) {
+	service := NewService(fakeUserStore{
+		taskboxes: []map[string]interface{}{
+			{"taskid": "1", "taskname": "推广1人", "showtype": "0"},
+			{"taskid": "1022", "taskname": "每日神秘", "showtype": "0"},
+		},
+		taskboxLogs: []map[string]interface{}{
+			{"logid": "9", "username": "u", "nickname": "n", "avatar": "", "addtime": "1760000000", "taskid": "1", "addcoin": "3", "prize": "p", "taskstatus": "2"},
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 15, 10, 0, 0, 0, time.Local) }
+
+	data, err := service.TaskboxIndex(context.Background(), "")
+	if err != nil {
+		t.Fatalf("taskbox: %v", err)
+	}
+	taskRows := data["taskrows"].([]map[string]interface{})
+	if len(taskRows) != 2 || taskRows[0]["taskstatus"] != 0 {
+		t.Fatalf("taskrows = %#v", taskRows)
+	}
+	logRows := data["logrows"].([]map[string]interface{})
+	if len(logRows) != 1 || logRows[0]["taskstatus"] != "已发放" {
+		t.Fatalf("logrows = %#v", logRows)
+	}
 }
 
 func TestMyAffRequiresLogin(t *testing.T) {
@@ -1157,6 +1269,78 @@ func TestCoinLogInviteLogFormatsRows(t *testing.T) {
 	}
 	if data.PageInfo["page_url"] != "/ucp/coinlog/invitelog?page=[?]" || data.PageInfo["pagesize"] != 20 {
 		t.Fatalf("unexpected pageinfo %#v", data.PageInfo)
+	}
+}
+
+type trackingMsgStore struct {
+	fakeUserStore
+	readCIDs []int
+	cleanUID int
+	deleteID int
+	deleted  []int
+}
+
+func (s *trackingMsgStore) SetMsgRead(_ context.Context, uid int, cid int) error {
+	s.readCIDs = append(s.readCIDs, cid)
+	return nil
+}
+
+func (s *trackingMsgStore) CleanMsgRead(_ context.Context, uid int) error {
+	s.cleanUID = uid
+	return nil
+}
+
+func (s *trackingMsgStore) DeleteMsgConversations(_ context.Context, uid int, cids []int) error {
+	s.deleteID = uid
+	s.deleted = append([]int{}, cids...)
+	return nil
+}
+
+func TestMsgSetReadRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgSetRead(context.Background(), "", []int{1})
+	if err != nil {
+		t.Fatalf("msg setread: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
+func TestMsgSetReadSkipsInvalidIDs(t *testing.T) {
+	store := &trackingMsgStore{fakeUserStore: fakeUserStore{user: map[string]interface{}{"uid": "5"}}}
+	service := NewService(store, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgSetRead(context.Background(), "token", []int{9, 0, -1, 12})
+	if err != nil {
+		t.Fatalf("msg setread: %v", err)
+	}
+	if retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	if !equalInts(store.readCIDs, []int{9, 12}) {
+		t.Fatalf("read cids = %#v", store.readCIDs)
+	}
+}
+
+func TestMsgCleanReadAndDelete(t *testing.T) {
+	store := &trackingMsgStore{fakeUserStore: fakeUserStore{user: map[string]interface{}{"uid": "5"}}}
+	service := NewService(store, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgCleanRead(context.Background(), "token")
+	if err != nil || retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("cleanread response %d %q err %v", retcode, errmsg, err)
+	}
+	if store.cleanUID != 5 {
+		t.Fatalf("clean uid = %d", store.cleanUID)
+	}
+	retcode, errmsg, err = service.MsgDelete(context.Background(), "token", []int{3, 4})
+	if err != nil || retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("delete response %d %q err %v", retcode, errmsg, err)
+	}
+	if store.deleteID != 5 || !equalInts(store.deleted, []int{3, 4}) {
+		t.Fatalf("delete uid/cids = %d %#v", store.deleteID, store.deleted)
 	}
 }
 

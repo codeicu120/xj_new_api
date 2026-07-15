@@ -34,11 +34,20 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | 本轮完成 | 登录只读金币日志首页，读取账户、金币、汇率和最近 10 条 `user_coinlogs`，类型、时间、手机号遮罩与 PHP 一致。 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | 本轮完成 | 登录只读收益金币日志分页，列表包含 22/32，累计收益统计按 PHP 保持不含 22/32。 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | 本轮完成 | 登录只读邀请金币日志分页，过滤 `cointype IN (201,32,11)`，分页和日志字段映射与 PHP 一致。 |
+| `/bought/listing` | `c.api.bought->listing` | 本轮完成 | 登录只读已购影片列表，读取 `user_bought LEFT JOIN vods`，复用 VOD `procRow2` 兼容字段和 `/bought/listing?page=[?]` 分页，对比通过。 |
+| `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；空 `vodids` 与 PHP 一样返回成功，删除写入按 uid 限定。 |
+| `/playlog/listing`、`/downlog/listing` | `c.api.playlog/downlog->listing` | 本轮完成 | 登录用户读取用户播放/下载记录；未登录按游客 sid 返回空或游客记录，不强制登录。 |
+| `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 登录用户软删除自己的播放/下载记录；未登录按游客 sid 软删除，不强制登录。 |
+| `/favorite/listing`、`/minifavorite/listing` | `c.api.favorite/minifavorite->listing` | 本轮完成 | 登录只读收藏列表；普通视频支持 `wd` 搜索，小视频补 `isfavorite=1`。 |
+| `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
+| `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读随机推广海报；奖励/签到 task action 未接管。 |
+| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读任务宝箱状态；开启宝箱奖励写入未接管。 |
 
 ## 暂缓
 
 | 接口 | 原因 |
 | --- | --- |
-| `POST /ucp/feedback`、`/ucp/feedback/create`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`、`/ucp/msg/send`、`/ucp/task/*` | 涉及写库、已读状态、奖励或状态变更，需要单独测试和回滚策略；`GET /ucp/feedback/detail` 只读详情已迁移。 |
+| `POST /ucp/feedback`、`/ucp/feedback/create`、`/ucp/msg/send`、`/ucp/task/*`（除 `/ucp/task/sharepic`）、`/favorite/add`、`/minifavorite/add` | 涉及写库、奖励或状态变更，需要单独测试和回滚策略；收藏 index/listing/remove 已迁移。 |
 | `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用。 |
+| `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

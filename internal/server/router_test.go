@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -9,8 +11,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	"xj_comp/internal/config"
+	"xj_comp/internal/handler"
 	"xj_comp/internal/legacyjson"
+	attachService "xj_comp/internal/service/attach"
 )
 
 func TestHealthz(t *testing.T) {
@@ -110,6 +116,97 @@ func TestSysAvatar(t *testing.T) {
 	}
 }
 
+func TestAttachIndexEmptyResponse(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/attach", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if rec.Body.String() != "" {
+		t.Fatalf("expected empty body, got %q", rec.Body.String())
+	}
+}
+
+func TestSMSAndEmailIndexEmptyResponse(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/sms", "/sms/index", "/email", "/email/index", "/aiundress/index", "/playlog", "/playlog/index", "/downlog", "/downlog/index", "/favorite", "/favorite/index", "/minifavorite", "/minifavorite/index"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "" {
+			t.Fatalf("%s: expected empty body, got %q", path, rec.Body.String())
+		}
+	}
+}
+
+func TestAttachUpAvatarRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/attach/upavatar", strings.NewReader("avatarid=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 || body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected response %+v", body)
+	}
+}
+
+func TestAttachUpAvatarRejectsInvalidAvatarIDWithPHPErrorShape(t *testing.T) {
+	service := attachService.NewService(&attachTestStore{user: map[string]interface{}{"uid": "8"}})
+	router := gin.New()
+	router.POST("/attach/upavatar", handler.NewAttachHandler(service).UpAvatar)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/attach/upavatar", strings.NewReader("avatarid=abc"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["retcode"] != float64(-1) || body["errmsg"] != "请选择系统头像" {
+		t.Fatalf("unexpected response %+v", body)
+	}
+	if _, ok := body["data"]; ok {
+		t.Fatal("expected data to be omitted")
+	}
+}
+
+type attachTestStore struct {
+	user map[string]interface{}
+}
+
+func (s *attachTestStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
+	return s.user, nil
+}
+
+func (s *attachTestStore) UpdateAvatar(context.Context, int, string) error {
+	return nil
+}
+
 func TestCaptchaReq(t *testing.T) {
 	router := newTestRouter()
 
@@ -145,6 +242,91 @@ func TestCaptchaReq(t *testing.T) {
 	}
 	if data["smscaptcha"] != float64(1) {
 		t.Fatalf("expected smscaptcha 1, got %v", data["smscaptcha"])
+	}
+}
+
+func TestCaptchaPicInvalidSecret(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/captcha/pic", "/captcha/pic?bad", "/captcha/picx", "/captcha/picx?bad"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusNotFound, rec.Code)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -4 || body.ErrMsg != "验证码无效" {
+			t.Fatalf("%s unexpected response %#v", path, body)
+		}
+	}
+}
+
+func TestCaptchaPicFromReqSecret(t *testing.T) {
+	router := newTestRouter()
+
+	reqRec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/captcha/req", nil)
+	router.ServeHTTP(reqRec, req)
+
+	var reqBody legacyjson.Response
+	if err := json.Unmarshal(reqRec.Body.Bytes(), &reqBody); err != nil {
+		t.Fatalf("decode req response: %v", err)
+	}
+	data := reqBody.Data.(map[string]interface{})
+	picURL := data["picurl"].(string)
+
+	rec := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, picURL, nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "image/png" {
+		t.Fatalf("expected image/png content type, got %q", contentType)
+	}
+	body := rec.Body.Bytes()
+	if len(body) < 24 || string(body[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("expected PNG response, got %q", body[:min(len(body), 8)])
+	}
+	if width := binary.BigEndian.Uint32(body[16:20]); width != 100 {
+		t.Fatalf("expected PNG width 100, got %d", width)
+	}
+	if height := binary.BigEndian.Uint32(body[20:24]); height != 34 {
+		t.Fatalf("expected PNG height 34, got %d", height)
+	}
+}
+
+func TestTestCaptchaPNG(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "image/png" {
+		t.Fatalf("expected image/png content type, got %q", contentType)
+	}
+	body := rec.Body.Bytes()
+	if len(body) < 24 || string(body[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("expected PNG response, got %q", body[:min(len(body), 8)])
+	}
+	if width := binary.BigEndian.Uint32(body[16:20]); width != 100 {
+		t.Fatalf("expected PNG width 100, got %d", width)
+	}
+	if height := binary.BigEndian.Uint32(body[20:24]); height != 34 {
+		t.Fatalf("expected PNG height 34, got %d", height)
 	}
 }
 
@@ -483,6 +665,89 @@ func TestOneGoMarqueeNoDataWithoutMySQL(t *testing.T) {
 	}
 }
 
+func TestSpecialListingWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/special/listing", "/special/listing-1-3-0?page=2"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != 0 {
+				t.Fatalf("expected retcode 0, got %d", body.RetCode)
+			}
+			data, ok := body.Data.(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected data object, got %T", body.Data)
+			}
+			if _, ok := data["rows"].([]interface{}); !ok {
+				t.Fatalf("expected rows array, got %T", data["rows"])
+			}
+			if _, ok := data["pageinfo"].(map[string]interface{}); !ok {
+				t.Fatalf("expected pageinfo object, got %T", data["pageinfo"])
+			}
+			if _, ok := data["actorrows"].([]interface{}); !ok {
+				t.Fatalf("expected actorrows array, got %T", data["actorrows"])
+			}
+		})
+	}
+}
+
+func TestSpecialIndexEmpty(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/special/index", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if body := rec.Body.String(); body != "" {
+		t.Fatalf("expected empty body, got %q", body)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+}
+
+func TestSpecialDetailNotFoundWithoutMySQL(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/special/detail/123", "/special/detail/123-1"} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+				t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+			}
+			var body legacyjson.Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.RetCode != -1 || body.ErrMsg != "记录不存在或已被删除" {
+				t.Fatalf("unexpected response %#v", body)
+			}
+		})
+	}
+}
+
 func TestV2VODListingRoutes(t *testing.T) {
 	router := newTestRouter()
 
@@ -674,22 +939,22 @@ func TestCommentListingRoute(t *testing.T) {
 	}
 }
 
-func TestV2VODShowPlaceholderIsNotListing(t *testing.T) {
+func TestV2VODShowUsesRealHandler(t *testing.T) {
 	router := newTestRouter()
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v2/vod/show/1", nil)
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("expected status %d, got %d", http.StatusNotImplemented, rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
-	var body map[string]string
+	var body legacyjson.Response
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body["legacy_handler"] != "c.apiv2.vod.show" {
-		t.Fatalf("unexpected legacy handler %q", body["legacy_handler"])
+	if body.RetCode != -1 || body.ErrMsg != "记录不存在或已删除" {
+		t.Fatalf("unexpected response %+v", body)
 	}
 }
 
@@ -720,6 +985,78 @@ func TestGetLikeRows(t *testing.T) {
 	}
 	if _, ok := data["likerows"].([]interface{}); !ok {
 		t.Fatalf("expected likerows array, got %T", data["likerows"])
+	}
+}
+
+func TestSearchRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/search", "/search?wd=test&page=1", "/search?wd=test&free=1&page=1"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != 0 {
+			t.Fatalf("%s expected retcode 0, got %d", path, body.RetCode)
+		}
+	}
+}
+
+func TestMiniSearchRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/minisearch", "/minisearch?wd=test&page=1"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != 0 {
+			t.Fatalf("%s expected retcode 0, got %d", path, body.RetCode)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/minisearch", strings.NewReader("wd=test&page=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /minisearch expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("POST /minisearch decode response: %v", err)
+	}
+	data, ok := body.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T", body.Data)
+	}
+	pageinfo, ok := data["pageinfo"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected pageinfo object, got %T", data["pageinfo"])
+	}
+	if pageinfo["page_url"] != "/search?wd=test&page=[?]" {
+		t.Fatalf("unexpected page_url %v", pageinfo["page_url"])
 	}
 }
 

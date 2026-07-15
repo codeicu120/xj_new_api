@@ -61,6 +61,20 @@ func (r *Repository) Groups(ctx context.Context) ([]map[string]interface{}, erro
 	return scanRows(rows)
 }
 
+func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query user by id: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
 func (r *Repository) CountRecommended(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil
@@ -70,6 +84,26 @@ func (r *Repository) CountRecommended(ctx context.Context, uid int) (int, error)
 		return 0, fmt.Errorf("count recommended users: %w", err)
 	}
 	return total, nil
+}
+
+func (r *Repository) UpdateAvatar(ctx context.Context, uid int, avatarID string) error {
+	if r.db == nil {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE users SET avatar=? WHERE uid=?", avatarID, uid); err != nil {
+		return fmt.Errorf("update user avatar: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) Logout(ctx context.Context, sid string) error {
+	if r.db == nil || !validSID(sid) {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "DELETE FROM sessions WHERE sid=? AND type=0", sid); err != nil {
+		return fmt.Errorf("delete session: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) RecommendedUsers(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {

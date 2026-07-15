@@ -14,45 +14,88 @@
 | 接口 | PHP handler | Go 状态 | 对比说明 |
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | 已完成 | 忽略旧中间件动态字段 `data.xxx_api_auth` 后一致。 |
+| `/logout` | `c.api.user->logout` | 本轮完成 | 退出登录；无 token/非法 token 分支对比通过，成功删除 session 由 service fake 覆盖。 |
+| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | 本轮完成 | 短信/邮件默认空入口，返回 `200 text/html` 空 body；发送验证码 action 未接管。 |
 | `/captcha/req` | `c.api.captcha->req` | 本轮完成 | `picurl` secret 动态生成，对比稳定结构、前缀和 `smscaptcha`。 |
+| `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | 本轮完成 | 图片验证码输出；无效 secret 404 JSON 对比一致，有效 PHP/Go secret 均返回 `image/png`、100x34 PNG。 |
+| `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | 本轮完成 | 附件空入口和系统头像更新；空响应、未登录、登录非法参数对比通过，成功更新由 service fake 覆盖。 |
+| `/:size/:uri` | `c.api.pic->index` | 本轮完成 | 图片裁剪/缩略/原图输出入口；不存在和非法文件 404 对比通过，图片生成由 service 测试覆盖。 |
+| `/test` | `c.api.test->test` | 本轮完成 | 动态 PNG 二进制输出，按 HTTP status、`image/png` 和 100x34 PNG 形态对比。 |
 | `/iploc/:ip` | `c.api.index->iploc` | 本轮完成 | 忽略旧中间件动态字段后，稳定 IP 样例一致。 |
+| `/shortcutstats/add`、`/adstats/add`、`/playstats/add` | `c.api.shortcutstats/adstats/playstats->add` | 本轮完成 | 统计写入接口；复刻无 token 游客 sid 创建，成功和参数错误分支对比通过。 |
+| `/open`、`/open/index`、`/open/reqauth` | `c.api.open->index/reqauth` | 本轮完成 | 开放平台授权接口；`reqauth` 游客成功路径的 `authrow/openid/sign/time` 与旧 PHP 一致，旧 PHP 动态 `xxx_api_auth` 不回传。 |
+| `/activity`、`/activity/index`、`/activity/details` | `c.api.activity->index/details` | 本轮完成 | 活动只读接口；当前无活动和无效 `aid` 错误分支对比通过，成功分支按源码读取活动与奖项。 |
+| `/activity/luckyprizes` | `c.api.activity->luckyprizes` | 本轮完成 | 静态充值抽奖奖项列表；忽略旧 PHP 动态 `xxx_api_auth` 后一致。 |
+| `/activity/newyear2020`、`/activity/luckydraw` | `c.api.activity->newyear2020/luckydraw` | 本轮完成 | 过期抽奖活动入口；当前日期下旧 PHP 直接返回活动结束错误，忽略动态 `xxx_api_auth` 后一致。 |
+| `/activity/luckydrawhistory` | `c.api.activity->luckydrawhistory` | 本轮完成 | 登录只读充值抽奖历史；未登录和登录空历史分支对比通过。 |
+| `/activity/ranking`、`/activity/receive` | `c.api.activity->ranking/receive` | 本轮完成 | 登录活动排名/领奖结果预览；未登录和无效活动分支对比通过，成功分支由 service fake 覆盖。 |
+| `/activity/recommends` | `c.api.activity->recommends` | 本轮完成 | 登录邀请记录只读接口；未登录和无效活动分支对比通过，成功分支由 service fake 覆盖。 |
+| `/invite/info` | `c.api.invite->info` | 本轮完成 | 登录只读当前绑定的邀请码；未登录和登录真实 token 分支对比通过。 |
+| `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
+| `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
+| `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
+| `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；签到写入 action 未接管。 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | 本轮完成 | 旧 PHP 空 OK 入口；激励视频 show/reqcoin 未接管。 |
+| `/explore/index` | `c.api.explore.index->index` | 本轮完成 | 发现页入口，读取可见 tab，按用户/游客权限计算未来 7 天签到奖励和当前签到状态，对比通过。 |
 | `/game/platforms` | `c.api.game.index->index` | 本轮完成 | 读 `game_platform`，保留 PHP 字段和值类型并剔除 `json`。 |
 | `/game/categories` | `c.api.game.index->categories` | 本轮完成 | 读 `game_category`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/v2/amazing/categories` | `c.apiv2.amazing->categories` | 本轮完成 | 读 `amazing_category` 固定列，支持 `parent_id`。 |
 | `/v2/so/list` | `c.apiv2.so->index` | 本轮完成 | 读 `server_so_config.value`，按 PHP `json_decode` 行为返回 `data.data`。 |
 | `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` | `c.apiv2.vod->listing` | 本轮完成 | 动态 action 路由组，支持 `-params`，迁移列表筛选、排序、分页和核心 `vodrows` 字段。 |
+| `/v2/vod/show/:vodid` | `c.apiv2.vod->show` | 本轮完成 | v2 视频详情；复用详情 service，错误分支和真实样例对比通过。 |
 | `/v2/amazing/listing`、`/v2/amazing/recommend`、`/v2/amazing/hot`、`/v2/amazing/latest` | `c.apiv2.amazing->listing` | 本轮完成 | 动态 action 路由组，支持 `-params`，迁移精彩推荐列表筛选、排序和分页。 |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | `c.api.vod->listing` | 本轮完成 | 非 v2 动态 action 路由组，支持 `-params`；复用 VOD 列表服务并对齐 PHP 分页 selector。 |
 | `/vod/show/:vodid` | `c.api.vod->show` | 本轮完成 | 视频详情只读接口，迁移主视频、父级分类、相似视频和猜你喜欢；随机列表按 shape 对比。 |
 | `/vod/preView/:vodid/index.m3u8` | `c.api.vod->preView` | 本轮完成 | m3u8 试看输出；HTTP 拉取通过 fetcher 注入，测试用 fixture，不依赖真实 CDN。 |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | `c.api.sendfile->play/down` | 本轮完成 | 兼容旧 PHP 空壳行为：play 只做登录和 vodid 存在性检查，成功空 200；down 空 200。 |
 | `/comment/listing-:params` | `c.api.comment->listing` | 本轮完成 | 评论列表公共只读接口，支持评论树、排序、分页和用户头像/VIP 标识。 |
+| `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | `c.api.playlog/downlog->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
+| `/playlog/listing` | `c.api.playlog->listing` | 本轮完成 | 播放记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式，游客 timeline 2/3 保留旧 PHP 边界反序行为。 |
+| `/downlog/listing` | `c.api.downlog->listing` | 本轮完成 | 下载记录只读列表；不强制登录，游客按 sid 查询，支持 timeline/page 和 PHP 相对时间格式。 |
+| `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 播放/下载记录软删除；未登录按游客 sid，空 `vodids` 返回 `已删除0项`。 |
+| `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | `c.api.favorite/minifavorite->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/game/games` | `c.api.game.index->games` | 本轮完成 | 读 `game`，支持 `platform_id/category_id`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | 本轮完成 | 复用 VOD 行处理，按旧 PHP 固定返回 6 条随机猜你喜欢。 |
+| `/getCertUuid` | `c.api.index->getCertUuid` | 本轮完成 | 证书 UUID 外部查询代理；本地错误分支对比一致，成功分支通过 fake client 覆盖。 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
+| `/game/wali/test` | `c.api.game.wali->ping` | 本轮完成 | 瓦力平台 ping；读取 `game_platform.json` 后 AES-ECB 加密、MD5 签名并外呼，live 对比一致。 |
+| `/game/wali/balance` | `c.api.game.wali->getBalance` | 本轮完成 | 需要登录但无本地写入；复用瓦力 AES/签名外呼，返回外部平台余额。 |
+| `/hgame/index` | `c.api.hgame->index` | 本轮完成 | HGame 公共只读列表，返回 `data.data.list/slide`，`/hgame` 本身保持旧 PHP 404 未接管。 |
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
+| `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
+| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 空响应未接管，领奖 action 未接管。 |
+| `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
+| `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | `c.api.ucp.msg->setread/cleanread/delete` | 本轮完成 | 登录消息状态写入；未登录和空数组成功分支对比通过，旧 PHP 动态 `xxx_api_auth` 不回传。 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
 | `/onego/hash` | `c.api.onego->hash` | 本轮完成 | 一元购公共哈希计算接口，复刻 PHP `hash('sha256')` 和末尾数字期号截取规则。 |
 | `/onego/lucky` | `c.api.onego->lucky` | 本轮完成 | 一元购幸运榜公共只读接口，按获奖金币总数排序并附带各房间获奖次数；保留 PHP 未分页排行 SQL。 |
 | `/onego/marquee` | `c.api.onego->marquee` | 本轮完成 | 一元购跑马灯公共只读接口，读取最近已开奖期前 10 条记录并按规则模板生成中奖消息。 |
+| `/special/index` | `c.api.special->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |
+| `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 本轮完成 | 专题公共接口，复用 VOD 行处理；listing 含分页、前 4 个视频和第一页 actorrows，detail 含全量视频排序和浏览数写入副作用。 |
+| `/special/up/:spid`、`/special/down/:spid` | `c.api.special->up/down` | 本轮完成 | 专题赞踩；不存在分支 live 对比通过，成功/重复投票写入分支由 service fake 覆盖。 |
+| `/search` | `c.api.search->index` | 本轮完成 | 普通视频搜索；空关键词返回热词/热片/猜你喜欢，带关键词返回分页视频列表并更新 `vod_schlogs`。 |
+| `/minisearch` | `c.api.miniSearch->index` | 本轮完成 | 小视频搜索；空关键词返回小视频热词/热片/猜你喜欢，带关键词返回 `rows[].vodrow` 并更新 `minivod_schlogs`。 |
+| `/art`、`/art/index` | `c.api.art->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |
+| `/art/announce` | `c.api.art->announce` | 本轮完成 | 系统公告列表，读 `art_categories.uuid=announce` 和公开 `arts`；分页 URL 保留旧 PHP `/art/?page=[?]` 行为。 |
+| `/art/show` | `c.api.art->show` | 本轮完成 | 公告/文章详情，读 `arts` 和 `arts_content`；成功、缺少 `artid`、不存在记录分支均对比一致。 |
+| `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
 
 ## 优先候选
 
 | 优先级 | 接口 | PHP handler | 风险 |
 | --- | --- | --- | --- |
-| 1 | `/special/listing`、`/special/detail/:spid` | `c.api.special->listing/detail` | 中；专题只读，但会聚合视频行和详情浏览数。 |
-| 2 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
-| 3 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
-| 4 | `/search` | `c.api.search->index` | 中；搜索结果会写入/更新搜索日志。 |
+| 1 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
+| 2 | `/getGlobalData` | `c.api.index->getGlobalData` | 中；依赖系统设置/缓存。 |
 
 ## 暂缓
 
 | 接口 | 原因 |
 | --- | --- |
 | `/register`、`/login`、`/forgot` | 公共但涉及账号、短信、风控和写库。 |
+| `/favorite/add`、`/minifavorite/add` | 收藏写入会触发金币奖励计算和 `user_coinlogs` 写入，需单独迁移和回滚策略；index/listing/remove 已完成。 |
 | `/payment/*`、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
+| `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
-| `/captcha/pic`、`/captcha/picx` | 图片二进制输出，需要字体和图片生成兼容。 |
 | `/minivod/*` | 多数依赖游客/用户权限、播放记录、金币或数据库。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |

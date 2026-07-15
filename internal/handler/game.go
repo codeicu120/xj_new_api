@@ -15,14 +15,16 @@ type GameHandler struct {
 	categoryService  *gameService.CategoryService
 	listingService   *gameService.ListingService
 	broadcastService *gameService.BroadcastService
+	waliService      *gameService.WaliService
 }
 
-func NewGameHandler(platformService *gameService.PlatformService, categoryService *gameService.CategoryService, listingService *gameService.ListingService, broadcastService *gameService.BroadcastService) *GameHandler {
+func NewGameHandler(platformService *gameService.PlatformService, categoryService *gameService.CategoryService, listingService *gameService.ListingService, broadcastService *gameService.BroadcastService, waliService *gameService.WaliService) *GameHandler {
 	return &GameHandler{
 		platformService:  platformService,
 		categoryService:  categoryService,
 		listingService:   listingService,
 		broadcastService: broadcastService,
+		waliService:      waliService,
 	}
 }
 
@@ -69,6 +71,30 @@ func (h *GameHandler) Broadcasts(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏广播失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *GameHandler) WaliTest(c *gin.Context) {
+	data, err := h.waliService.Ping(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusOK, legacyjson.Error("测试失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *GameHandler) WaliBalance(c *gin.Context) {
+	data, retcode, errmsg, err := h.waliService.Balance(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))

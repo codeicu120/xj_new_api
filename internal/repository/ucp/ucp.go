@@ -30,6 +30,55 @@ func (r *Repository) RollTitles(ctx context.Context) ([]map[string]interface{}, 
 	return scanRows(rows)
 }
 
+func (r *Repository) Posters(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM poster WHERE status=1")
+	if err != nil {
+		return nil, fmt.Errorf("query posters: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) Taskboxes(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM promotion_taskboxs ORDER BY taskid ASC")
+	if err != nil {
+		return nil, fmt.Errorf("query taskboxes: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	return r.queryOne(ctx, "SELECT * FROM promotion_taskboxlogs WHERE uid=? AND taskid=? AND daykey=?", uid, taskID, dayKey)
+}
+
+func (r *Repository) TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+SELECT a.*, b.username, b.nickname, b.avatar
+FROM promotion_taskboxlogs a
+LEFT JOIN users b ON b.uid=a.uid
+WHERE 1=1 AND taskstatus=2
+ORDER BY a.logid DESC
+LIMIT ? OFFSET 0`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query taskbox logs: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
 func (r *Repository) CountPayments(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil
@@ -358,6 +407,151 @@ ORDER BY a.last_sendtime DESC LIMIT ? OFFSET ?`, uid, pageSize, offset)
 	}
 	defer rows.Close()
 	return scanRows(rows)
+}
+
+func (r *Repository) MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || cid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM msgc WHERE uid=? AND cid=?", uid, cid)
+	if err != nil {
+		return nil, fmt.Errorf("query msg conversation: %w", err)
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
+func (r *Repository) CountMessages(ctx context.Context, uid int, cid int) (int, error) {
+	if r.db == nil || uid <= 0 || cid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM msg_maps WHERE 1=1 AND uid=? AND cid=?", uid, cid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count messages: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) Messages(ctx context.Context, uid int, cid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || cid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+	rows, err := r.db.QueryContext(ctx, `SELECT a.*, b.senderid, b.content, b.sendtime, c.username, c.avatar
+FROM msg_maps a
+LEFT JOIN msgs b ON b.msgid=a.msgid
+LEFT JOIN users c ON c.uid=b.senderid
+WHERE 1=1 AND a.uid=? AND cid=?
+ORDER BY a.sendtime ASC LIMIT ? OFFSET ?`, uid, cid, pageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query messages: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) SetMsgRead(ctx context.Context, uid int, cid int) error {
+	if r.db == nil || uid <= 0 || cid <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin set msg read: %w", err)
+	}
+	defer tx.Rollback()
+	var ruid, newmsg int
+	if err := tx.QueryRowContext(ctx, "SELECT ruid, newmsg FROM msgc WHERE uid=? AND cid=?", uid, cid).Scan(&ruid, &newmsg); err != nil {
+		if err == sql.ErrNoRows {
+			return tx.Commit()
+		}
+		return fmt.Errorf("query msgc read state: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE msgc SET newmsg=0 WHERE uid=? AND cid=?", uid, cid); err != nil {
+		return fmt.Errorf("clear msgc newmsg: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE msgc SET risread=1 WHERE uid=? AND cid=?", ruid, cid); err != nil {
+		return fmt.Errorf("set peer risread: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE users SET newmsg=newmsg-? WHERE uid=?", newmsg, uid); err != nil {
+		return fmt.Errorf("update user newmsg: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) CleanMsgRead(ctx context.Context, uid int) error {
+	if r.db == nil || uid <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE users SET newmsg=0 WHERE uid=?", uid); err != nil {
+		return fmt.Errorf("clean user newmsg: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) DeleteMsgConversations(ctx context.Context, uid int, cids []int) error {
+	if r.db == nil || uid <= 0 || len(cids) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete msg conversations: %w", err)
+	}
+	defer tx.Rollback()
+	for _, cid := range cids {
+		if cid <= 0 {
+			continue
+		}
+		var newmsg int
+		if err := tx.QueryRowContext(ctx, "SELECT newmsg FROM msgc WHERE uid=? AND cid=?", uid, cid).Scan(&newmsg); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("query msgc before delete: %w", err)
+		}
+		rows, err := tx.QueryContext(ctx, "SELECT msgid FROM msg_maps WHERE uid=? AND cid=?", uid, cid)
+		if err != nil {
+			return fmt.Errorf("query msg maps before delete: %w", err)
+		}
+		msgIDs := []int{}
+		for rows.Next() {
+			var msgID int
+			if err := rows.Scan(&msgID); err != nil {
+				rows.Close()
+				return fmt.Errorf("scan msg map id: %w", err)
+			}
+			msgIDs = append(msgIDs, msgID)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("iterate msg map ids: %w", err)
+		}
+		rows.Close()
+		if _, err := tx.ExecContext(ctx, "DELETE FROM msgc WHERE uid=? AND cid=?", uid, cid); err != nil {
+			return fmt.Errorf("delete msgc: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM msg_maps WHERE uid=? AND cid=?", uid, cid); err != nil {
+			return fmt.Errorf("delete msg maps: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE users SET newmsg=newmsg-? WHERE uid=?", newmsg, uid); err != nil {
+			return fmt.Errorf("update user newmsg after delete: %w", err)
+		}
+		for _, msgID := range msgIDs {
+			if _, err := tx.ExecContext(ctx, "UPDATE msgs SET refcount=refcount-1 WHERE msgid=?", msgID); err != nil {
+				return fmt.Errorf("decrement msg refcount: %w", err)
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM msgs WHERE refcount=0"); err != nil {
+		return fmt.Errorf("delete unreferenced msgs: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (r *Repository) BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {

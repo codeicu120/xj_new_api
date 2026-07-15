@@ -16,6 +16,10 @@ func (s ucpStore) UserBySession(ctx context.Context, sid string) (map[string]int
 	return s.user.UserBySession(ctx, sid)
 }
 
+func (s ucpStore) UserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
+	return s.user.UserByID(ctx, uid)
+}
+
 func (s ucpStore) Groups(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.user.Groups(ctx)
 }
@@ -30,6 +34,22 @@ func (s ucpStore) RecommendedUsers(ctx context.Context, uid int, page int, pageS
 
 func (s ucpStore) RollTitles(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.ucp.RollTitles(ctx)
+}
+
+func (s ucpStore) Posters(ctx context.Context) ([]map[string]interface{}, error) {
+	return s.ucp.Posters(ctx)
+}
+
+func (s ucpStore) Taskboxes(ctx context.Context) ([]map[string]interface{}, error) {
+	return s.ucp.Taskboxes(ctx)
+}
+
+func (s ucpStore) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error) {
+	return s.ucp.TaskboxLog(ctx, uid, taskID, dayKey)
+}
+
+func (s ucpStore) TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error) {
+	return s.ucp.TaskboxCompletedLogs(ctx, limit)
 }
 
 func (s ucpStore) CountPayments(ctx context.Context, uid int) (int, error) {
@@ -126,6 +146,30 @@ func (s ucpStore) CountMsgConversations(ctx context.Context, uid int) (int, erro
 
 func (s ucpStore) MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.MsgConversations(ctx, uid, page, pageSize)
+}
+
+func (s ucpStore) MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error) {
+	return s.ucp.MsgConversation(ctx, uid, cid)
+}
+
+func (s ucpStore) CountMessages(ctx context.Context, uid int, cid int) (int, error) {
+	return s.ucp.CountMessages(ctx, uid, cid)
+}
+
+func (s ucpStore) Messages(ctx context.Context, uid int, cid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	return s.ucp.Messages(ctx, uid, cid, page, pageSize)
+}
+
+func (s ucpStore) SetMsgRead(ctx context.Context, uid int, cid int) error {
+	return s.ucp.SetMsgRead(ctx, uid, cid)
+}
+
+func (s ucpStore) CleanMsgRead(ctx context.Context, uid int) error {
+	return s.ucp.CleanMsgRead(ctx, uid)
+}
+
+func (s ucpStore) DeleteMsgConversations(ctx context.Context, uid int, cids []int) error {
+	return s.ucp.DeleteMsgConversations(ctx, uid, cids)
 }
 
 func (s ucpStore) BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {

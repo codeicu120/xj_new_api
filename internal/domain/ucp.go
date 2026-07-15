@@ -40,6 +40,13 @@ type UCPMsgListingData struct {
 	PageInfo map[string]interface{}   `json:"pageinfo"`
 }
 
+type UCPMsgDetailData struct {
+	Crow     map[string]interface{}   `json:"crow"`
+	CUser    interface{}              `json:"cuser"`
+	Rows     []map[string]interface{} `json:"rows"`
+	PageInfo map[string]interface{}   `json:"pageinfo"`
+}
+
 type UCPPaymentListingData struct {
 	Rows     []map[string]interface{} `json:"rows"`
 	PageInfo map[string]interface{}   `json:"pageinfo"`

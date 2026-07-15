@@ -7,17 +7,23 @@ import (
 	"testing"
 	"time"
 
+	"xj_comp/internal/domain"
 	vodRepo "xj_comp/internal/repository/vod"
 )
 
 type fakeListingStore struct {
-	lastFilter vodRepo.ListingFilter
-	lastTotal  int
-	lastPage   int
-	lastSize   int
-	lastOrder  string
-	randomUsed bool
-	vodByID    map[string]interface{}
+	lastFilter          vodRepo.ListingFilter
+	lastTotal           int
+	lastPage            int
+	lastSize            int
+	lastOrder           string
+	randomUsed          bool
+	vodByID             map[string]interface{}
+	searchLog           map[string]interface{}
+	miniSearchCalls     int
+	miniCachedListCalls int
+	miniUpsertCalls     int
+	miniIncrementCalls  int
 }
 
 type fakeM3U8Fetcher map[string]string
@@ -86,6 +92,10 @@ func (s *fakeListingStore) VODByID(context.Context, int) (map[string]interface{}
 	return fixtureVODRows()[0], nil
 }
 
+func (s *fakeListingStore) VODsByIDs(context.Context, []int, string) ([]map[string]interface{}, error) {
+	return fixtureVODRows(), nil
+}
+
 func (s *fakeListingStore) SimilarVODsByTagIDs(context.Context, []int, int, int64, int) ([]map[string]interface{}, error) {
 	return fixtureVODRows(), nil
 }
@@ -95,6 +105,211 @@ func (s *fakeListingStore) TagsByNames(context.Context, []string) ([]map[string]
 		{"tagid": "7", "tagtype": "1", "tagname": "剧情", "itemcount": "12"},
 		{"tagid": "8", "tagtype": "0", "tagname": "演员", "itemcount": "3"},
 	}, nil
+}
+
+func (s *fakeListingStore) CalldataByUUID(_ context.Context, uuid string) (map[string]interface{}, error) {
+	switch uuid {
+	case "search.hotwords":
+		return map[string]interface{}{"type": "json", "content": `["剧情","演员"]`}, nil
+	case "search.hotvods":
+		return map[string]interface{}{"type": "code", "content": "100"}, nil
+	case "search.minihotwords":
+		return map[string]interface{}{"type": "json", "content": `["短片","作者"]`}, nil
+	case "search.minihotvods":
+		return map[string]interface{}{"type": "code", "content": "100"}, nil
+	default:
+		return map[string]interface{}{}, nil
+	}
+}
+
+func (s *fakeListingStore) VODsByIDsLimited(_ context.Context, _ []int, _ bool, _ int, _ bool) ([]map[string]interface{}, error) {
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) SearchVODs(_ context.Context, _ string, _ bool, _ int) ([]map[string]interface{}, error) {
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) SearchLog(context.Context, string) (map[string]interface{}, error) {
+	if s.searchLog != nil {
+		return s.searchLog, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeListingStore) UpsertSearchLog(context.Context, string, int64, int, []int) error {
+	return nil
+}
+
+func (s *fakeListingStore) IncrementSearchLog(context.Context, string, int64, int64) error {
+	return nil
+}
+
+func (s *fakeListingStore) TopSearchVODIDs(context.Context) (string, error) {
+	return "100", nil
+}
+
+func (s *fakeListingStore) MiniVODsByIDsLimited(_ context.Context, _ []int, _ int, _ bool) ([]map[string]interface{}, error) {
+	s.miniCachedListCalls++
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) MiniVODsByIDs(_ context.Context, _ []int, _ string) ([]map[string]interface{}, error) {
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) MiniSearchVODs(_ context.Context, _ string, _ int) ([]map[string]interface{}, error) {
+	s.miniSearchCalls++
+	return fixtureVODRows(), nil
+}
+
+func (s *fakeListingStore) MiniSearchLog(context.Context, string) (map[string]interface{}, error) {
+	if s.searchLog != nil {
+		return s.searchLog, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeListingStore) UpsertMiniSearchLog(context.Context, string, int64, int, []int) error {
+	s.miniUpsertCalls++
+	return nil
+}
+
+func (s *fakeListingStore) IncrementMiniSearchLog(context.Context, string, int64, int64) error {
+	s.miniIncrementCalls++
+	return nil
+}
+
+func (s *fakeListingStore) TopMiniSearchVODIDs(context.Context) (string, error) {
+	return "100", nil
+}
+
+func TestListingServiceSearchIndex(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.Search(context.Background(), "", false, 0, false)
+	if err != nil {
+		t.Fatalf("search index: %v", err)
+	}
+	index, ok := data.(domain.SearchIndexData)
+	if !ok {
+		t.Fatalf("expected SearchIndexData, got %T", data)
+	}
+	hotwords := index.HotWords.([]interface{})
+	if len(hotwords) != 2 || hotwords[0] != "剧情" {
+		t.Fatalf("unexpected hotwords %#v", index.HotWords)
+	}
+	if len(index.HotRows) != 1 || index.HotRows[0]["coverpic"] != "https://cover.example.test/202501/a.jpg" {
+		t.Fatalf("unexpected hot rows %#v", index.HotRows)
+	}
+}
+
+func TestListingServiceSearchList(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.Search(context.Background(), "标题", false, 1, false)
+	if err != nil {
+		t.Fatalf("search list: %v", err)
+	}
+	list, ok := data.(domain.SearchListData)
+	if !ok {
+		t.Fatalf("expected SearchListData, got %T", data)
+	}
+	if len(list.VODRows) != 1 {
+		t.Fatalf("expected one search row, got %d", len(list.VODRows))
+	}
+	if list.PageInfo["total"] != 1 {
+		t.Fatalf("expected total 1, got %v", list.PageInfo["total"])
+	}
+}
+
+func TestListingServiceMiniSearchIndex(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.MiniSearch(context.Background(), "", 0, false)
+	if err != nil {
+		t.Fatalf("mini search index: %v", err)
+	}
+	index, ok := data.(domain.SearchIndexData)
+	if !ok {
+		t.Fatalf("expected SearchIndexData, got %T", data)
+	}
+	if len(index.HotRows) != 1 {
+		t.Fatalf("expected one hot row, got %d", len(index.HotRows))
+	}
+	vodrow := index.HotRows[0]["vodrow"].(map[string]interface{})
+	if vodrow["play_url"] != "/minivod/reqplay/100" || !strings.Contains(vodrow["preview_url"].(string), "/minivod/preView/100/index.m3u8") {
+		t.Fatalf("unexpected mini vod urls %#v", vodrow)
+	}
+}
+
+func TestListingServiceMiniSearchList(t *testing.T) {
+	store := &fakeListingStore{}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	data, err := service.MiniSearch(context.Background(), "标题", 1, false)
+	if err != nil {
+		t.Fatalf("mini search list: %v", err)
+	}
+	list, ok := data.(domain.MiniSearchListData)
+	if !ok {
+		t.Fatalf("expected MiniSearchListData, got %T", data)
+	}
+	if len(list.Rows) != 1 || list.PageInfo["page_url"] != "/search?wd=%E6%A0%87%E9%A2%98&page=[?]" {
+		t.Fatalf("unexpected mini search list %#v", list)
+	}
+	vodrow := list.Rows[0]["vodrow"].(map[string]interface{})
+	if vodrow["down_url"] != "/minivod/reqdown/100" {
+		t.Fatalf("unexpected mini vod row %#v", vodrow)
+	}
+}
+
+func TestListingServiceMiniSearchRefreshesExpiredLogAndIncrementsFirstPage(t *testing.T) {
+	store := &fakeListingStore{searchLog: map[string]interface{}{
+		"schwd":        "标题",
+		"schtime":      "1",
+		"sch_lasttime": "100",
+		"total":        "1",
+		"vodids":       "100",
+	}}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(4000, 0) }
+
+	if _, err := service.MiniSearch(context.Background(), "标题", 1, false); err != nil {
+		t.Fatalf("mini search list: %v", err)
+	}
+	if store.miniSearchCalls != 1 || store.miniUpsertCalls != 1 || store.miniIncrementCalls != 1 {
+		t.Fatalf("expected expired log refresh and increment, got search=%d upsert=%d increment=%d", store.miniSearchCalls, store.miniUpsertCalls, store.miniIncrementCalls)
+	}
+}
+
+func TestListingServiceMiniSearchUsesFreshCachedLogWithoutRebuild(t *testing.T) {
+	store := &fakeListingStore{searchLog: map[string]interface{}{
+		"schwd":        "标题",
+		"schtime":      "3900",
+		"sch_lasttime": "3900",
+		"total":        "20",
+		"vodids":       "100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119",
+	}}
+	service := NewListingService(store, "https://res.example.test", 50)
+	service.now = func() time.Time { return time.Unix(4000, 0) }
+
+	if _, err := service.MiniSearch(context.Background(), "标题", 2, false); err != nil {
+		t.Fatalf("mini search list: %v", err)
+	}
+	if store.miniSearchCalls != 0 || store.miniUpsertCalls != 0 || store.miniIncrementCalls != 0 {
+		t.Fatalf("expected cached log without rebuild/increment, got search=%d upsert=%d increment=%d", store.miniSearchCalls, store.miniUpsertCalls, store.miniIncrementCalls)
+	}
+	if store.miniCachedListCalls != 1 {
+		t.Fatalf("expected cached vod lookup, got %d", store.miniCachedListCalls)
+	}
 }
 
 func TestListingServiceShowProcessesDetailRows(t *testing.T) {

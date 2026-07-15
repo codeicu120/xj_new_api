@@ -28,3 +28,32 @@ type VODShowData struct {
 	SimilarRows []map[string]interface{} `json:"similarrows"`
 	LikeRows    []map[string]interface{} `json:"likerows"`
 }
+
+type SearchIndexData struct {
+	HotWords    interface{}              `json:"hotwords"`
+	HotRows     []map[string]interface{} `json:"hotrows"`
+	YouMayLikes interface{}              `json:"you_may_likes"`
+}
+
+type SearchListData struct {
+	VODRows  []map[string]interface{} `json:"vodrows"`
+	PageInfo map[string]interface{}   `json:"pageinfo"`
+}
+
+type MiniSearchListData struct {
+	Rows     []map[string]interface{} `json:"rows"`
+	PageInfo map[string]interface{}   `json:"pageinfo"`
+}
+
+type SpecialListingData struct {
+	Rows         []map[string]interface{} `json:"rows"`
+	PageInfo     map[string]interface{}   `json:"pageinfo"`
+	SampleParams string                   `json:"sample_params"`
+	Params       map[string]interface{}   `json:"params"`
+	ActorRows    []map[string]interface{} `json:"actorrows"`
+}
+
+type SpecialDetailData struct {
+	Row     map[string]interface{}   `json:"row"`
+	VODRows []map[string]interface{} `json:"vodrows"`
+}

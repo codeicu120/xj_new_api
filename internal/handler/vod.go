@@ -47,6 +47,46 @@ func (h *VODHandler) LikeRows(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *VODHandler) Search(c *gin.Context) {
+	page, _ := strconv.Atoi(c.Query("page"))
+	data, err := h.listingService.Search(
+		c.Request.Context(),
+		c.Query("wd"),
+		c.Query("free") == "1",
+		page,
+		c.GetHeader("x-cookie-auth") != "",
+	)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("搜索失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *VODHandler) MiniSearch(c *gin.Context) {
+	page, _ := strconv.Atoi(miniSearchInput(c, "page"))
+	data, err := h.listingService.MiniSearch(
+		c.Request.Context(),
+		miniSearchInput(c, "wd"),
+		page,
+		c.GetHeader("x-cookie-auth") != "",
+	)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("搜索失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func miniSearchInput(c *gin.Context, key string) string {
+	if value := c.PostForm(key); value != "" {
+		return value
+	}
+	return c.Query(key)
+}
+
 func (h *VODHandler) Show(c *gin.Context) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
 	data, err := h.listingService.Show(c.Request.Context(), vodID, c.GetHeader("x-cookie-auth") != "")

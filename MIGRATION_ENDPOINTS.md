@@ -27,22 +27,61 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/healthz` | GET | `healthHandler` |
 | `/readyz` | GET | `healthHandler` |
 | `/sysavatar` | ANY | `UserHandler.SysAvatar` |
+| `/logout` | ANY | `UserHandler.Logout` |
+| `/sms`、`/sms/index`、`/email`、`/email/index` | ANY | `handler.EmptyHTML` |
 | `/captcha/req` | ANY | `CaptchaHandler.Req` |
+| `/captcha/pic`、`/captcha/picx` | ANY | `CaptchaHandler.Pic/PicX` |
+| `/test` | ANY | `TestHandler.Test` |
 | `/iploc/:ip` | ANY | `IPLocHandler.Find` |
 | `/game/platforms` | ANY | `GameHandler.Platforms` |
 | `/game/categories` | ANY | `GameHandler.Categories` |
 | `/game/games` | ANY | `GameHandler.Games` |
 | `/game/broadcasts` | ANY | `GameHandler.Broadcasts` |
 | `/game/wali/gameList` | ANY | `GameHandler.WaliGames` |
+| `/game/wali/test` | ANY | `GameHandler.WaliTest` |
+| `/game/wali/balance` | ANY | `GameHandler.WaliBalance` |
+| `/hgame/index` | ANY | `HGameHandler.Index` |
+| `/art`、`/art/index` | ANY | `ArtHandler.Index` |
+| `/art/announce` | ANY | `ArtHandler.Announce` |
+| `/art/show` | ANY | `ArtHandler.Show` |
+| `/attach`、`/attach/index`、`/attach/upavatar` | ANY | `AttachHandler.Index/UpAvatar` |
+| `/:size/:uri`（`C*`/`T*`/`R*`/`M`/`N`） | ANY | `PicHandler.Index` |
 | `/getLikeRows` | ANY | `VODHandler.LikeRows` |
+| `/search` | ANY | `VODHandler.Search` |
+| `/minisearch` | ANY | `VODHandler.MiniSearch` |
+| `/shortcutstats/add`、`/adstats/add`、`/playstats/add` | ANY | `StatsHandler` |
+| `/open`、`/open/index`、`/open/reqauth` | ANY | `OpenHandler.Index/ReqAuth` |
+| `/activity`、`/activity/index`、`/activity/details` | ANY | `ActivityHandler.Index/Details` |
+| `/activity/luckyprizes` | ANY | `ActivityHandler.LuckyPrizes` |
+| `/activity/newyear2020`、`/activity/luckydraw` | ANY | `ActivityHandler.NewYear2020/LuckyDraw` |
+| `/activity/luckydrawhistory` | ANY | `ActivityHandler.LuckyDrawHistory` |
+| `/activity/ranking`、`/activity/receive` | ANY | `ActivityHandler.Ranking/Receive` |
+| `/activity/recommends` | ANY | `ActivityHandler.Recommends` |
+| `/invite/info` | ANY | `InviteHandler.Info` |
+| `/bought/listing`、`/bought/delete` | ANY | `BoughtHandler.Listing/Delete` |
+| `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
+| `/playlog/listing`、`/playlog/remove`、`/downlog/listing`、`/downlog/remove` | ANY | `HistoryHandler` |
+| `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | ANY | `handler.EmptyHTML` |
+| `/favorite/listing`、`/favorite/remove`、`/minifavorite/listing`、`/minifavorite/remove` | ANY | `FavoriteHandler` |
+| `/explore/index` | ANY | `ExploreHandler.Index` |
+| `/explore/notification`、`/explore/notification/index` | ANY | `ExploreHandler.EmptyOK` |
+| `/explore/notification/clean` | ANY | `ExploreHandler.CleanNotification` |
+| `/explore/signtask`、`/explore/signtask/index` | ANY | `ExploreHandler.EmptyOK` |
+| `/explore/vodtask`、`/explore/vodtask/index` | ANY | `ExploreHandler.EmptyOK` |
+| `/aiundress/index` | ANY | `handler.EmptyHTML` |
+| `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
 | `/ucp/index` | ANY | `UCPHandler.Index` |
 | `/ucp/feedback` | GET | `UCPHandler.FeedbackListing` |
 | `/ucp/feedback/index` | GET | `UCPHandler.FeedbackIndex` |
 | `/ucp/feedback/listing` | GET | `UCPHandler.FeedbackNewListing` |
 | `/ucp/feedback/detail` | GET | `UCPHandler.FeedbackDetail` |
 | `/ucp/msg`、`/ucp/msg/index` | GET | `UCPHandler.MsgListing` |
+| `/ucp/msg/show` | ANY | `UCPHandler.MsgDetail` |
+| `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | ANY | `UCPHandler.MsgSetRead/CleanRead/Delete` |
 | `/ucp/myaff` | ANY | `UCPHandler.MyAff` |
 | `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
+| `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
+| `/ucp/taskbox/index` | ANY | `UCPHandler.TaskboxIndex` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
 | `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
@@ -55,6 +94,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
 | `/sendfile/play/:file`、`/sendfile/down/:file` | ANY | `SendfileHandler.Play/Down` |
 | `/comment/listing-:params` | ANY | `CommentHandler.Listing` |
+| `/special/index` | ANY | `SpecialHandler.Index` |
+| `/special/listing`、`/special/listing-:params` | ANY | `SpecialHandler.Listing` |
+| `/special/detail/:spid`、`/special/detail/:spid-:params` | ANY | `SpecialHandler.Detail` |
+| `/special/up/:spid`、`/special/down/:spid` | ANY | `SpecialHandler.Up/Down` |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee` | ANY | `OneGoHandler` |
 | `/vod/listing`、`/vod/recommend`、`/vod/hot`、`/vod/latest` | ANY | `VODHandler.Listing` |
 | `/vod/listing-:params`、`/vod/recommend-:params`、`/vod/hot-:params`、`/vod/latest-:params` | ANY | `VODHandler.Listing` |
@@ -64,6 +107,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/so/list` | ANY | `SOHandler.List` |
 | `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` | ANY | `VODHandler.Listing` |
 | `/v2/vod/listing-:params`、`/v2/vod/recommend-:params`、`/v2/vod/hot-:params`、`/v2/vod/latest-:params` | ANY | `VODHandler.Listing` |
+| `/v2/vod/show/:vodid` | ANY | `VODHandler.Show` |
 
 ### 已注册占位
 
@@ -72,7 +116,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | ANY | `notImplemented("c.apiv2.user.register")` |
 | `/v2/login` | ANY | `notImplemented("c.apiv2.user.login")` |
 | `/v2/forgot` | ANY | `notImplemented("c.apiv2.user.forgot")` |
-| `/v2/vod/show/:vodid` | ANY | `notImplemented("c.apiv2.vod.show")` |
 | `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `notImplemented("c.apiv2.vod.up/down")` |
 | `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `notImplemented("c.apiv2.vod.reqplay/reqdown")` |
 | `/v2/vod/buy/:vodid` | ANY | `notImplemented("c.apiv2.vod.buy")` |
@@ -84,9 +127,37 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | Go 入口 | 状态 |
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | `UserHandler.SysAvatar` | 已重构，对比通过 |
+| `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
+| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body，发送验证码 action 未接管 |
 | `/captcha/req` | `c.api.captcha->req` | `CaptchaHandler.Req` | 已重构，动态 secret 按 shape 对比通过 |
+| `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | `CaptchaHandler.Pic/PicX` | 已重构；无效 secret 404 JSON 对比通过，有效 PHP secret 和 Go req secret 均输出 100x34 PNG |
+| `/test` | `c.api.test->test` | `TestHandler.Test` | 已重构，动态 PNG 按 status/content-type/PNG 尺寸对比通过 |
+| `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | `AttachHandler.Index/UpAvatar` | 已重构；空响应、未登录和登录非法头像分支对比通过，成功更新分支由 service fake 覆盖 |
+| `/:size/:uri`（`C*`/`T*`/`R*`/`M`/`N`） | `c.api.pic->index` | `PicHandler.Index` | 已重构；无效/不存在文件 404 分支对比通过，图片生成由 service 测试覆盖 |
 | `/iploc/:ip` | `c.api.index->iploc` | `IPLocHandler.Find` | 已重构，对比通过 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | `VODHandler.LikeRows` | 已重构，对比通过 |
+| `/getCertUuid` | `c.api.index->getCertUuid` | `IndexHandler.GetCertUUID` | 已重构，本地错误分支对比通过；成功分支用 fake client 覆盖 |
+| `/shortcutstats/add` | `c.api.shortcutstats->add` | `StatsHandler.ShortcutAdd` | 已重构，对比通过；按 IP 去重写入快捷方式统计 |
+| `/adstats/add` | `c.api.adstats->add` | `StatsHandler.AdAdd` | 已重构，对比通过；复刻无 token 游客 sid 创建和广告点击/安装统计 |
+| `/playstats/add` | `c.api.playstats->add` | `StatsHandler.PlayAdd` | 已重构，对比通过；复刻无 token 游客 sid 创建和播放进度统计 |
+| `/open`、`/open/index` | `c.api.open->index` | `OpenHandler.Index` | 已重构；按 PHP 源码空响应实现，本地旧 PHP `/open` 返回 500 空体 |
+| `/open/reqauth` | `c.api.open->reqauth` | `OpenHandler.ReqAuth` | 已重构，对比通过；游客授权 `authrow/openid/sign/time` 与旧 PHP 一致，动态 `xxx_api_auth` 不回传 |
+| `/activity`、`/activity/index` | `c.api.activity->index` | `ActivityHandler.Index` | 已重构，对比通过；当前无进行中活动错误分支一致，成功分支按源码读取活动表 |
+| `/activity/details` | `c.api.activity->details` | `ActivityHandler.Details` | 已重构，对比通过；无效 `aid` 错误分支一致，成功分支读取活动和奖项 |
+| `/activity/luckyprizes` | `c.api.activity->luckyprizes` | `ActivityHandler.LuckyPrizes` | 已重构，对比通过；静态充值抽奖奖项列表 |
+| `/activity/newyear2020`、`/activity/luckydraw` | `c.api.activity->newyear2020/luckydraw` | `ActivityHandler.NewYear2020/LuckyDraw` | 已重构，对比通过；按当前日期复刻旧 PHP 过期活动错误 |
+| `/activity/luckydrawhistory` | `c.api.activity->luckydrawhistory` | `ActivityHandler.LuckyDrawHistory` | 已重构，对比通过；登录只读充值抽奖历史并补 `prizename` |
+| `/activity/ranking` | `c.api.activity->ranking` | `ActivityHandler.Ranking` | 已重构，对比通过；登录活动排名只读，支持无效活动错误和记录奖项计算 |
+| `/activity/receive` | `c.api.activity->receive` | `ActivityHandler.Receive` | 已重构，对比通过；登录领奖结果预览只读，按源码未写入领取状态 |
+| `/activity/recommends` | `c.api.activity->recommends` | `ActivityHandler.Recommends` | 已重构，对比通过；登录邀请记录只读，复刻用户行处理 |
+| `/invite/info` | `c.api.invite->info` | `InviteHandler.Info` | 已重构，对比通过；登录只读当前绑定邀请码 |
+| `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
+| `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
+| `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
+| `/explore/signtask`、`/explore/signtask/index` | `c.api.explore.signtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，签到写入 action 未接管 |
+| `/explore/vodtask`、`/explore/vodtask/index` | `c.api.explore.vodtask->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，show/reqcoin 未接管 |
+| `/explore/index` | `c.api.explore.index->index` | `ExploreHandler.Index` | 已重构，对比通过；发现页 tab、7 日签到奖励和签到状态只读聚合 |
+| `/explore/notification/clean` | `c.api.explore.notification->clean` | `ExploreHandler.CleanNotification` | 已重构，对比通过；清理发现页红点，仅更新 `notification_all` |
 
 ### 游戏公共接口
 
@@ -97,6 +168,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/games` | `c.api.game.index->games` | `GameHandler.Games` | 已重构，对比通过 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | `GameHandler.Broadcasts` | 已重构，随机广播按 shape 对比通过 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
+| `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
+| `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
+| `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
 | `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
 | `/onego/lucky` | `c.api.onego->lucky` | `OneGoHandler.Lucky` | 已重构，对比通过；一元购幸运榜公共只读，保留旧 PHP 排行 SQL 未分页行为 |
@@ -124,6 +198,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/hot-:params` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/v2/vod/latest` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/v2/vod/latest-:params` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构 |
+| `/v2/vod/show/:vodid` | `c.apiv2.vod->show` | `VODHandler.Show` | 已重构，对比通过；复用视频详情实现 |
 
 ### 非 v2 视频列表接口
 
@@ -147,6 +222,33 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | Go 入口 | 状态 |
 | --- | --- | --- | --- |
 | `/comment/listing-:params` | `c.api.comment->listing` | `CommentHandler.Listing` | 已重构，对比通过 |
+| `/playlog`、`/playlog/index` | `c.api.playlog->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
+| `/playlog/listing` | `c.api.playlog->listing` | `HistoryHandler.PlayListing` | 已重构；播放记录只读列表，支持登录/游客、timeline、分页和 PHP 相对时间格式；游客 timeline 2/3 保留旧 PHP 边界反序行为 |
+| `/playlog/remove` | `c.api.playlog->remove` | `HistoryHandler.PlayRemove` | 已重构；按登录 uid 或游客 sid 软删除播放记录，空 `vodids` 返回 `已删除0项` |
+| `/downlog`、`/downlog/index` | `c.api.downlog->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
+| `/downlog/listing` | `c.api.downlog->listing` | `HistoryHandler.DownListing` | 已重构；下载记录只读列表，支持登录/游客、timeline、分页和 PHP 相对时间格式 |
+| `/downlog/remove` | `c.api.downlog->remove` | `HistoryHandler.DownRemove` | 已重构；按登录 uid 或游客 sid 软删除下载记录，空 `vodids` 返回 `已删除0项` |
+| `/favorite`、`/favorite/index` | `c.api.favorite->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
+| `/favorite/listing` | `c.api.favorite->listing` | `FavoriteHandler.Listing` | 已重构；登录只读普通视频收藏，支持 `wd` 搜索和分页，复用 VOD 行处理 |
+| `/favorite/remove` | `c.api.favorite->remove` | `FavoriteHandler.Remove` | 已重构；登录删除普通视频收藏，空 `vodids` 返回 `已删除0项` |
+| `/minifavorite`、`/minifavorite/index` | `c.api.minifavorite->index` | `handler.EmptyHTML` | 已重构，对比通过；旧 PHP 空方法，返回 `200 text/html` 空 body |
+| `/minifavorite/listing` | `c.api.minifavorite->listing` | `FavoriteHandler.MiniListing` | 已重构；登录只读小视频收藏，复用 mini VOD 行处理并补 `isfavorite=1` |
+| `/minifavorite/remove` | `c.api.minifavorite->remove` | `FavoriteHandler.MiniRemove` | 已重构；登录删除小视频收藏，空 `vodids` 返回 `已删除0项` |
+
+### 搜索、专题、公告
+
+| 接口 | PHP handler | Go 入口 | 状态 |
+| --- | --- | --- | --- |
+| `/special/index` | `c.api.special->index` | `SpecialHandler.Index` | 已重构，对比通过；旧 PHP 空方法，返回 text/html 空 body |
+| `/special/listing`、`/special/listing-:params` | `c.api.special->listing` | `SpecialHandler.Listing` | 已重构，对比通过；专题列表，含前 4 个视频、分页和第一页 actorrows |
+| `/special/detail/:spid`、`/special/detail/:spid-:params` | `c.api.special->detail` | `SpecialHandler.Detail` | 已重构，对比通过；专题详情，含全量视频排序和浏览数写入副作用 |
+| `/special/up/:spid`、`/special/down/:spid` | `c.api.special->up/down` | `SpecialHandler.Up/Down` | 已重构；不存在分支对比通过，成功和重复投票分支由 service fake 覆盖 |
+| `/search` | `c.api.search->index` | `VODHandler.Search` | 已重构，对比通过；空关键词搜索页和关键词结果列表，保留搜索统计写入 |
+| `/minisearch` | `c.api.miniSearch->index` | `VODHandler.MiniSearch` | 已重构，对比通过；小视频搜索，保留 `showtype=1`、`/minivod` URL、`minivod_schlogs` 搜索日志写入和旧分页 URL |
+| `/art`、`/art/index` | `c.api.art->index` | `ArtHandler.Index` | 已重构，对比通过；旧 PHP 空方法，返回 text/html 空 body |
+| `/art/announce` | `c.api.art->announce` | `ArtHandler.Announce` | 已重构，对比通过；公告列表，保留旧 PHP 未定义 `$action` 导致的 `/art/?page=[?]` 分页 URL |
+| `/art/show` | `c.api.art->show` | `ArtHandler.Show` | 已重构，对比通过；公告/文章详情，成功和不存在错误分支一致 |
+| `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
 
 ### 需要登录但不需要验证码
 
@@ -160,6 +262,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | `UCPHandler.FeedbackNewListing` | 已重构，对比通过；新版反馈列表，支持 `type=0/1/2` 过滤，POST 未接管 |
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | `UCPHandler.FeedbackDetail` | 已重构，对比通过；新版反馈详情，校验反馈归属，附件图片和关联支付只读，POST 未接管 |
 | `GET /ucp/msg`、`GET /ucp/msg/index` | `c.api.ucp.msg->index` | `UCPHandler.MsgListing` | 已重构，对比通过；登录只读消息会话列表，写状态 action 未接管 |
+| `/ucp/msg/show` | `c.api.ucp.msg->show` | `UCPHandler.MsgDetail` | 已重构，对比通过；读取会话详情并复刻 setRead 已读副作用 |
+| `/ucp/msg/setread` | `c.api.ucp.msg->setread` | `UCPHandler.MsgSetRead` | 已重构，对比通过；批量会话设为已读，空 `cids` 仍返回操作成功 |
+| `/ucp/msg/cleanread` | `c.api.ucp.msg->cleanread` | `UCPHandler.MsgCleanRead` | 已重构，对比通过；清空当前用户 `newmsg` |
+| `/ucp/msg/delete` | `c.api.ucp.msg->delete` | `UCPHandler.MsgDelete` | 已重构，对比通过；删除当前用户会话、消息映射并递减消息引用计数 |
 | `/ucp/payment`、`/ucp/payment/index` | `c.api.ucp.payment->index/listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；兼容旧动态 action 默认入口 |
 | `/ucp/payment/listing` | `c.api.ucp.payment->listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；登录只读支付记录，支持 GET/POST page |
 | `/ucp/payment/safepaylog` | `c.api.ucp.payment->safepaylog` | `UCPHandler.SafePayLog` | 已重构，对比通过；最近 7 天 safepay 记录 |
@@ -168,6 +274,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
+| `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | `UCPHandler.TaskSharePic` | 已重构，对比通过；公共随机推广海报，只读无奖励写入 |
+| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 
 ### 个人中心公开只读
 
@@ -191,7 +299,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | `c.apiv2.user->register` |
 | `/v2/login` | `c.apiv2.user->login` |
 | `/v2/forgot` | `c.apiv2.user->forgot` |
-| `/v2/vod/show/:vodid` | `c.apiv2.vod->show` |
 | `/v2/vod/up/:vodid` | `c.apiv2.vod->up` |
 | `/v2/vod/down/:vodid` | `c.apiv2.vod->down` |
 | `/v2/vod/reqplay/:vodid` | `c.apiv2.vod->reqplay` |
@@ -207,11 +314,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/init` | `c.api.index->init` | 未重构；依赖登录/游客初始化、系统设置、版本、广告、全局数据、通知等 |
 | `/`、`/index` | `c.api.index->index` | 未重构；首页聚合，多表、多广告配置 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | 未重构；依赖系统设置、维护配置、广告、弹窗、版本和外链 |
-| `/getCertUuid` | `c.api.index->getCertUuid` | 未重构；外部 HTTP 调用 |
 | `/getCover` | `c.api.index->getCover` | 未重构；Redis、外部封面服务、AES 加密 |
-| `/test` | `c.api.test->test` | 未重构；测试入口 |
-| `/sms/:action?` | `c.api.sms->$action` | 未重构；短信相关 |
-| `/email/:action?` | `c.api.email->$action` | 未重构；邮件相关 |
+| `/sms/:action?`（除 `/sms`、`/sms/index`） | `c.api.sms->$action` | 未重构；剩余 `sendv/sendu` 涉及验证码、短信平台、频控 |
+| `/email/:action?`（除 `/email`、`/email/index`） | `c.api.email->$action` | 未重构；剩余 `send` 涉及验证码、邮件平台、频控 |
 
 ### 非 v2 视频接口
 
@@ -227,22 +332,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/comment/:action?` | `c.api.comment->$action` | 未重构；评论发布涉及写库和权限 |
-| `/favorite/:action?` | `c.api.favorite->$action` | 未重构；收藏写入 |
-| `/minifavorite/:action?` | `c.api.minifavorite->$action` | 未重构 |
-| `/playlog/:action?` | `c.api.playlog->$action` | 未重构 |
-| `/downlog/:action?` | `c.api.downlog->$action` | 未重构 |
-
-### 搜索、专题、公告
-
-| 接口 | PHP handler | 备注 |
-| --- | --- | --- |
-| `/search` | `c.api.search->index` | 未重构；普通视频搜索 |
-| `/minisearch` | `c.api.miniSearch->index` | 未重构；小视频搜索 |
-| `/special/index` | `c.api.special->index` | 未重构 |
-| `/special/listing`、`/special/listing-:params` | `c.api.special->listing` | 未重构 |
-| `/special/detail/:spid`、`/special/detail/:spid-:params` | `c.api.special->detail` | 未重构 |
-| `/special/up/:spid`、`/special/down/:spid` | `c.api.special->up/down` | 未重构；用户行为 |
-| `/art/:action?` | `c.api.art->$action` | 未重构；公告/文章 |
+| `/favorite/add` | `c.api.favorite->add` | 未重构；收藏写入且可能触发金币奖励 |
+| `/minifavorite/add` | `c.api.minifavorite->add` | 未重构；收藏写入且可能触发金币奖励 |
 
 ### 小视频、作者页
 
@@ -268,7 +359,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/register` | `c.api.user->register` | 未重构；验证码、注册风控、写库 |
 | `/login` | `c.api.user->login` | 未重构；密码/短信登录、session |
-| `/logout` | `c.api.user->logout` | 未重构；session 删除 |
 | `/forgot` | `c.api.user->forgot` | 未重构；验证码、密码重置 |
 | `/delete` | `c.api.user2->delAccount` | 未重构；账号注销 |
 | `/changePhone` | `c.api.user2->changePhone` | 未重构；手机换绑、验证码 |
@@ -289,13 +379,13 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `POST /ucp/feedback` | `c.api.ucp.index->feedback` | 未重构；提交反馈写入 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?` | `c.api.ucp.user->$action` | 未重构 |
-| `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`） | `c.api.ucp.msg->$action` | 未重构；show/setread/cleanread/delete/send 涉及详情、写入或已读状态 |
-| `/ucp/task/:action?` | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
+| `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`） | `c.api.ucp.msg->$action` | 未重构；剩余 `send` 涉及站内信发送、每日限额和批量收件人 |
+| `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
 | `/ucp/account/:action?`（除 `/ucp/account`、`/ucp/account/index`、`/ucp/account/balancelog`） | `c.api.ucp.account->$action` | 未重构；账户其他 action |
 | `/ucp/bankcard/:action?` | `c.api.ucp.bankcard->$action` | 未重构 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
-| `/ucp/taskbox/:action?` | `c.api.ucp.taskbox->$action` | 未重构 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 空响应未接管，`taskboxopen` 涉及奖励写入 |
 | `/ucp/vippkg/:action?` | `c.api.ucp.vippkg->$action` | 未重构；会员套餐/订单 |
 | `/ucp/coinpkg/:action?` | `c.api.ucp.coinpkg->$action` | 未重构；金币套餐 |
 | `/ucp/beanpkg/:action?` | `c.api.ucp.beanpkg->$action` | 未重构；金豆套餐 |
@@ -307,22 +397,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/activity/:action?` | `c.api.activity->$action` | 未重构 |
-| `/invite/:action?` | `c.api.invite->$action` | 未重构 |
-| `/explore/index` | `c.api.explore.index->index` | 未重构 |
-| `/explore/notification/:action?` | `c.api.explore.notification->$action` | 未重构 |
-| `/explore/signtask/:action?` | `c.api.explore.signtask->$action` | 未重构；签到任务 |
+| `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 未重构；剩余 `bind` 涉及绑定关系、VIP/金币奖励写入 |
+| `/explore/notification/:action?`（除 `/explore/notification`、`/explore/notification/index`、`/explore/notification/clean`） | `c.api.explore.notification->$action` | 未重构；当前未发现其他 action |
+| `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`） | `c.api.explore.signtask->$action` | 未重构；签到任务 |
 | `/explore/vodtask/show/:vid` | `c.api.explore.vodtask->show` | 未重构 |
-| `/explore/vodtask/:action?` | `c.api.explore.vodtask->$action` | 未重构 |
-
-### 开放平台、统计
-
-| 接口 | PHP handler | 备注 |
-| --- | --- | --- |
-| `/open/:action?` | `c.api.open->$action` | 未重构 |
-| `/shortcutstats/add` | `c.api.shortcutstats->add` | 未重构；统计写入 |
-| `/adstats/add` | `c.api.adstats->add` | 未重构；统计写入 |
-| `/playstats/add` | `c.api.playstats->add` | 未重构；统计写入 |
+| `/explore/vodtask/:action?`（除 `/explore/vodtask`、`/explore/vodtask/index`） | `c.api.explore.vodtask->$action` | 未重构 |
 
 ### 游戏、直播、一元购
 
@@ -330,13 +409,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/game/wali/topup` | `c.api.game.wali->topup` | 未重构；上分、金币扣减、外部平台 |
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 未重构；下分、金币增加、外部平台 |
-| `/game/wali/balance` | `c.api.game.wali->getBalance` | 未重构；外部平台余额 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 未重构；外部平台进入游戏 |
-| `/game/wali/test` | `c.api.game.wali->ping` | 未重构；外部平台测试 |
 | `/game/lottery/gameList`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台 |
 | `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
 | `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee`） | `c.api.onego->$action` | 未重构；一元购剩余 history/bet/bet_ranks 等登录/投注写入 |
-| `/bought/:action?` | `c.api.bought->$action` | 未重构；付费影片 |
+| `/bought/:action?`（除 `/bought/listing`、`/bought/delete`） | `c.api.bought->$action` | 未重构；剩余 `buy` 涉及金豆扣费 |
 
 ### 社区、HGame、AI
 
@@ -346,23 +423,19 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/*-:params` | `c.api.topic->list` | 未重构 |
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 未重构 |
 | `/community/:action?` | `c.api.topic->$action` | 未重构；发帖/评论等写入 |
-| `/hgame/:action` | `c.api.hgame->$action` | 未重构 |
-| `/aiundress/:action?` | `c.api.aiundress->$action` | 未重构；AI/外部服务/任务 |
+| `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 未重构；当前旧 PHP 仅发现 `index`，`/hgame` 本身为 404 |
+| `/aiundress/:action?`（除 `/aiundress/index`） | `c.api.aiundress->$action` | 未重构；AI/外部服务/任务，`/aiundress` 本身旧 PHP 返回登录错误且未接管 |
 
 ### 图片、附件和通配资源
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/:size/:uri` | `c.api.pic->index` | 未重构；图片处理、缩略图 |
-| `/captcha/pic`、`/captcha/picx` | `c.api.captcha->$action` | 未重构；图片验证码二进制输出 |
-| `/attach/:action?` | `c.api.attach->$action` | 未重构；附件 |
 
 ## 建议后续顺序
 
-1. 继续按风险优先级评估 `/ucp/msg/show`：旧 PHP 读取详情同时可能涉及已读状态，需要明确是否复刻写入副作用。
-2. 继续公共只读接口：`/special/listing`、`/special/detail`；`/search` 会写搜索日志，放入普通写入批次评估。
-3. 中风险接口：`/getGlobalData`、`/init`、`/vod/show/:vodid`。
-4. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
+1. 继续公共接口：`/getGlobalData`、`/init`；这两个依赖全局设置、广告和版本配置，建议成组迁移。
+2. 中风险接口：`/getCover`、`/sms/:action?`、`/email/:action?`。
+3. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
 
 ## 当前验证命令
 

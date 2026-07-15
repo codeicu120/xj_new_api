@@ -44,6 +44,13 @@ type UserStore interface {
 	AttachByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
 	CountMsgConversations(ctx context.Context, uid int) (int, error)
 	MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error)
+	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	CountMessages(ctx context.Context, uid int, cid int) (int, error)
+	Messages(ctx context.Context, uid int, cid int, page int, pageSize int) ([]map[string]interface{}, error)
+	SetMsgRead(ctx context.Context, uid int, cid int) error
+	CleanMsgRead(ctx context.Context, uid int) error
+	DeleteMsgConversations(ctx context.Context, uid int, cids []int) error
 	CountBalanceLogs(ctx context.Context, uid int) (int, error)
 	BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
@@ -51,6 +58,10 @@ type UserStore interface {
 	CoinLogsByTypes(ctx context.Context, uid int, coinTypes []int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
 	CoinBonusStats(ctx context.Context, uid int) (map[string]interface{}, error)
 	SettingExRate(ctx context.Context) (int, error)
+	Posters(ctx context.Context) ([]map[string]interface{}, error)
+	Taskboxes(ctx context.Context) ([]map[string]interface{}, error)
+	TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error)
+	TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error)
 }
 
 type Service struct {

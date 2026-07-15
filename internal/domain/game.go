@@ -16,6 +16,10 @@ type GameBroadcastsData struct {
 	Data []string `json:"data"`
 }
 
+type GameWaliData struct {
+	Data map[string]interface{} `json:"data"`
+}
+
 type OneGoData struct {
 	Data interface{} `json:"data"`
 }
