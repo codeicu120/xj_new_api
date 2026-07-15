@@ -278,6 +278,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/account", ucpHandler.AccountIndex)
 	router.Any("/ucp/account/index", ucpHandler.AccountIndex)
 	router.Any("/ucp/account/balancelog", ucpHandler.BalanceLog)
+	router.Any("/ucp/withdraw", ucpHandler.WithdrawIndex)
+	router.Any("/ucp/withdraw/index", ucpHandler.WithdrawIndex)
 	router.Any("/ucp/coinlog", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/index", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/bonuslog", ucpHandler.CoinLogBonusLog)

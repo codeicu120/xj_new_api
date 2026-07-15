@@ -1757,6 +1757,56 @@ func TestBalanceLogRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestWithdrawIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.WithdrawIndex(context.Background(), "")
+	if err != nil {
+		t.Fatalf("withdraw index: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected auth response %d %q", retcode, errmsg)
+	}
+}
+
+func TestWithdrawIndexFormatsRows(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		settings: map[string]map[string]interface{}{
+			"setting": {
+				"value": `a:7:{s:6:"exrate";i:10;s:8:"topupmin";i:5000;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:200000;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:500000;}`,
+			},
+			"game.setting": {
+				"value": `a:2:{s:11:"withdrawmin";i:6000;s:12:"withdrawrate";d:0.08;}`,
+			},
+		},
+		bankcards: []map[string]interface{}{{"cardid": "1", "uid": "5", "name": "张三", "bankname": "支付宝", "cardnum": "abc", "isdef": "1", "type": "1"}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.WithdrawIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatalf("withdraw index: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	if data.GoldCoin != 625 || data.ExRate != 10 || data.TopupMin != "50.00" {
+		t.Fatalf("unexpected coin settings %#v", data)
+	}
+	if data.Coin2RMB != "62.50" || data.Max2RMB != "70.50" {
+		t.Fatalf("unexpected rmb fields %#v", data)
+	}
+	if data.GameWithdrawMin != 6000 || data.GameWithdrawRate != 0.08 {
+		t.Fatalf("unexpected game withdraw settings %#v", data)
+	}
+	if data.AlipayWithdrawMin != 1000 || data.BankcardWithdrawMax != 500000 {
+		t.Fatalf("unexpected withdraw settings %#v", data)
+	}
+	if len(data.CardRows) != 1 || data.CardRows[0]["bankname"] != "支付宝" {
+		t.Fatalf("unexpected card rows %#v", data.CardRows)
+	}
+}
+
 func TestBalanceLogFormatsRows(t *testing.T) {
 	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
 	service.now = func() time.Time { return time.Unix(1770000000, 0) }

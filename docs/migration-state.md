@@ -518,6 +518,17 @@
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/account/balancelog?page=1`、`page=0`、`page=999999`、POST `/ucp/account/balancelog`、cookie token 和未登录分支忽略动态 `xxx_api_auth` 后完全一致。
 
+### `/ucp/withdraw`、`/ucp/withdraw/index`
+
+- PHP: `c.api.ucp.withdraw->index`
+- Go: `internal/handler.UCPHandler.WithdrawIndex`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/index.SettingsRepository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `users_account`、`users_quota`、`user_bankcards`、`settings(setting/game.setting)`。
+- 兼容规则：返回 `account/cardrows/goldcoin/exrate/topupmin/coin2rmb/max2rmb/game_withdrawmin/game_withdrawrate/alipay_withdraw_min/alipay_withdraw_max/bankcard_withdraw_min/bankcard_withdraw_max`；`topupmin/coin2rmb/max2rmb` 为元字符串，提现上下限保持旧配置原始整数值；`create` 提现写入仍未接管。
+- 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/withdraw`、`/ucp/withdraw/index` 未登录分支和测试 token 登录成功分支字段值一致，忽略旧 PHP 动态游客 token。
+
 ### `/ucp/coinlog`、`/ucp/coinlog/index`
 
 - PHP: `c.api.ucp.coinlog->index`

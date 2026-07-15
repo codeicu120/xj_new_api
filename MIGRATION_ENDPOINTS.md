@@ -108,6 +108,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
 | `/ucp/account`、`/ucp/account/index` | ANY | `UCPHandler.AccountIndex` |
 | `/ucp/account/balancelog` | ANY | `UCPHandler.BalanceLog` |
+| `/ucp/withdraw`、`/ucp/withdraw/index` | ANY | `UCPHandler.WithdrawIndex` |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | ANY | `UCPHandler.CoinLogIndex` |
 | `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
@@ -347,6 +348,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/account`、`/ucp/account/index` | `c.api.ucp.account->index` | `UCPHandler.AccountIndex` | 已重构，对比通过；登录只读资产主页 |
 | `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | `UCPHandler.BalanceLog` | 已重构，对比通过；登录只读余额日志分页 |
 | `/ucp/account/:action?`（除已列 action） | `c.api.ucp.account->$action` | 不接管 | PHP `ucp/account.php` 仅定义 `index/balancelog`，均已覆盖 |
+| `/ucp/withdraw`、`/ucp/withdraw/index` | `c.api.ucp.withdraw->index` | `UCPHandler.WithdrawIndex` | 已重构；登录只读提现初始化页，返回账户、收款地址、金币折算和提现配置 |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
@@ -452,7 +454,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到、二维码图片生成或 keylimit 写入等 |
-| `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
+| `/ucp/withdraw/:action?`（除 `/ucp/withdraw`、`/ucp/withdraw/index`） | `c.api.ucp.withdraw->$action` | 未重构；剩余 `create` 为提现写入，涉及账户余额、银行卡、风控和事务 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/share/qrcode` 涉及奖励写入或图片生成 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金币兑换和会员资产 |

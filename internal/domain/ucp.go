@@ -85,6 +85,22 @@ type UCPBalanceLogData struct {
 	PageInfo map[string]interface{}   `json:"pageinfo"`
 }
 
+type UCPWithdrawIndexData struct {
+	Account             map[string]interface{}   `json:"account"`
+	CardRows            []map[string]interface{} `json:"cardrows"`
+	GoldCoin            int                      `json:"goldcoin"`
+	ExRate              int                      `json:"exrate"`
+	TopupMin            string                   `json:"topupmin"`
+	Coin2RMB            string                   `json:"coin2rmb"`
+	Max2RMB             string                   `json:"max2rmb"`
+	GameWithdrawMin     int                      `json:"game_withdrawmin"`
+	GameWithdrawRate    float64                  `json:"game_withdrawrate"`
+	AlipayWithdrawMin   int                      `json:"alipay_withdraw_min"`
+	AlipayWithdrawMax   int                      `json:"alipay_withdraw_max"`
+	BankcardWithdrawMin int                      `json:"bankcard_withdraw_min"`
+	BankcardWithdrawMax int                      `json:"bankcard_withdraw_max"`
+}
+
 type UCPCoinLogIndexData struct {
 	Account  map[string]interface{}   `json:"account"`
 	GoldCoin int                      `json:"goldcoin"`
