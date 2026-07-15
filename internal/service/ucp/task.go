@@ -149,6 +149,29 @@ func (s *Service) TaskboxQRLink(ctx context.Context, token string, pid string) (
 	return s.taskQRLink(ctx, token, pid, "taskbox.qrcode.link")
 }
 
+func (s *Service) TaskboxShare(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -1, "获取任务宝箱分享文案失败", err
+	}
+	pid = sanitizeTaskPID(pid)
+	sharetext, err := s.taskCallHTML(ctx, pid, "taskbox.share.text")
+	if err != nil {
+		return nil, -1, "获取任务宝箱分享文案失败", err
+	}
+	inviteURL, err := s.taskInviteURL(ctx)
+	if err != nil {
+		return nil, -1, "获取任务宝箱分享文案失败", err
+	}
+	inviteCode := randomInviteCode(4)
+	if atoi(user["uid"]) > 0 {
+		inviteCode = strings.ToUpper(taskBase36(atoi(user["uniqkey"])))
+	}
+	sharetext = strings.ReplaceAll(sharetext, "{inviteUrl}", inviteURL)
+	sharetext = strings.ReplaceAll(sharetext, "{inviteCode}", inviteCode)
+	return map[string]interface{}{"sharetext": sharetext}, 0, "", nil
+}
+
 func (s *Service) taskQRLink(ctx context.Context, token string, pid string, uuid string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
@@ -253,6 +276,23 @@ func (s *Service) taskCallCode(ctx context.Context, pid string, uuid string) (st
 	return strings.TrimSpace(str(row["content"])), nil
 }
 
+func (s *Service) taskCallHTML(ctx context.Context, pid string, uuid string) (string, error) {
+	row, err := s.store.CalldataByUUID(ctx, taskUUID(pid, uuid))
+	if err != nil {
+		return "", err
+	}
+	if pid != "" && len(row) == 0 {
+		row, err = s.store.CalldataByUUID(ctx, uuid)
+		if err != nil {
+			return "", err
+		}
+	}
+	if str(row["type"]) != "html" {
+		return "", nil
+	}
+	return strings.TrimSpace(str(row["content"])), nil
+}
+
 func (s *Service) taskInviteURL(ctx context.Context) (string, error) {
 	row, err := s.store.SettingByUUID(ctx, "baseset")
 	if err != nil {
@@ -327,6 +367,18 @@ func taskBase36(value int) string {
 		return "0"
 	}
 	return strconv.FormatInt(int64(value), 36)
+}
+
+func randomInviteCode(size int) string {
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if size <= 0 {
+		return ""
+	}
+	out := make([]byte, size)
+	for i := range out {
+		out[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(out)
 }
 
 func (s *Service) TaskboxLogListing(ctx context.Context, token string, page int) (map[string]interface{}, int, string, error) {

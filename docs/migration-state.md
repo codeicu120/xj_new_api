@@ -986,6 +986,17 @@
 - 兼容规则：与 `/ucp/task/qrlink` 相同的 pid 校验、每日 inviteUrls 分组和 `{inviteCode}` 替换；不生成 PNG，也不写 keylimit 或发奖励。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/taskbox/qrlink` 未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
 
+### `/ucp/taskbox/share`
+
+- PHP: `c.api.ucp.taskbox->share`
+- Go: `internal/handler.UCPHandler.TaskboxShare`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/index.SettingsRepository` 通过 `ucpStore` 只读注入。
+- Auth: 公共接口，不强制登录；游客使用随机 4 位邀请码，登录用户使用 `uniqkey` 的大写 base36 邀请码。
+- DB/Config: 读取 `maintain_calldata.uuid=(pid.)taskbox.share.text`，渠道配置缺失时回退默认 `taskbox.share.text`；读取 `settings.uuid=baseset` 的 `inviteUrls` 并按当月日期分组选择推广 URL。
+- 兼容规则：`pid` 只允许英文数字；替换 `{inviteUrl}` 和 `{inviteCode}`；旧 PHP 游客响应可能包含动态 `data.xxx_api_auth`，Go 不生成该字段。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/taskbox/share` 的 `retcode/errmsg/data.sharetext` shape 一致，邀请码和推广 URL 存在随机差异，不逐字比较。
+
 ### `/community/{list,recommend,hot,latest,favorite}`、`/community/*-:params`
 
 - PHP: `c.api.topic->list`

@@ -112,7 +112,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task`、`/ucp/task/index` | ANY | `UCPHandler.TaskIndex` |
 | `/ucp/task/sharepic` | ANY | `UCPHandler.TaskSharePic` |
 | `/ucp/task/qrlink` | ANY | `UCPHandler.TaskQRLink` |
-| `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxQRLink` |
+| `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxShare/TaskboxQRLink` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
 | `/ucp/payment/safepaylog` | ANY | `UCPHandler.SafePayLog` |
@@ -390,6 +390,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | `UCPHandler.TaskQRLink` | 已重构，对比通过；登录只读推广二维码链接，读取推广 URL 和邀请码，不生成图片、不写 keylimit |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
+| `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | `UCPHandler.TaskboxShare` | 已重构；公共只读任务宝箱分享文案，替换随机/登录邀请码和每日推广 URL，按 shape 对比通过 |
 | `/ucp/taskbox/qrlink` | `c.api.ucp.taskbox->qrlink` | `UCPHandler.TaskboxQRLink` | 已重构，对比通过；登录只读任务宝箱推广二维码链接，不生成图片、不发奖励 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
@@ -480,7 +481,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；剩余 `sign/share/saveqrcode/qrcode/adviewclick` 涉及任务奖励、二维码图片生成或 keylimit 写入 |
 | `/ucp/withdraw/:action?`（除 `/ucp/withdraw`、`/ucp/withdraw/index`） | `c.api.ucp.withdraw->$action` | 未重构；剩余 `create` 为提现写入，涉及账户余额、银行卡、风控和事务 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
-| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/share/qrcode` 涉及奖励写入或图片生成 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/qrcode` 涉及奖励写入或图片生成 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金币兑换和会员资产 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 未重构；`placeorder` 涉及支付下单和金币资产 |
 | `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金豆和金币兑换 |

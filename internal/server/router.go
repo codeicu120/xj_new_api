@@ -276,6 +276,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/task/qrlink", ucpHandler.TaskQRLink)
 	router.Any("/ucp/taskbox/index", ucpHandler.TaskboxIndex)
 	router.Any("/ucp/taskbox/taskboxlog", ucpHandler.TaskboxLog)
+	router.Any("/ucp/taskbox/share", ucpHandler.TaskboxShare)
 	router.Any("/ucp/taskbox/qrlink", ucpHandler.TaskboxQRLink)
 	router.Any("/ucp/affcenter", ucpHandler.AffCenter)
 	router.Any("/ucp/payment", ucpHandler.PaymentListing)

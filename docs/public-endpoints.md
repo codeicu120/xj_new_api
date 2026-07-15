@@ -93,6 +93,7 @@
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 无稳定响应未接管，领奖 action 未接管。 |
+| `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | 本轮完成 | 公共只读任务宝箱分享文案；随机游客邀请码/登录邀请码和每日推广 URL 形态对齐。 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志；未登录错误、登录测试 token 分页和首行内容 live 对比通过。 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | `c.api.ucp.msg->setread/cleanread/delete` | 本轮完成 | 登录消息状态写入；未登录和空数组成功分支对比通过，旧 PHP 动态 `xxx_api_auth` 不回传。 |
