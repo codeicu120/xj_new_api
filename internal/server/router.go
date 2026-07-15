@@ -147,7 +147,7 @@ func NewRouter(opts Options) *gin.Engine {
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
-	paymentHandler := handler.NewPaymentHandler(paymentService.NewService())
+	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -206,6 +206,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/activity/receive", activityHandler.Receive)
 	router.Any("/activity/recommends", activityHandler.Recommends)
 	router.Any("/invite/info", inviteHandler.Info)
+	router.Any("/payment/index", paymentHandler.Query)
+	router.Any("/payment/query", paymentHandler.Query)
 	router.Any("/payment/unpaid", paymentHandler.Unpaid)
 	router.Any("/payment/success", paymentHandler.Success)
 	router.Any("/payment/failed", paymentHandler.Failed)

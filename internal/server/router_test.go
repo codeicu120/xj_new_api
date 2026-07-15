@@ -1804,6 +1804,30 @@ func TestPaymentUnpaidRoute(t *testing.T) {
 	}
 }
 
+func TestPaymentQueryRoutesNoAccess(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/payment/index", "/payment/query"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -1 || body.ErrMsg != "无权限" {
+			t.Fatalf("%s expected no access, got %#v", path, body)
+		}
+	}
+}
+
 func TestPaymentCallbackStatusRoutes(t *testing.T) {
 	router := newTestRouter()
 

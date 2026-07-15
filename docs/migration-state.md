@@ -1119,6 +1119,17 @@
 - 兼容规则：返回 `retcode=0`、`errmsg=""`、`data.total_count=0`；旧 PHP 游客中间件可能追加动态 `xxx_api_auth`，Go 不生成。
 - 测试：`go test ./internal/service/payment ./internal/server` 通过；路由测试覆盖 JSON 壳和 `total_count=0`。
 
+### `/payment/index`、`/payment/query`
+
+- PHP: `c.api.payment->index/query`
+- Go: `internal/handler.PaymentHandler.Query`
+- Service: `internal/service/payment.Service`
+- Repository: 复用 `internal/server.ucpStore` 的 `UserBySession` 和 `PaymentByID`。
+- Auth: 支持 `x-cookie-auth` header 和 `xxx_api_auth` cookie；订单 `uid>0` 时必须与登录用户一致，否则返回 `无权限`。
+- DB: 读取 `trade_payments` 单条记录。
+- 兼容规则：`/payment/index` 走 `query`；返回 `data.payrow`，支付字段映射与 UCP 支付记录一致；无订单、无权限或缺少 `payid` 返回 `retcode=-1`、`errmsg=无权限`；裸 `/payment` 旧 PHP 为 404，不接管。
+- 测试：`go test ./internal/service/payment ./internal/server` 通过；单测覆盖越权和成功字段映射，路由测试覆盖两条入口的无权限错误壳；PHP-Go live 对比 `/payment/index`、`/payment/query` 缺少 `payid` 分支一致，忽略旧 PHP 动态游客 token。
+
 ### `/payment/success`、`/payment/failed`
 
 - PHP: `c.api.payment->success/failed`
