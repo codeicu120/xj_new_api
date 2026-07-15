@@ -2150,6 +2150,28 @@ func TestMiniVODReqMediaRoutes(t *testing.T) {
 	}
 }
 
+func TestMiniVODReqListRoute(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/minivod/reqlist", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestVODReqMediaRoutes(t *testing.T) {
 	router := newTestRouter()
 

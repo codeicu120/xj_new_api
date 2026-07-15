@@ -40,6 +40,8 @@ type Store interface {
 	RandomVODsExcept(ctx context.Context, pageSize int, excludeID int, cateID int) ([]map[string]interface{}, error)
 	Setting(ctx context.Context, key string) (string, error)
 	UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
+	VODsByIDs(ctx context.Context, ids []int, orderByField bool) ([]map[string]interface{}, error)
+	PendingViewLogs(ctx context.Context, uid int, sid string, limit int) ([]map[string]interface{}, error)
 	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
 	DeleteUpDown(ctx context.Context, uid int, vodID int) error
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
@@ -165,6 +167,64 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.MiniV
 		Mosaics:      optionRows([][2]interface{}{{1, "有码"}, {2, "无码"}}),
 		LangVoices:   optionRows([][2]interface{}{{1, "中文字幕"}, {2, "国语对白"}, {3, "其它"}}),
 	}, nil
+}
+
+func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool) (map[string]interface{}, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	logs, err := s.store.PendingViewLogs(ctx, atoi(user["uid"]), str(user["sid"]), 10)
+	if err != nil {
+		return nil, err
+	}
+	vodIDs := rowIDs(logs, "vodid")
+	rows, err := s.store.VODsByIDs(ctx, vodIDs, true)
+	if err != nil {
+		return nil, err
+	}
+	tagRows, err := s.store.TagsByNames(ctx, collectTagNames(rows))
+	if err != nil {
+		return nil, err
+	}
+	_ = tagRows
+	vodRows := rows
+	if s.vodProcessor != nil {
+		vodRows, err = s.vodProcessor.ProcessMiniRowsFullPrice(ctx, rows, isH5Request)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if atoi(user["uid"]) > 0 {
+		for _, row := range vodRows {
+			count, err := s.store.FavoriteCount(ctx, atoi(user["uid"]), atoi(row["vodid"]))
+			if err != nil {
+				return nil, err
+			}
+			row["isfavorite"] = boolInt(count > 0)
+		}
+	} else {
+		for _, row := range vodRows {
+			row["isfavorite"] = 0
+		}
+	}
+	users, err := s.store.UsersByIDs(ctx, rowIDs(vodRows, "authorid"))
+	if err != nil {
+		return nil, err
+	}
+	userByID := map[string]map[string]interface{}{}
+	for _, item := range users {
+		userByID[str(item["uid"])] = processUser(item, s.resourceBaseURL)
+	}
+	out := []map[string]interface{}{}
+	for _, row := range vodRows {
+		var author interface{}
+		if found, ok := userByID[str(row["authorid"])]; ok {
+			author = found
+		}
+		out = append(out, map[string]interface{}{"vodrow": row, "user": author})
+	}
+	return map[string]interface{}{"rows": out}, nil
 }
 
 func (s *Service) Show(ctx context.Context, vodID int, isH5Request bool) (domain.MiniVODShowData, error) {

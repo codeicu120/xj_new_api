@@ -370,6 +370,18 @@
 - 风险边界：本批不执行金币扣减、播放/下载日志写入、播放任务金币、每 10 部奖励和三级分销奖励；这些资产/奖励副作用仍保留在未重构清单，后续需要事务化迁移。
 - 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝和免费下载；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
+### `/minivod/reqlist`
+
+- PHP: `c.api.minivod->reqlist`
+- Go: `internal/handler.MiniVODHandler.ReqList`
+- Service: `internal/service/minivod.Service`
+- Repository: `internal/repository/minivod.Repository`
+- Auth: 不强制登录；有有效 token 时按 uid 读取 `minivod_viewlogs`，否则按 sid 读取 `minivod_guestviewlogs`，无 sid 时返回空 rows。
+- DB: 读取现有 `showtype=0` 的待展示小视频 viewlog，按 `logid DESC` 取 10 条，再读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理。
+- 兼容规则：返回 `data.rows`，每行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0。
+- 风险边界：本批不执行 `pullViewLogs` 拉取推荐、不执行 `mUpdate(showtype=1)` 标记已浏览，也不随机插入 `minivod.ads` 广告行；这些副作用仍保留在未重构清单。
+- 测试：`go test ./internal/service/minivod ./internal/server` 通过；service fake 覆盖现有 viewlog 组装 rows，server 测试覆盖空 rows 响应壳。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
+
 ### `/minivod/reqlong/:vodid`
 
 - PHP: `c.api.minivod->getLong2Mini`

@@ -211,6 +211,34 @@ func (r *Repository) UsersByIDs(ctx context.Context, ids []int) ([]map[string]in
 	return r.queryRows(ctx, "SELECT * FROM users WHERE uid IN("+idList+")")
 }
 
+func (r *Repository) VODsByIDs(ctx context.Context, ids []int, orderByField bool) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	idList := intListSQL(ids)
+	if idList == "NULL" {
+		return []map[string]interface{}{}, nil
+	}
+	orderBy := "vodid DESC"
+	if orderByField {
+		orderBy = "FIELD(vodid, " + idList + ")"
+	}
+	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy)
+}
+
+func (r *Repository) PendingViewLogs(ctx context.Context, uid int, sid string, limit int) ([]map[string]interface{}, error) {
+	if r.db == nil || limit <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	if uid > 0 {
+		return r.queryRows(ctx, "SELECT * FROM minivod_viewlogs WHERE uid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", uid, limit)
+	}
+	if sid == "" {
+		return []map[string]interface{}{}, nil
+	}
+	return r.queryRows(ctx, "SELECT * FROM minivod_guestviewlogs WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
+}
+
 func (r *Repository) UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 || vodID <= 0 {
 		return map[string]interface{}{}, nil

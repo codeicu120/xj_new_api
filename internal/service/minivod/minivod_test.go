@@ -18,6 +18,7 @@ type fakeStore struct {
 	vod        map[string]interface{}
 	updown     map[string]interface{}
 	viewlog    map[string]interface{}
+	viewlogs   []map[string]interface{}
 	saved      int
 	deleted    bool
 	counters   []string
@@ -101,6 +102,17 @@ func (s *fakeStore) Setting(_ context.Context, key string) (string, error) {
 
 func (s *fakeStore) UsersByIDs(context.Context, []int) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{{"uid": "7", "username": "u", "nickname": "n", "avatar": "avatar.jpg", "gender": "1"}}, nil
+}
+
+func (s *fakeStore) VODsByIDs(context.Context, []int, bool) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{{"vodid": "9", "authorid": "7", "title": "mini", "showtype": "1"}}, nil
+}
+
+func (s *fakeStore) PendingViewLogs(context.Context, int, string, int) ([]map[string]interface{}, error) {
+	if s.viewlogs != nil {
+		return s.viewlogs, nil
+	}
+	return []map[string]interface{}{}, nil
 }
 
 func (s *fakeStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
@@ -191,6 +203,28 @@ func TestRecommendUsesRandomRows(t *testing.T) {
 	}
 	if !store.randomUsed || data.PageInfo["total"] != 0 {
 		t.Fatalf("random=%v pageinfo=%#v", store.randomUsed, data.PageInfo)
+	}
+}
+
+func TestReqListReturnsRowsFromPendingLogs(t *testing.T) {
+	store := &fakeStore{viewlogs: []map[string]interface{}{{"logid": "1", "vodid": "9"}}}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}}
+
+	data, err := service.ReqList(context.Background(), "token", false)
+	if err != nil {
+		t.Fatalf("reqlist: %v", err)
+	}
+	rows, ok := data["rows"].([]map[string]interface{})
+	if !ok || len(rows) != 1 {
+		t.Fatalf("rows=%#v", data["rows"])
+	}
+	vodrow, ok := rows[0]["vodrow"].(map[string]interface{})
+	if !ok || vodrow["vodid"] != "9" || vodrow["isfavorite"] != 1 {
+		t.Fatalf("vodrow=%#v", rows[0]["vodrow"])
+	}
+	if rows[0]["user"] == nil {
+		t.Fatalf("expected user wrapper, got %#v", rows[0])
 	}
 }
 
