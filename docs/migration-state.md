@@ -1655,3 +1655,12 @@
 - 未迁移：`/delete` 的 Redis hash `delAccountList` 重复注销判断、验证码校验、Redis 注销申请写入和退出登录仍需 Redis/client 设计。
 - Subagent：`Mencius` 核对账号剩余配置、keylimit 和注销分支；主线采纳 settings/keylimit/UserByID 只读分支，暂缓 Redis。
 - 测试：`go test ./internal/service/user ./internal/server` 通过。
+
+### UCP 会员升级前置失败分支
+
+- 已迁移：`/ucp/upgrade` 的已经是尊贵会员、无效时长、终身尊贵 VIP 暂停升级和金币不足分支；这些均位于 `db->begin()`、金币扣减和会员组写入之前。
+- PHP: `src/c/api/ucp/index.php::upgrade`。
+- Go: `internal/handler.UCPHandler.Upgrade`、`internal/service/ucp.Service.UpgradeEdge`。
+- 未迁移：金币扣减、`user_coinlogs`、会员组与过期时间写入成功分支仍需事务化迁移。
+- Subagent：`Maxwell` 核对 UCP 剩余前置失败分支，主线先采纳 upgrade 小切口。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。

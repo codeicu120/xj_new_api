@@ -114,6 +114,12 @@ func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
 	}
 }
 
+func (h *UCPHandler) Upgrade(c *gin.Context) {
+	day, _ := strconv.Atoi(inputValue(c, "day"))
+	retcode, errmsg, err := h.service.UpgradeEdge(c.Request.Context(), authToken(c), day)
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) UserCheckEmail(c *gin.Context) {
 	retcode, errmsg, err := h.service.UserEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), "邮箱可用成功分支暂未迁移")
 	h.respondEdge(c, retcode, errmsg, err)

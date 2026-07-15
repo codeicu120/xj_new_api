@@ -25,6 +25,43 @@ func (s *Service) HighRiskActionEdge(ctx context.Context, token string, pendingM
 	return -1, pendingMessage, nil
 }
 
+func (s *Service) UpgradeEdge(ctx context.Context, token string, day int) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	const superVIPGID = 6
+	if atoi(user["sysgid"]) == superVIPGID {
+		return -1, "您已经是尊贵会员", nil
+	}
+	pricing := map[int]int{
+		7:    100,
+		30:   300,
+		180:  1000,
+		365:  1500,
+		3650: 3000,
+	}
+	deductCoin, ok := pricing[day]
+	if !ok {
+		return -1, "请选择一个时长", nil
+	}
+	if day == 3650 {
+		return -1, "终身尊贵VIP暂停升级", nil
+	}
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return -1, "会员升级失败", err
+	}
+	if atoi(quota["goldcoin"]) < deductCoin {
+		return -1, "金币不足，快做任务获取金币吧！", nil
+	}
+	return -1, "会员升级成功分支暂未迁移", nil
+}
+
 func (s *Service) TaskSignEdge(ctx context.Context, token string) (int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {

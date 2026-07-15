@@ -1551,6 +1551,58 @@ func TestPackageOrderEdges(t *testing.T) {
 	}
 }
 
+func TestUpgradeEdgePrechecks(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5", "sysgid": "6"}}, "https://res.example.test")
+	retcode, errmsg, err := service.UpgradeEdge(context.Background(), "token", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您已经是尊贵会员" {
+		t.Fatalf("vip retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5", "sysgid": "4"}}, "https://res.example.test")
+	retcode, errmsg, err = service.UpgradeEdge(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "请选择一个时长" {
+		t.Fatalf("day retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UpgradeEdge(context.Background(), "token", 3650)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "终身尊贵VIP暂停升级" {
+		t.Fatalf("lifetime retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:  map[string]interface{}{"uid": "5", "sysgid": "4"},
+		quota: map[string]interface{}{"goldcoin": "99"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UpgradeEdge(context.Background(), "token", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币不足，快做任务获取金币吧！" {
+		t.Fatalf("gold retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:  map[string]interface{}{"uid": "5", "sysgid": "4"},
+		quota: map[string]interface{}{"goldcoin": "100"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UpgradeEdge(context.Background(), "token", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "会员升级成功分支暂未迁移" {
+		t.Fatalf("pending retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestCoinPackageIndexFormatsBonusCoins(t *testing.T) {
 	service := NewService(fakeUserStore{
 		user: map[string]interface{}{"uid": "5"},

@@ -371,7 +371,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/taskbox/taskboxopen", ucpHandler.TaskboxOpen)
 	router.Any("/ucp/taskbox/qrcode", ucpHandler.HighRiskAction("任务宝箱二维码图片生成成功分支暂未迁移"))
 	router.Any("/ucp/affcenter", ucpHandler.AffCenter)
-	router.Any("/ucp/upgrade", ucpHandler.HighRiskAction("会员升级成功分支暂未迁移"))
+	router.Any("/ucp/upgrade", ucpHandler.Upgrade)
 	router.Any("/ucp/payment", ucpHandler.PaymentListing)
 	router.Any("/ucp/payment/index", ucpHandler.PaymentListing)
 	router.Any("/ucp/payment/listing", ucpHandler.PaymentListing)
