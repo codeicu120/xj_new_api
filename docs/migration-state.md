@@ -1055,6 +1055,17 @@
 - 兼容规则：`type=0/1` 时强制 `bankname=支付宝`，`type=3` 时强制 `bankname=微信`；保留 PHP 的姓名、开户银行、账号长度校验文案；新增时沿用 PHP `count >= 5` 但错误文案为 `最多可以设置3个地址`。
 - 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；覆盖未登录、创建校验、支付宝类型映射、默认地址、修改缺失记录和删除成功分支。写入成功 live 分支未直接打旧库，避免污染本地导入数据。
 
+### `/ucp/vippkg`、`/ucp/vippkg/index`、`/ucp/coinpkg`、`/ucp/coinpkg/index`、`/ucp/beanpkg`、`/ucp/beanpkg/index`
+
+- PHP: `c.api.ucp.vippkg->index`、`c.api.ucp.coinpkg->index`、`c.api.ucp.beanpkg->index`
+- Go: `internal/handler.UCPHandler.VIPPkgIndex/CoinPkgIndex/BeanPkgIndex`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/index.SettingsRepository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 读取 `trade_vippkgs/trade_coinpkgs/trade_beanpkgs WHERE showtype=0 ORDER BY sortnum ASC, pkgid ASC`；读取 `settings.uuid=setting` 取得 `safepayurl`。
+- 兼容规则：套餐字段按 PHP `procRow2` 输出，金额按分转元字符串两位小数；支付通道通过 `PaymentChannels` 接口隔离，当前 repository 默认返回空列表，不伪造旧 PHP `conf/payment.php` 和后台支付通道配置。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比三类套餐未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
+
 ### `/init`
 
 - PHP: `c.api.index->init`

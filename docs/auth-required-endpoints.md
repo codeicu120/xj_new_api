@@ -52,12 +52,15 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | 本轮完成 | 登录只读当前用户资料；资料修改、密码和邮箱/手机验证码 action 未接管。 |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | 本轮完成 | 登录只读提款地址和后台银行列表。 |
 | `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete` | `c.api.ucp.bankcard->create/modify/delete` | 本轮完成 | 登录新增、修改、删除本人提款地址；保留 PHP 旧文案、类型映射和默认地址逻辑。 |
+| `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | 本轮完成 | 登录只读 VIP 套餐；支付通道通过接口隔离，当前不伪造旧 PHP `conf/payment.php`。 |
+| `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | 本轮完成 | 登录只读金币套餐；保留套餐字段和 `safepayurl`。 |
+| `/ucp/beanpkg`、`/ucp/beanpkg/index` | `c.api.ucp.beanpkg->index` | 本轮完成 | 登录只读金豆套餐；保留套餐字段和 `safepayurl`。 |
 
 ## 暂缓
 
 | 接口 | 原因 |
 | --- | --- |
 | `/ucp/task/*`（除 `/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
+| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用。 |
 | `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

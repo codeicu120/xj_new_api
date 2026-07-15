@@ -258,3 +258,11 @@ func (s ucpStore) SettingByUUID(ctx context.Context, uuid string) (map[string]in
 func (s ucpStore) CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
 	return s.index.CalldataByUUID(ctx, uuid)
 }
+
+func (s ucpStore) PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error) {
+	return s.ucp.PackageRows(ctx, kind)
+}
+
+func (s ucpStore) PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error) {
+	return s.ucp.PaymentChannels(ctx, gameOnly)
+}

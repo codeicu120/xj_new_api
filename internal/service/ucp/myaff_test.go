@@ -36,6 +36,8 @@ type fakeUserStore struct {
 	banks              []map[string]interface{}
 	settings           map[string]map[string]interface{}
 	calldata           map[string]map[string]interface{}
+	packages           []map[string]interface{}
+	payments           []map[string]interface{}
 	sentMessage        map[string]interface{}
 }
 
@@ -556,6 +558,14 @@ func (s fakeUserStore) CalldataByUUID(_ context.Context, uuid string) (map[strin
 	return map[string]interface{}{}, nil
 }
 
+func (s fakeUserStore) PackageRows(context.Context, string) ([]map[string]interface{}, error) {
+	return s.packages, nil
+}
+
+func (s fakeUserStore) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
+	return s.payments, nil
+}
+
 func TestTaskSharePicEmpty(t *testing.T) {
 	service := NewService(fakeUserStore{}, "https://res.example.test")
 
@@ -892,6 +902,100 @@ func TestBankcardDeleteSuccess(t *testing.T) {
 	}
 	if deleted["uid"] != 5 || deleted["cardid"] != 9 {
 		t.Fatalf("deleted = %#v", deleted)
+	}
+}
+
+func TestVIPPackageIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.VIPPkgIndex(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestVIPPackageIndexFormatsRowsAndPayments(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		settings: map[string]map[string]interface{}{
+			"setting": {"value": `a:1:{s:10:"safepayurl";s:20:"https://safe.example";}`},
+		},
+		packages: []map[string]interface{}{{
+			"pkgid":          "1",
+			"pkgname":        "VIP",
+			"daylen":         "30",
+			"showtype":       "0",
+			"rmbprice":       "6800",
+			"coinprice":      "100",
+			"recommend":      "1",
+			"bonus_vip_days": "2",
+			"memo":           "memo",
+		}},
+		payments: []map[string]interface{}{{
+			"channame": "余额支付",
+			"chanlogo": "",
+			"dscr":     "",
+			"payways": []map[string]interface{}{{
+				"payname":       "余额",
+				"paylogo":       "",
+				"dscr":          "",
+				"paycode":       "balance.pay",
+				"trxamount_min": "1",
+				"trxamount_max": "999",
+				"allow_paytypes": map[int][]string{
+					1: {"ALL"},
+				},
+			}},
+		}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.VIPPkgIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	rows := data["pkgrows"].([]map[string]interface{})
+	if rows[0]["rmbprice"] != "68.00" || rows[0]["daylen"] != 30 || rows[0]["coinprice"] != 100 {
+		t.Fatalf("pkgrows = %#v", rows)
+	}
+	payments := data["payments"].([]map[string]interface{})
+	if len(payments) != 1 || payments[0]["channame"] != "余额支付" {
+		t.Fatalf("payments = %#v", payments)
+	}
+	if data["safepayurl"] != "https://safe.example" {
+		t.Fatalf("safepayurl = %#v", data["safepayurl"])
+	}
+}
+
+func TestCoinPackageIndexFormatsBonusCoins(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		packages: []map[string]interface{}{{
+			"pkgid":          "2",
+			"pkgname":        "金币",
+			"showtype":       "0",
+			"rmbprice":       "1200",
+			"recommend":      "0",
+			"bonus_vip_days": "0",
+			"bonus_coins":    "300",
+		}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.CoinPkgIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	rows := data["pkgrows"].([]map[string]interface{})
+	if rows[0]["rmbprice"] != "12.00" || rows[0]["bonus_coins"] != 300 {
+		t.Fatalf("pkgrows = %#v", rows)
 	}
 }
 

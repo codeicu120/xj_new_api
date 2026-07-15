@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -466,6 +467,32 @@ func (h *UCPHandler) CoinLogBonusLog(c *gin.Context) {
 func (h *UCPHandler) CoinLogInviteLog(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	data, retcode, errmsg, err := h.service.CoinLogInviteLog(c.Request.Context(), authToken(c), page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) VIPPkgIndex(c *gin.Context) {
+	h.pkgIndex(c, h.service.VIPPkgIndex)
+}
+
+func (h *UCPHandler) CoinPkgIndex(c *gin.Context) {
+	h.pkgIndex(c, h.service.CoinPkgIndex)
+}
+
+func (h *UCPHandler) BeanPkgIndex(c *gin.Context) {
+	h.pkgIndex(c, h.service.BeanPkgIndex)
+}
+
+func (h *UCPHandler) pkgIndex(c *gin.Context, fn func(context.Context, string) (map[string]interface{}, int, string, error)) {
+	data, retcode, errmsg, err := fn(c.Request.Context(), authToken(c))
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

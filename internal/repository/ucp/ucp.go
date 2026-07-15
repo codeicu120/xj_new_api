@@ -207,6 +207,30 @@ func (r *Repository) Banks(ctx context.Context) ([]map[string]interface{}, error
 	return scanRows(rows)
 }
 
+func (r *Repository) PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	table := map[string]string{
+		"vip":  "trade_vippkgs",
+		"coin": "trade_coinpkgs",
+		"bean": "trade_beanpkgs",
+	}[kind]
+	if table == "" {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM "+table+" WHERE showtype=0 ORDER BY sortnum ASC, pkgid ASC")
+	if err != nil {
+		return nil, fmt.Errorf("query %s packages: %w", kind, err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
+	return []map[string]interface{}{}, nil
+}
+
 func (r *Repository) CountPayments(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil

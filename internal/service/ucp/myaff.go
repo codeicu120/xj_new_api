@@ -70,6 +70,8 @@ type UserStore interface {
 	SettingExRate(ctx context.Context) (int, error)
 	SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
 	CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
+	PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error)
+	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
 	Posters(ctx context.Context) ([]map[string]interface{}, error)
 	Taskboxes(ctx context.Context) ([]map[string]interface{}, error)
 	TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error)
