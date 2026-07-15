@@ -9,15 +9,17 @@ import (
 )
 
 type fakeStore struct {
-	filter       communityRepo.TopicFilter
-	order        string
-	missingTopic bool
-	visitCount   int
-	commentOrder string
-	topicUp      bool
-	commentUp    bool
-	topicDelta   int
-	commentDelta int
+	filter        communityRepo.TopicFilter
+	order         string
+	missingTopic  bool
+	visitCount    int
+	commentOrder  string
+	topicFavorite bool
+	favoriteDelta int
+	topicUp       bool
+	commentUp     bool
+	topicDelta    int
+	commentDelta  int
 }
 
 func (s *fakeStore) CountTopics(_ context.Context, filter communityRepo.TopicFilter) (int, error) {
@@ -41,7 +43,25 @@ func (s *fakeStore) VideosByTIDs(context.Context, []int) (map[int][]map[string]i
 	return map[int][]map[string]interface{}{}, nil
 }
 func (s *fakeStore) FavoriteTopicIDs(context.Context, int, []int) (map[int]int, error) {
-	return map[int]int{9: 1}, nil
+	if s.topicFavorite {
+		return map[int]int{9: 1}, nil
+	}
+	return map[int]int{}, nil
+}
+func (s *fakeStore) SetTopicFavorite(_ context.Context, _ int, _ int, favorite bool, _ int64) (int, error) {
+	if !favorite && s.topicFavorite {
+		s.topicFavorite = false
+		return 1, nil
+	}
+	if favorite && !s.topicFavorite {
+		s.topicFavorite = true
+		return 1, nil
+	}
+	return 0, nil
+}
+func (s *fakeStore) IncrementTopicFavorite(_ context.Context, _ int, delta int) error {
+	s.favoriteDelta += delta
+	return nil
 }
 func (s *fakeStore) UpTopicIDs(context.Context, int, []int) (map[int]int, error) {
 	if s.topicUp {
@@ -97,7 +117,7 @@ func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}
 }
 
 func TestListingBuildsParamsAndRows(t *testing.T) {
-	store := &fakeStore{topicUp: true}
+	store := &fakeStore{topicFavorite: true, topicUp: true}
 	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
 	service.now = func() time.Time { return time.Unix(1700000000, 0) }
 
@@ -139,7 +159,7 @@ func TestCommentListing(t *testing.T) {
 }
 
 func TestShowReturnsTopicAndComments(t *testing.T) {
-	store := &fakeStore{topicUp: true, commentUp: true}
+	store := &fakeStore{topicFavorite: true, topicUp: true, commentUp: true}
 	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
 
 	data, err := service.Show(context.Background(), ShowRequest{TID: 9, QueryOrder: "1", Token: "abc"})
@@ -176,6 +196,44 @@ func TestUpTopicRequiresLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "请登录后操作" {
 		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestAttentionRequiresLogin(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.Attention(context.Background(), "", 9, nil)
+	if err != nil {
+		t.Fatalf("attention: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请登录后操作" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestAttentionTogglesFavorite(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
+
+	retcode, errmsg, err := service.Attention(context.Background(), "abc", 9, nil)
+	if err != nil {
+		t.Fatalf("attention: %v", err)
+	}
+	if retcode != 0 || errmsg != "收藏成功" || !store.topicFavorite || store.favoriteDelta != 1 {
+		t.Fatalf("response=%d %q favorite=%v delta=%d", retcode, errmsg, store.topicFavorite, store.favoriteDelta)
+	}
+}
+
+func TestAttentionBatchCancelsFavorites(t *testing.T) {
+	store := &fakeStore{topicFavorite: true}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
+
+	retcode, errmsg, err := service.Attention(context.Background(), "abc", 0, []int{8, 9})
+	if err != nil {
+		t.Fatalf("attention batch: %v", err)
+	}
+	if retcode != 0 || errmsg != "批量取消收藏成功" || store.topicFavorite || store.favoriteDelta != -1 {
+		t.Fatalf("response=%d %q favorite=%v delta=%d", retcode, errmsg, store.topicFavorite, store.favoriteDelta)
 	}
 }
 

@@ -94,6 +94,17 @@ func (h *CommunityHandler) Up(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 }
 
+func (h *CommunityHandler) Attention(c *gin.Context) {
+	tid, _ := strconv.Atoi(inputValue(c, "tid"))
+	retcode, errmsg, err := h.service.Attention(c.Request.Context(), authToken(c), tid, intArrayValue(c, "tids"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func (h *CommunityHandler) UpComment(c *gin.Context) {
 	cid, _ := strconv.Atoi(inputValue(c, "cid"))
 	retcode, errmsg, err := h.service.UpComment(c.Request.Context(), authToken(c), cid)

@@ -1032,6 +1032,17 @@
 - 兼容规则：记录不存在返回 `记录不存在或已删除`；已点赞时取消并返回 `取消赞成功`；未点赞时插入点赞记录并返回 `已赞`。
 - 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、帖子点赞和评论取消点赞，路由测试覆盖两条未登录错误壳；PHP-Go live 对比 `/community/up?tid=9` 和 `/community/up_comment?cid=1` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
 
+### `/community/attention`
+
+- PHP: `c.api.topic->attention`
+- Go: `internal/handler.CommunityHandler.Attention`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 必须登录，未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。
+- DB: 单个 `tid` 读取 `topics`、切换 `topic_favorites` 并更新 `topics.fav_count`；多个 `tids` 走批量取消收藏，按实际删除记录数决定是否扣减 `fav_count`。
+- 兼容规则：记录不存在返回 `记录不存在或已删除`；已收藏时取消并返回 `取消收藏成功`；未收藏时插入收藏记录并返回 `收藏成功`；批量取消返回 `批量取消收藏成功`。
+- 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、单个收藏和批量取消收藏，路由测试覆盖未登录错误壳；PHP-Go live 对比 `/community/attention?tid=9` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/getGlobalData`
 
 - PHP: `c.api.index->getGlobalData`

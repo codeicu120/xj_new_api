@@ -86,6 +86,40 @@ func (r *Repository) FavoriteTopicIDs(ctx context.Context, uid int, tids []int) 
 	return r.flagTopicIDs(ctx, "topic_favorites", "tid", "uid", uid, tids)
 }
 
+func (r *Repository) SetTopicFavorite(ctx context.Context, tid int, uid int, favorite bool, now int64) (int, error) {
+	if r.db == nil || tid <= 0 || uid <= 0 {
+		return 0, nil
+	}
+	var result sql.Result
+	var err error
+	if !favorite {
+		result, err = r.db.ExecContext(ctx, "DELETE FROM topic_favorites WHERE tid=? AND uid=?", tid, uid)
+		if err != nil {
+			return 0, fmt.Errorf("delete topic favorite: %w", err)
+		}
+	} else {
+		result, err = r.db.ExecContext(ctx, "INSERT IGNORE INTO topic_favorites(uid,tid,created_at) VALUES(?,?,?)", uid, tid, now)
+		if err != nil {
+			return 0, fmt.Errorf("insert topic favorite: %w", err)
+		}
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("topic favorite affected rows: %w", err)
+	}
+	return int(affected), nil
+}
+
+func (r *Repository) IncrementTopicFavorite(ctx context.Context, tid int, delta int) error {
+	if r.db == nil || tid <= 0 || delta == 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE topics SET fav_count=fav_count+? WHERE tid=?", delta, tid); err != nil {
+		return fmt.Errorf("increment topic favorite: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error) {
 	return r.flagTopicIDs(ctx, "topic_ups", "tid", "uid", uid, tids)
 }

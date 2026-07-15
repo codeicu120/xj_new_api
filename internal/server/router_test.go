@@ -483,7 +483,7 @@ func TestCommunityShowMissingTopic(t *testing.T) {
 func TestCommunityUpRoutesRequireLogin(t *testing.T) {
 	router := newTestRouter()
 
-	for _, path := range []string{"/community/up?tid=9", "/community/up_comment?cid=1"} {
+	for _, path := range []string{"/community/attention?tid=9", "/community/up?tid=9", "/community/up_comment?cid=1"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(rec, req)

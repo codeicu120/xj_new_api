@@ -34,6 +34,8 @@ type Store interface {
 	ImagesByTIDs(ctx context.Context, tids []int) (map[int][]map[string]interface{}, error)
 	VideosByTIDs(ctx context.Context, tids []int) (map[int][]map[string]interface{}, error)
 	FavoriteTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error)
+	SetTopicFavorite(ctx context.Context, tid int, uid int, favorite bool, now int64) (int, error)
+	IncrementTopicFavorite(ctx context.Context, tid int, delta int) error
 	UpTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error)
 	TopicByID(ctx context.Context, tid int) (map[string]interface{}, error)
 	IncrementTopicVisit(ctx context.Context, tid int) error
@@ -265,6 +267,64 @@ func (s *Service) UpTopic(ctx context.Context, token string, tid int) (int, stri
 		return -1, "社区点赞失败", err
 	}
 	return 0, "已赞", nil
+}
+
+func (s *Service) Attention(ctx context.Context, token string, tid int, tids []int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "社区收藏失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "请登录后操作", nil
+	}
+	if tid > 0 {
+		tids = []int{tid}
+	}
+	if len(tids) > 1 {
+		for _, id := range tids {
+			affected, err := s.store.SetTopicFavorite(ctx, id, uid, false, s.now().Unix())
+			if err != nil {
+				return -1, "社区收藏失败", err
+			}
+			if affected > 0 {
+				if err := s.store.IncrementTopicFavorite(ctx, id, -1); err != nil {
+					return -1, "社区收藏失败", err
+				}
+			}
+		}
+		return 0, "批量取消收藏成功", nil
+	}
+	if len(tids) == 0 {
+		tids = []int{0}
+	}
+	topic, err := s.store.TopicByID(ctx, tids[0])
+	if err != nil {
+		return -1, "社区收藏失败", err
+	}
+	if len(topic) == 0 {
+		return -1, "记录不存在或已删除", nil
+	}
+	favIDs, err := s.store.FavoriteTopicIDs(ctx, uid, []int{tids[0]})
+	if err != nil {
+		return -1, "社区收藏失败", err
+	}
+	if favIDs[tids[0]] > 0 {
+		if _, err := s.store.SetTopicFavorite(ctx, tids[0], uid, false, s.now().Unix()); err != nil {
+			return -1, "社区收藏失败", err
+		}
+		if err := s.store.IncrementTopicFavorite(ctx, tids[0], -1); err != nil {
+			return -1, "社区收藏失败", err
+		}
+		return 0, "取消收藏成功", nil
+	}
+	if _, err := s.store.SetTopicFavorite(ctx, tids[0], uid, true, s.now().Unix()); err != nil {
+		return -1, "社区收藏失败", err
+	}
+	if err := s.store.IncrementTopicFavorite(ctx, tids[0], 1); err != nil {
+		return -1, "社区收藏失败", err
+	}
+	return 0, "收藏成功", nil
 }
 
 func (s *Service) UpComment(ctx context.Context, token string, cid int) (int, string, error) {
