@@ -1088,6 +1088,16 @@
 - 兼容规则：成功返回 `data.vodid/title` 且 `errmsg=ok`；无记录或 `showtype>0` 返回 `记录不存在或已被删除`。
 - 测试：`go test ./internal/service/vod ./internal/repository/vod ./internal/server` 通过；PHP-Go live 对比当前本地库无记录错误分支 retcode/errmsg 一致，忽略旧 PHP 动态游客 token。
 
+### `/payment/unpaid`
+
+- PHP: `c.api.payment->unpaid`
+- Go: `internal/handler.PaymentHandler.Unpaid`
+- Service: `internal/service/payment.Service`
+- Auth: 当前 PHP 函数在登录检查前直接返回 `total_count=0`，因此 Go 也不要求登录。
+- DB/Cache: 无；旧 PHP 后续的 24 小时未支付订单查询和 Redis 标记分支不可达，本次不接管。
+- 兼容规则：返回 `retcode=0`、`errmsg=""`、`data.total_count=0`；旧 PHP 游客中间件可能追加动态 `xxx_api_auth`，Go 不生成。
+- 测试：`go test ./internal/service/payment ./internal/server` 通过；路由测试覆盖 JSON 壳和 `total_count=0`。
+
 ### `/init`
 
 - PHP: `c.api.index->init`

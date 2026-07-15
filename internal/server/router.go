@@ -53,6 +53,7 @@ import (
 	minivodService "xj_comp/internal/service/minivod"
 	onegoService "xj_comp/internal/service/onego"
 	openService "xj_comp/internal/service/open"
+	paymentService "xj_comp/internal/service/payment"
 	picService "xj_comp/internal/service/pic"
 	sendfileService "xj_comp/internal/service/sendfile"
 	soService "xj_comp/internal/service/so"
@@ -146,6 +147,7 @@ func NewRouter(opts Options) *gin.Engine {
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
+	paymentHandler := handler.NewPaymentHandler(paymentService.NewService())
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -203,6 +205,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/activity/receive", activityHandler.Receive)
 	router.Any("/activity/recommends", activityHandler.Recommends)
 	router.Any("/invite/info", inviteHandler.Info)
+	router.Any("/payment/unpaid", paymentHandler.Unpaid)
 	router.Any("/bought/listing", boughtHandler.Listing)
 	router.Any("/bought/delete", boughtHandler.Delete)
 	router.Any("/playlog", handler.EmptyHTML)

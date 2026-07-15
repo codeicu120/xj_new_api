@@ -1701,6 +1701,35 @@ func TestNoRoute(t *testing.T) {
 	}
 }
 
+func TestPaymentUnpaidRoute(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/payment/unpaid", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 || body.ErrMsg != "" {
+		t.Fatalf("expected ok response, got %#v", body)
+	}
+	data, ok := body.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data map, got %#v", body.Data)
+	}
+	if data["total_count"] != float64(0) {
+		t.Fatalf("expected total_count 0, got %#v", data["total_count"])
+	}
+}
+
 func newTestRouter() http.Handler {
 	return NewRouter(Options{
 		Config: config.Config{

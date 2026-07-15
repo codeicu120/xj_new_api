@@ -1,6 +1,6 @@
 # 接口重构总览
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
 旧 PHP 项目：`/Users/canavs/xjProj/XJBackend/api`
 
@@ -61,6 +61,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/activity/ranking`、`/activity/receive` | ANY | `ActivityHandler.Ranking/Receive` |
 | `/activity/recommends` | ANY | `ActivityHandler.Recommends` |
 | `/invite/info` | ANY | `InviteHandler.Info` |
+| `/payment/unpaid` | ANY | `PaymentHandler.Unpaid` |
 | `/bought/listing`、`/bought/delete` | ANY | `BoughtHandler.Listing/Delete` |
 | `/playlog`、`/playlog/index`、`/downlog`、`/downlog/index` | ANY | `handler.EmptyHTML` |
 | `/playlog/listing`、`/playlog/remove`、`/downlog/listing`、`/downlog/remove` | ANY | `HistoryHandler` |
@@ -181,6 +182,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/activity/receive` | `c.api.activity->receive` | `ActivityHandler.Receive` | 已重构，对比通过；登录领奖结果预览只读，按源码未写入领取状态 |
 | `/activity/recommends` | `c.api.activity->recommends` | `ActivityHandler.Recommends` | 已重构，对比通过；登录邀请记录只读，复刻用户行处理 |
 | `/invite/info` | `c.api.invite->info` | `InviteHandler.Info` | 已重构，对比通过；登录只读当前绑定邀请码 |
+| `/payment/unpaid` | `c.api.payment->unpaid` | `PaymentHandler.Unpaid` | 已重构；旧 PHP 当前直接返回 `data.total_count=0`，后续未执行的 24 小时未支付查询分支不接管 |
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
 | `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | `ExploreHandler.EmptyOK` | 已重构，对比通过；旧 PHP 空 OK，动态 `xxx_api_auth` 不回传 |
@@ -435,7 +437,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/payment/:action` | `c.api.payment->$action` | 未重构；支付、查询、下单、回调跳转 |
+| `/payment/:action`（除 `/payment/unpaid`） | `c.api.payment->$action` | 未重构；剩余 `index/query/payways/chpayway/reqpay/success/failed` 涉及支付查询、下单、支付方式切换或跳转 |
 | `/respond/:action` | `c.respond.*` | 未重构；支付平台回调 |
 | `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay5` | `c.respond.*` | 未重构 |
 | `/respond/hawpay`、`/respond/easypay`、`/respond/chan1`、`/respond/pay6`、`/respond/pay7` | `c.respond.*` | 未重构 |
