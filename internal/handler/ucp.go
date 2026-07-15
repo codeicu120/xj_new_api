@@ -73,6 +73,20 @@ func (h *UCPHandler) TaskQRLink(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) TaskIndex(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.TaskIndex(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *UCPHandler) TaskboxQRLink(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.TaskboxQRLink(c.Request.Context(), authToken(c), inputValue(c, "pid"))
 	c.Header("X-Served-By", "newbie")

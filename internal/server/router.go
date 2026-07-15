@@ -268,6 +268,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/msg/delete", ucpHandler.MsgDelete)
 	router.Any("/ucp/myaff", ucpHandler.MyAff)
 	router.Any("/ucp/rolltitle", ucpHandler.RollTitle)
+	router.Any("/ucp/task", ucpHandler.TaskIndex)
+	router.Any("/ucp/task/index", ucpHandler.TaskIndex)
 	router.Any("/ucp/task/sharepic", ucpHandler.TaskSharePic)
 	router.Any("/ucp/task/qrlink", ucpHandler.TaskQRLink)
 	router.Any("/ucp/taskbox/index", ucpHandler.TaskboxIndex)

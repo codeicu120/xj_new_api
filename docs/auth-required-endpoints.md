@@ -45,6 +45,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/favorite/add`、`/minifavorite/add` | `c.api.favorite/minifavorite->add` | 本轮完成 | 登录新增收藏；未登录、视频不存在、重复收藏分支 live 对比通过，成功写入由 fake 覆盖；金币奖励默认不改资产，保留后续 rewarder 接入点。 |
 | `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读随机推广海报；奖励/签到 task action 未接管。 |
+| `/ucp/task`、`/ucp/task/index` | `c.api.ucp.task->index` | 本轮完成 | 登录只读任务中心聚合；统计分享、评论、收藏、观看、保存二维码、广告点击、小视频下载任务进度，不发奖励。 |
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | 本轮完成 | 登录只读推广二维码链接；保留 pid 校验、渠道配置回退、每日 inviteUrls 分组选择和 `{inviteCode}` 替换。 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 此 action 在 UCP 下但不要求登录，只读任务宝箱状态；开启宝箱奖励写入未接管。 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志，分页 URL 为 `/ucp/taskbox/taskboxlog?page=[?]`；开启宝箱奖励写入未接管。 |
@@ -62,7 +63,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 
 | 接口 | 原因 |
 | --- | --- |
-| `/ucp/task/*`（除 `/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
+| `/ucp/task/*`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
 | `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用。 |
 | `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

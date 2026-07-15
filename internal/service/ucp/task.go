@@ -10,6 +10,126 @@ import (
 	"time"
 )
 
+const (
+	coinTypeVODShare        = 2
+	coinTypeVODComment      = 3
+	coinTypeVODFavorite     = 4
+	coinTypeVODPlay10       = 5
+	coinTypeSaveQRCode      = 6
+	coinTypeAdViewClick     = 7
+	coinTypeMiniVODDownTask = 22
+)
+
+func (s *Service) TaskIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
+	user, groups, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	daytime := dayStartUnix(s.now())
+	perms := user["perms"]
+
+	share, err := s.coinTaskStat(ctx, uid, daytime, coinTypeVODShare, "max.goldcoin.share.num", "max.goldcoin.share.limit", perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	comment, err := s.commentTaskStat(ctx, uid, daytime, perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	favorite, err := s.favoriteTaskStat(ctx, uid, daytime, perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	play10, err := s.playTaskStat(ctx, uid, daytime, perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	saveqrcode, err := s.coinTaskStat(ctx, uid, daytime, coinTypeSaveQRCode, "max.goldcoin.saveqrcode.num", "max.goldcoin.saveqrcode.num", perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	adviewclick, err := s.coinTaskStat(ctx, uid, daytime, coinTypeAdViewClick, "max.goldcoin.adviewclick.num", "max.goldcoin.adviewclick.num", perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+	minivoddown, err := s.coinTaskStat(ctx, uid, daytime, coinTypeMiniVODDownTask, "max.goldcoin.minivod.down.coinnum", "max.goldcoin.minivod.down.limit", perms)
+	if err != nil {
+		return nil, -1, "获取任务中心失败", err
+	}
+
+	return map[string]interface{}{
+		"user":        singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		"share":       share,
+		"comment":     comment,
+		"favorite":    favorite,
+		"play10":      play10,
+		"saveqrcode":  saveqrcode,
+		"adviewclick": adviewclick,
+		"minivoddown": minivoddown,
+	}, 0, "", nil
+}
+
+func (s *Service) coinTaskStat(ctx context.Context, uid int, daytime int64, coinType int, dayKey string, limitKey string, perms interface{}) (map[string]interface{}, error) {
+	coinnum, err := s.store.SumCoinLogsSinceByType(ctx, uid, coinType, daytime)
+	if err != nil {
+		return nil, err
+	}
+	donenum, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinType, daytime)
+	if err != nil {
+		return nil, err
+	}
+	return taskStat(getPermInt(perms, dayKey), getPermInt(perms, limitKey), coinnum, donenum), nil
+}
+
+func (s *Service) commentTaskStat(ctx context.Context, uid int, daytime int64, perms interface{}) (map[string]interface{}, error) {
+	coinnum, err := s.store.SumCoinLogsSinceByType(ctx, uid, coinTypeVODComment, daytime)
+	if err != nil {
+		return nil, err
+	}
+	donenum, err := s.store.CountVODCommentsSince(ctx, uid, daytime, true)
+	if err != nil {
+		return nil, err
+	}
+	return taskStat(getPermInt(perms, "max.goldcoin.comment.num"), getPermInt(perms, "max.goldcoin.comment.limit"), coinnum, donenum), nil
+}
+
+func (s *Service) favoriteTaskStat(ctx context.Context, uid int, daytime int64, perms interface{}) (map[string]interface{}, error) {
+	coinnum, err := s.store.SumCoinLogsSinceByType(ctx, uid, coinTypeVODFavorite, daytime)
+	if err != nil {
+		return nil, err
+	}
+	donenum, err := s.store.CountVODFavoritesSince(ctx, uid, daytime)
+	if err != nil {
+		return nil, err
+	}
+	return taskStat(getPermInt(perms, "max.goldcoin.favorite.num"), getPermInt(perms, "max.goldcoin.favorite.limit"), coinnum, donenum), nil
+}
+
+func (s *Service) playTaskStat(ctx context.Context, uid int, daytime int64, perms interface{}) (map[string]interface{}, error) {
+	coinnum, err := s.store.SumCoinLogsSinceByType(ctx, uid, coinTypeVODPlay10, daytime)
+	if err != nil {
+		return nil, err
+	}
+	donenum, err := s.store.CountVODPlayLogsSince(ctx, uid, daytime)
+	if err != nil {
+		return nil, err
+	}
+	return taskStat(getPermInt(perms, "max.goldcoin.play10.num"), getPermInt(perms, "max.goldcoin.play10.limit"), coinnum, donenum), nil
+}
+
+func taskStat(daynum int, limit int, coinnum int, donenum int) map[string]interface{} {
+	return map[string]interface{}{
+		"daynum":  daynum,
+		"limit":   limit,
+		"coinnum": coinnum,
+		"donenum": donenum,
+	}
+}
+
 func (s *Service) TaskSharePic(ctx context.Context) (map[string]interface{}, error) {
 	rows, err := s.store.Posters(ctx)
 	if err != nil {

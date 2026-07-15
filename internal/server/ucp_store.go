@@ -151,6 +151,18 @@ func (s ucpStore) CountCoinLogsSinceByType(ctx context.Context, uid int, coinTyp
 	return s.ucp.CountCoinLogsSinceByType(ctx, uid, coinType, since)
 }
 
+func (s ucpStore) SumCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error) {
+	return s.ucp.SumCoinLogsSinceByType(ctx, uid, coinType, since)
+}
+
+func (s ucpStore) CountVODCommentsSince(ctx context.Context, uid int, since int64, unique bool) (int, error) {
+	return s.ucp.CountVODCommentsSince(ctx, uid, since, unique)
+}
+
+func (s ucpStore) CountVODFavoritesSince(ctx context.Context, uid int, since int64) (int, error) {
+	return s.ucp.CountVODFavoritesSince(ctx, uid, since)
+}
+
 func (s ucpStore) CountFeedbacks(ctx context.Context, uid int) (int, error) {
 	return s.ucp.CountFeedbacks(ctx, uid)
 }

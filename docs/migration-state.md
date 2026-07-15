@@ -931,6 +931,17 @@
 - 兼容规则：保持旧 PHP `data.data` 包装；随机行不做逐条完全一致，只要求字段 shape 和 `retcode/errmsg` 对齐。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 `/ucp/task/sharepic` 成功分支，忽略动态 `xxx_api_auth` 和随机行差异后一致。
 
+### `/ucp/task`、`/ucp/task/index`
+
+- PHP: `c.api.ucp.task->index`
+- Go: `internal/handler.UCPHandler.TaskIndex`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 必须登录；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 只读 `users/user_sessions/user_groups` 获取用户与权限；统计 `user_coinlogs` 的日内金币 sum/count，`vod_comments` 日内去重视频评论数，`vod_favorites` 日内收藏数，`vod_playlogs_week` 日内观看数。
+- 兼容规则：返回 `user/share/comment/favorite/play10/saveqrcode/adviewclick/minivoddown`；各任务块保留 `daynum/limit/coinnum/donenum` 字段；不执行签到、分享奖励、二维码 keylimit 或金币写入。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 和 `go test ./...` 通过；单测覆盖未登录错误和登录聚合字段，路由测试覆盖 `/ucp/task` 与 `/ucp/task/index` 未登录分支；PHP-Go live 对比两个路径未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/ucp/task/qrlink`
 
 - PHP: `c.api.ucp.task->qrlink`

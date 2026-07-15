@@ -50,7 +50,7 @@ func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interf
 func (s fakeUserStore) Groups(context.Context) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{
 		{"gid": "0", "gname": "游客", "gicon": "", "minup": "0", "weight": "0", "scope": "0", "perms": `{"max.vod.play.daynum":"10","max.vod.down.daynum":"8","max.minivod.play.daynum":"20","max.minivod.down.daynum":"18"}`},
-		{"gid": "4", "gname": "普通会员", "gicon": "V4", "minup": "100", "weight": "4", "scope": "0", "perms": `{"max.vod.play.daynum":"40","max.vod.down.daynum":"30","max.comment.post.daynum":"4","max.minivod.play.daynum":"150","max.minivod.down.daynum":"150"}`},
+		{"gid": "4", "gname": "普通会员", "gicon": "V4", "minup": "100", "weight": "4", "scope": "0", "perms": `{"max.vod.play.daynum":"40","max.vod.down.daynum":"30","max.comment.post.daynum":"4","max.minivod.play.daynum":"150","max.minivod.down.daynum":"150","max.goldcoin.share.num":"1","max.goldcoin.share.limit":"3","max.goldcoin.comment.num":"2","max.goldcoin.comment.limit":"6","max.goldcoin.favorite.num":"3","max.goldcoin.favorite.limit":"9","max.goldcoin.play10.num":"4","max.goldcoin.play10.limit":"12","max.goldcoin.saveqrcode.num":"5","max.goldcoin.adviewclick.num":"6","max.goldcoin.minivod.down.coinnum":"7","max.goldcoin.minivod.down.limit":"21"}`},
 		{"gid": "7", "gname": "禁止发言", "gicon": "V7", "minup": "2000000", "weight": "7", "scope": "0", "perms": `{"max.vod.play.daynum":"0","max.vod.down.daynum":"0","max.comment.post.daynum":"0","max.minivod.play.daynum":"0","max.minivod.down.daynum":"0"}`},
 		{"gid": "6", "gname": "尊贵VIP", "gicon": "V6", "minup": "1000000", "weight": "6", "scope": "0", "perms": `{"max.vod.play.daynum":"1000","max.vod.down.daynum":"202","max.comment.post.daynum":"50","max.minivod.play.daynum":"999","max.minivod.down.daynum":"200"}`},
 	}, nil
@@ -236,6 +236,18 @@ func (s fakeUserStore) CountGuestMiniVODViewLogsSince(_ context.Context, _ strin
 
 func (s fakeUserStore) CountCoinLogsSinceByType(context.Context, int, int, int64) (int, error) {
 	return 1, nil
+}
+
+func (s fakeUserStore) SumCoinLogsSinceByType(_ context.Context, _ int, coinType int, _ int64) (int, error) {
+	return coinType, nil
+}
+
+func (s fakeUserStore) CountVODCommentsSince(context.Context, int, int64, bool) (int, error) {
+	return 3, nil
+}
+
+func (s fakeUserStore) CountVODFavoritesSince(context.Context, int, int64) (int, error) {
+	return 4, nil
 }
 
 func (s fakeUserStore) CountFeedbacks(context.Context, int) (int, error) {
@@ -657,6 +669,74 @@ func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {
 	}
 	if data["qrlink"] != "https://qr.test?u=https://b.test&c=9IX" {
 		t.Fatalf("qrlink = %#v", data["qrlink"])
+	}
+}
+
+func TestTaskIndexRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.TaskIndex(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestTaskIndexFormatsTaskStats(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{
+			"uid":             "5",
+			"uniqkey":         "12345",
+			"username":        "tester",
+			"nickname":        "",
+			"gid":             "4",
+			"sysgid":          "0",
+			"regtime":         "1760000000",
+			"gender":          "1",
+			"avatar":          "",
+			"newmsg":          "0",
+			"goldcoin":        "9",
+			"gold_bean":       "8",
+			"recommend_total": "7",
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC) }
+
+	data, retcode, errmsg, err := service.TaskIndex(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	user, ok := data["user"].(map[string]interface{})
+	if !ok || user["uid"] != "5" {
+		t.Fatalf("user = %#v", data["user"])
+	}
+	share, ok := data["share"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("share = %#v", data["share"])
+	}
+	if share["daynum"] != 1 || share["limit"] != 3 || share["coinnum"] != coinTypeVODShare || share["donenum"] != 1 {
+		t.Fatalf("share = %#v", share)
+	}
+	comment, ok := data["comment"].(map[string]interface{})
+	if !ok || comment["daynum"] != 2 || comment["limit"] != 6 || comment["coinnum"] != coinTypeVODComment || comment["donenum"] != 3 {
+		t.Fatalf("comment = %#v", data["comment"])
+	}
+	favorite, ok := data["favorite"].(map[string]interface{})
+	if !ok || favorite["daynum"] != 3 || favorite["limit"] != 9 || favorite["coinnum"] != coinTypeVODFavorite || favorite["donenum"] != 4 {
+		t.Fatalf("favorite = %#v", data["favorite"])
+	}
+	play10, ok := data["play10"].(map[string]interface{})
+	if !ok || play10["daynum"] != 4 || play10["limit"] != 12 || play10["coinnum"] != coinTypeVODPlay10 || play10["donenum"] != 1 {
+		t.Fatalf("play10 = %#v", data["play10"])
+	}
+	minivoddown, ok := data["minivoddown"].(map[string]interface{})
+	if !ok || minivoddown["daynum"] != 7 || minivoddown["limit"] != 21 || minivoddown["coinnum"] != coinTypeMiniVODDownTask || minivoddown["donenum"] != 1 {
+		t.Fatalf("minivoddown = %#v", data["minivoddown"])
 	}
 }
 

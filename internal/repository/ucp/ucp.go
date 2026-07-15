@@ -530,6 +530,46 @@ func (r *Repository) CountCoinLogsSinceByType(ctx context.Context, uid int, coin
 	return total, nil
 }
 
+func (r *Repository) SumCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, "SELECT SUM(coinnum) FROM user_coinlogs WHERE uid=? AND cointype=? AND addtime>=?", uid, coinType, since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("sum coin logs by type: %w", err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
+}
+
+func (r *Repository) CountVODCommentsSince(ctx context.Context, uid int, since int64, unique bool) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	column := "*"
+	if unique {
+		column = "DISTINCT vodid"
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT("+column+") FROM vod_comments WHERE uid=? AND addtime>=?", uid, since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count vod comments: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) CountVODFavoritesSince(ctx context.Context, uid int, since int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM vod_favorites WHERE uid=? AND favtime>=?", uid, since).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count vod favorites: %w", err)
+	}
+	return total, nil
+}
+
 func (r *Repository) CountFeedbacks(ctx context.Context, uid int) (int, error) {
 	if r.db == nil {
 		return 0, nil
