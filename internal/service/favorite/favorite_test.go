@@ -14,6 +14,7 @@ type fakeStore struct {
 	keyword string
 	total   int
 	rows    []map[string]interface{}
+	users   []map[string]interface{}
 	removed []int
 	vodrow  map[string]interface{}
 	count   int
@@ -62,6 +63,10 @@ func (s *fakeStore) Add(_ context.Context, kind favoriteRepo.Kind, uid int, vodi
 	s.uid = uid
 	s.added = append(s.added, vodid)
 	return nil
+}
+
+func (s *fakeStore) UsersByIDs(_ context.Context, ids []int) ([]map[string]interface{}, error) {
+	return s.users, nil
 }
 
 type fakeVODProcessor struct{}
@@ -150,6 +155,56 @@ func TestMiniListingMarksFavorite(t *testing.T) {
 	}
 	if data.Rows[0]["processed"] != "mini-full" || data.Rows[0]["isfavorite"] != 1 {
 		t.Fatalf("rows = %#v", data.Rows)
+	}
+}
+
+func TestMiniListingIgnoresKeywordForLegacyAPI(t *testing.T) {
+	store := &fakeStore{
+		user:  map[string]interface{}{"uid": "5"},
+		total: 1,
+		rows:  []map[string]interface{}{{"vodid": "9"}},
+	}
+	service := NewService(store, store, fakeVODProcessor{})
+
+	_, _, _, err := service.Listing(context.Background(), "token", favoriteRepo.KindMini, 1, "abc", false)
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if store.keyword != "" {
+		t.Fatalf("legacy mini keyword = %q", store.keyword)
+	}
+}
+
+func TestMiniV2ListingWrapsRowsWithUsersAndKeywordPageURL(t *testing.T) {
+	store := &fakeStore{
+		user:  map[string]interface{}{"uid": "5"},
+		total: 1,
+		rows:  []map[string]interface{}{{"vodid": "9", "authorid": "7"}},
+		users: []map[string]interface{}{{"uid": "7", "username": "u7", "nickname": "n7", "avatar": "avatar/a.jpg", "gender": "1"}},
+	}
+	service := NewService(store, store, fakeVODProcessor{}).WithResourceBaseURL("https://res.test")
+
+	data, retcode, errmsg, err := service.MiniV2Listing(context.Background(), "token", 1, "abc", false)
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+	if store.kind != favoriteRepo.KindMini || store.keyword != "abc" {
+		t.Fatalf("lookup = kind:%s keyword:%q", store.kind, store.keyword)
+	}
+	if data.PageInfo["page_url"] != "/minifavorite/listing?page=[?]&wd=abc" {
+		t.Fatalf("pageinfo = %#v", data.PageInfo)
+	}
+	row := data.Rows[0]
+	vodrow, ok := row["vodrow"].(map[string]interface{})
+	if !ok || vodrow["vodid"] != "9" || vodrow["isfavorite"] != 1 {
+		t.Fatalf("vodrow = %#v", row["vodrow"])
+	}
+	user, ok := row["user"].(map[string]interface{})
+	if !ok || user["uid"] != "7" || user["avatar_url"] != "https://res.test/C1/avatar/a.jpg" {
+		t.Fatalf("user = %#v", row["user"])
 	}
 }
 

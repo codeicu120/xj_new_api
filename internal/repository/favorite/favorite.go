@@ -134,6 +134,33 @@ func (r *Repository) Add(ctx context.Context, kind Kind, uid int, vodid int, now
 	return nil
 }
 
+func (r *Repository) UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error) {
+	if r.db == nil || len(ids) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	clean := make([]int, 0, len(ids))
+	seen := map[int]bool{}
+	for _, id := range ids {
+		if id > 0 && !seen[id] {
+			clean = append(clean, id)
+			seen[id] = true
+		}
+	}
+	if len(clean) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(clean)), ",")
+	args := make([]interface{}, 0, len(clean))
+	for _, id := range clean {
+		args = append(args, id)
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM users WHERE uid IN("+placeholders+")", args...)
+	if err != nil {
+		return nil, fmt.Errorf("query favorite users: %w", err)
+	}
+	return rows, nil
+}
+
 func tableSpec(kind Kind) (string, int) {
 	if kind == KindMini {
 		return "minivod_favorites", 1

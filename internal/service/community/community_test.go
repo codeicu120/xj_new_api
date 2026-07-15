@@ -12,6 +12,8 @@ import (
 type fakeStore struct {
 	filter        communityRepo.TopicFilter
 	order         string
+	parentID      int
+	searchWD      string
 	missingTopic  bool
 	visitCount    int
 	commentOrder  string
@@ -37,6 +39,32 @@ func (s *fakeStore) ListTopics(_ context.Context, filter communityRepo.TopicFilt
 	s.filter = filter
 	s.order = orderBy
 	return []map[string]interface{}{{"tid": "9", "content": `<p><img src="a.jpg"></p>`, "image_srvid": "0", "video_srvid": "0"}}, nil
+}
+
+func (s *fakeStore) Categories(_ context.Context, parentID int) ([]map[string]interface{}, error) {
+	s.parentID = parentID
+	return []map[string]interface{}{{"id": "1", "parent_id": "0", "title": "官方", "description": "desc"}}, nil
+}
+
+func (s *fakeStore) Calldata(_ context.Context, uuid string) (map[string]interface{}, error) {
+	switch uuid {
+	case "global_adgroup_ad19":
+		return map[string]interface{}{"content": `[{"type":"article","article_id":9,"pic":"a.jpg"},{"type":"link","link":"example.com","url":"b.jpg"},{"type":"game","article_id":3,"pic":"c.jpg"}]`}, nil
+	case "search.hotwords":
+		return map[string]interface{}{"type": "json", "content": `["热词"]`}, nil
+	default:
+		return map[string]interface{}{}, nil
+	}
+}
+
+func (s *fakeStore) CountTopicSearch(_ context.Context, wd string) (int, error) {
+	s.searchWD = wd
+	return 1, nil
+}
+
+func (s *fakeStore) ListTopicSearch(_ context.Context, wd string, _ int, _ int, _ int) ([]map[string]interface{}, error) {
+	s.searchWD = wd
+	return []map[string]interface{}{{"tid": "9", "title": "hello", "content": "", "image_srvid": "0", "video_srvid": "0"}}, nil
 }
 
 func (s *fakeStore) Servers(context.Context) ([]map[string]interface{}, error) {
@@ -165,6 +193,73 @@ func TestFavoriteRequiresLogin(t *testing.T) {
 	_, err := service.Listing(context.Background(), ListingRequest{Action: "favorite"})
 	if err != ErrLoginRequired {
 		t.Fatalf("expected ErrLoginRequired, got %v", err)
+	}
+}
+
+func TestCategories(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{}, store, "https://res.test")
+
+	data, err := service.Categories(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("categories: %v", err)
+	}
+	if store.parentID != 3 {
+		t.Fatalf("parentID=%d", store.parentID)
+	}
+	rows := data["rows"].([]map[string]interface{})
+	if len(rows) != 1 || rows[0]["title"] != "官方" {
+		t.Fatalf("data=%#v", data)
+	}
+}
+
+func TestSlides(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	data, err := service.Slides(context.Background())
+	if err != nil {
+		t.Fatalf("slides: %v", err)
+	}
+	rows := data["rows"].([]map[string]interface{})
+	if len(rows) != 3 {
+		t.Fatalf("rows=%#v", rows)
+	}
+	if rows[0]["type"] != "post" || rows[0]["id"] != 9 {
+		t.Fatalf("article row=%#v", rows[0])
+	}
+	if rows[1]["type"] != "ad" || rows[1]["url"] != "http://example.com" {
+		t.Fatalf("link row=%#v", rows[1])
+	}
+	if rows[2]["type"] != "game" || rows[2]["gameid"] != 3 {
+		t.Fatalf("game row=%#v", rows[2])
+	}
+}
+
+func TestSearch(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{}, store, "https://res.test")
+
+	data, err := service.Search(context.Background(), "  关键词  ", 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if store.searchWD != "关键词" {
+		t.Fatalf("searchWD=%q", store.searchWD)
+	}
+	if data["pageinfo"].(map[string]interface{})["page_url"] != "/search?wd=%E5%85%B3%E9%94%AE%E8%AF%8D&page=[?]" {
+		t.Fatalf("data=%#v", data)
+	}
+	if len(data["hotwords"].([]interface{})) != 1 || len(data["rows"].([]map[string]interface{})) != 1 {
+		t.Fatalf("data=%#v", data)
+	}
+}
+
+func TestSearchRequiresKeyword(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	_, err := service.Search(context.Background(), " ", 1)
+	if err != ErrSearchKeywordRequired {
+		t.Fatalf("expected ErrSearchKeywordRequired, got %v", err)
 	}
 }
 

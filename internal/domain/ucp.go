@@ -101,6 +101,12 @@ type UCPWithdrawIndexData struct {
 	BankcardWithdrawMax int                      `json:"bankcard_withdraw_max"`
 }
 
+type UCPWithdrawListingData struct {
+	Rows          []map[string]interface{} `json:"rows"`
+	WithdrawTotal string                   `json:"withdrawTotal"`
+	PageInfo      map[string]interface{}   `json:"pageinfo"`
+}
+
 type UCPCoinLogIndexData struct {
 	Account  map[string]interface{}   `json:"account"`
 	GoldCoin int                      `json:"goldcoin"`

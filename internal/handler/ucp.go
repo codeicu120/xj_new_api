@@ -477,6 +477,31 @@ func (h *UCPHandler) WithdrawIndex(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) WithdrawListing(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, retcode, errmsg, err := h.service.WithdrawListing(c.Request.Context(), authToken(c), page)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) WithdrawRule(c *gin.Context) {
+	data, err := h.service.WithdrawRule(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取提现规则失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *UCPHandler) CoinLogIndex(c *gin.Context) {
 	data, retcode, errmsg, err := h.service.CoinLogIndex(c.Request.Context(), authToken(c))
 	c.Header("X-Served-By", "newbie")

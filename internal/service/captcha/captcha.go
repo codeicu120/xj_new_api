@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -69,11 +70,35 @@ func (s *Service) Req() (domain.CaptchaReqData, error) {
 	}, nil
 }
 
+func (s *Service) ReqV2() (domain.CaptchaReqV2Data, error) {
+	secret, err := s.secretGenerator.Generate(s.captchaStyle)
+	if err != nil {
+		return domain.CaptchaReqV2Data{}, err
+	}
+	body, err := s.PNG(secret)
+	if err != nil {
+		return domain.CaptchaReqV2Data{}, err
+	}
+	return domain.CaptchaReqV2Data{
+		PicURL:     url.QueryEscape("data:image/png;base64," + base64.StdEncoding.EncodeToString(body)),
+		SMSCaptcha: s.smsCaptcha,
+		CaptchaKey: secret,
+	}, nil
+}
+
 func (s *Service) PNG(secret string) ([]byte, error) {
 	if _, err := unpackSecret(secret); err != nil {
 		return nil, err
 	}
 	return NewTestImageService().PNG()
+}
+
+func (s *Service) Verify(secret, code string) bool {
+	actual, err := unpackSecret(secret)
+	if err != nil {
+		return false
+	}
+	return code == actual
 }
 
 func unpackSecret(secret string) (string, error) {

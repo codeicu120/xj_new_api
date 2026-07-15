@@ -134,7 +134,7 @@ func TestAttachIndexEmptyResponse(t *testing.T) {
 func TestSMSAndEmailIndexEmptyResponse(t *testing.T) {
 	router := newTestRouter()
 
-	for _, path := range []string{"/sms", "/sms/index", "/email", "/email/index", "/aiundress/index", "/playlog", "/playlog/index", "/downlog", "/downlog/index", "/favorite", "/favorite/index", "/minifavorite", "/minifavorite/index"} {
+	for _, path := range []string{"/sms", "/sms/index", "/email", "/email/index", "/aiundress/index", "/playlog", "/playlog/index", "/downlog", "/downlog/index", "/favorite", "/favorite/index", "/minifavorite", "/minifavorite/index", "/v2/minifavorite", "/v2/minifavorite/index"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(rec, req)
@@ -144,6 +144,27 @@ func TestSMSAndEmailIndexEmptyResponse(t *testing.T) {
 		}
 		if rec.Body.String() != "" {
 			t.Fatalf("%s: expected empty body, got %q", path, rec.Body.String())
+		}
+	}
+}
+
+func TestV2MiniFavoriteRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/v2/minifavorite/listing", "/v2/minifavorite/add?vodid=9", "/v2/minifavorite/remove?vodid=9"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -9999 || body.ErrMsg != "请登录后操作" {
+			t.Fatalf("%s unexpected response %#v", path, body)
 		}
 	}
 }
@@ -245,10 +266,40 @@ func TestCaptchaReq(t *testing.T) {
 	}
 }
 
+func TestV2CaptchaReq(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v2/captcha/req", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := body.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %T", body.Data)
+	}
+	picURL, ok := data["picurl"].(string)
+	if !ok {
+		t.Fatalf("expected picurl string, got %T", data["picurl"])
+	}
+	if !strings.HasPrefix(picURL, "data%3Aimage%2Fpng%3Bbase64%2C") {
+		t.Fatalf("unexpected v2 picurl %q", picURL[:min(len(picURL), 40)])
+	}
+	if data["captcha_key"] == "" {
+		t.Fatalf("expected captcha_key, got %#v", data["captcha_key"])
+	}
+}
+
 func TestCaptchaPicInvalidSecret(t *testing.T) {
 	router := newTestRouter()
 
-	for _, path := range []string{"/captcha/pic", "/captcha/pic?bad", "/captcha/picx", "/captcha/picx?bad"} {
+	for _, path := range []string{"/captcha/pic", "/captcha/pic?bad", "/captcha/picx", "/captcha/picx?bad", "/v2/captcha/pic", "/v2/captcha/pic?bad", "/v2/captcha/picx", "/v2/captcha/picx?bad"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(rec, req)
@@ -263,6 +314,32 @@ func TestCaptchaPicInvalidSecret(t *testing.T) {
 		if body.RetCode != -4 || body.ErrMsg != "验证码无效" {
 			t.Fatalf("%s unexpected response %#v", path, body)
 		}
+	}
+}
+
+func TestV2CaptchaVerify(t *testing.T) {
+	router := newTestRouter()
+
+	reqRec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v2/captcha/req", nil)
+	router.ServeHTTP(reqRec, req)
+
+	var reqBody legacyjson.Response
+	if err := json.Unmarshal(reqRec.Body.Bytes(), &reqBody); err != nil {
+		t.Fatalf("decode req response: %v", err)
+	}
+	key := reqBody.Data.(map[string]interface{})["captcha_key"].(string)
+
+	rec := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v2/captcha/verify", strings.NewReader("captcha_key="+key+"&captcha_code=wrong"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode wrong response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "验证失败" {
+		t.Fatalf("unexpected wrong response %#v", body)
 	}
 }
 
@@ -299,6 +376,21 @@ func TestCaptchaPicFromReqSecret(t *testing.T) {
 	}
 	if height := binary.BigEndian.Uint32(body[20:24]); height != 34 {
 		t.Fatalf("expected PNG height 34, got %d", height)
+	}
+}
+
+func TestV2CaptchaTestPNG(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v2/captcha/test", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "image/png" {
+		t.Fatalf("expected image/png content type, got %q", contentType)
 	}
 }
 
@@ -477,6 +569,39 @@ func TestCommunityShowMissingTopic(t *testing.T) {
 	}
 	if body.RetCode != -1 || body.ErrMsg != "记录不存在或已删除" {
 		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestCommunityPublicReadRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	tests := []struct {
+		path    string
+		retcode int
+		errmsg  string
+	}{
+		{path: "/community/categories", retcode: 0},
+		{path: "/community/slides", retcode: 0},
+		{path: "/community/search", retcode: -1, errmsg: "请输入关键词"},
+	}
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", tt.path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", tt.path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", tt.path, err)
+		}
+		if body.RetCode != tt.retcode || body.ErrMsg != tt.errmsg {
+			t.Fatalf("%s unexpected response %#v", tt.path, body)
+		}
 	}
 }
 
@@ -1547,7 +1672,7 @@ func TestUCPBalanceLogRequiresLoginWithoutToken(t *testing.T) {
 func TestUCPWithdrawIndexRequiresLoginWithoutToken(t *testing.T) {
 	router := newTestRouter()
 
-	for _, path := range []string{"/ucp/withdraw", "/ucp/withdraw/index?wdtype=1"} {
+	for _, path := range []string{"/ucp/withdraw", "/ucp/withdraw/index?wdtype=1", "/ucp/withdraw/listing"} {
 		t.Run(path, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -1570,6 +1695,28 @@ func TestUCPWithdrawIndexRequiresLoginWithoutToken(t *testing.T) {
 				t.Fatalf("unexpected errmsg %q", body.ErrMsg)
 			}
 		})
+	}
+}
+
+func TestUCPWithdrawRuleRoute(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ucp/withdraw/rule", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("unexpected response %#v", body)
 	}
 }
 

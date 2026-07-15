@@ -1062,6 +1062,49 @@ func (r *Repository) CountBalanceLogs(ctx context.Context, uid int) (int, error)
 	return total, nil
 }
 
+func (r *Repository) CountWithdraws(ctx context.Context, uid int) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_withdraws a WHERE 1=1 AND a.uid=?", uid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count withdraws: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+SELECT b.*, a.*
+FROM user_withdraws a
+LEFT JOIN users b ON b.uid=a.uid
+WHERE 1=1 AND a.uid=?
+ORDER BY a.wdid DESC
+LIMIT ? OFFSET ?`, uid, pageSize, limitOffset(page, pageSize))
+	if err != nil {
+		return nil, fmt.Errorf("query withdraws: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) SumWithdrawAmount(ctx context.Context, uid int) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, "SELECT SUM(withdraw_amount) FROM user_withdraws WHERE uid=? AND wdstatus>0", uid).Scan(&total); err != nil {
+		return 0, fmt.Errorf("sum withdraw amount: %w", err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
+}
+
 func (r *Repository) CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return r.CoinLogsByTypes(ctx, uid, nil, page, pageSize, "logid DESC")
 }

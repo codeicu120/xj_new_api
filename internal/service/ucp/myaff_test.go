@@ -38,6 +38,8 @@ type fakeUserStore struct {
 	calldata           map[string]map[string]interface{}
 	packages           []map[string]interface{}
 	payments           []map[string]interface{}
+	withdraws          []map[string]interface{}
+	withdrawTotal      int
 	vodOrders          []map[string]interface{}
 	vodSupports        []map[string]interface{}
 	latestVODIssue     map[string]interface{}
@@ -563,6 +565,31 @@ func (s fakeUserStore) CoinBonusStats(context.Context, int) (map[string]interfac
 
 func (s fakeUserStore) CountBalanceLogs(context.Context, int) (int, error) {
 	return 1, nil
+}
+
+func (s fakeUserStore) CountWithdraws(context.Context, int) (int, error) {
+	if s.withdraws != nil {
+		return len(s.withdraws), nil
+	}
+	return 1, nil
+}
+
+func (s fakeUserStore) Withdraws(context.Context, int, int, int) ([]map[string]interface{}, error) {
+	if s.withdraws != nil {
+		return s.withdraws, nil
+	}
+	return []map[string]interface{}{{
+		"wdid": "3", "uid": "5", "username": "tester", "wdtype": "0", "withdraw_amount": "12345", "remit_amount": "12000",
+		"createtime": "1770000000", "lastupdate": "1770000060", "name": "张三", "cardnum": "abc", "bankname": "支付宝",
+		"errmsg": "", "wdstatus": "1", "checkstatus": "0",
+	}}, nil
+}
+
+func (s fakeUserStore) SumWithdrawAmount(context.Context, int) (int, error) {
+	if s.withdrawTotal > 0 {
+		return s.withdrawTotal, nil
+	}
+	return 12345, nil
 }
 
 func (s fakeUserStore) SettingExRate(context.Context) (int, error) {
@@ -2011,6 +2038,52 @@ func TestWithdrawIndexFormatsRows(t *testing.T) {
 	}
 	if len(data.CardRows) != 1 || data.CardRows[0]["bankname"] != "支付宝" {
 		t.Fatalf("unexpected card rows %#v", data.CardRows)
+	}
+}
+
+func TestWithdrawListingRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.WithdrawListing(context.Background(), "", 1)
+	if err != nil {
+		t.Fatalf("withdraw listing: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected auth response %d %q", retcode, errmsg)
+	}
+}
+
+func TestWithdrawListingFormatsRows(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, withdrawTotal: 43210}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.WithdrawListing(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatalf("withdraw listing: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	if data.WithdrawTotal != "432.10" || data.PageInfo["page_url"] != "/ucp/withdraw/listing?page=[?]" {
+		t.Fatalf("unexpected listing data %#v", data)
+	}
+	if len(data.Rows) != 1 || data.Rows[0]["withdraw_amount"] != "123.45" || data.Rows[0]["createtime"] != formatWithdrawTime(1770000000) {
+		t.Fatalf("unexpected rows %#v", data.Rows)
+	}
+}
+
+func TestWithdrawRule(t *testing.T) {
+	service := NewService(fakeUserStore{
+		calldata: map[string]map[string]interface{}{
+			"withdraw.rule": {"type": "html", "content": " <p>规则</p> "},
+		},
+	}, "https://res.example.test")
+
+	data, err := service.WithdrawRule(context.Background())
+	if err != nil {
+		t.Fatalf("withdraw rule: %v", err)
+	}
+	if data["content"] != "<p>规则</p>" {
+		t.Fatalf("unexpected data %#v", data)
 	}
 }
 

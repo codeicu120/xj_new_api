@@ -3,6 +3,8 @@ package ucp
 import (
 	"context"
 	"strconv"
+	"strings"
+	"time"
 
 	"xj_comp/internal/domain"
 )
@@ -70,4 +72,76 @@ func (s *Service) WithdrawIndex(ctx context.Context, token string) (domain.UCPWi
 		BankcardWithdrawMin: atoi(setting["bankcard_withdraw_min"]),
 		BankcardWithdrawMax: atoi(setting["bankcard_withdraw_max"]),
 	}, 0, "", nil
+}
+
+func (s *Service) WithdrawListing(ctx context.Context, token string, page int) (domain.UCPWithdrawListingData, int, string, error) {
+	user, err := s.authenticatedPaymentUser(ctx, token)
+	if err != nil {
+		return domain.UCPWithdrawListingData{}, -1, "获取提现列表失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return domain.UCPWithdrawListingData{}, -9999, "您还没有登录", nil
+	}
+	const pageSize = 20
+	total, err := s.store.CountWithdraws(ctx, uid)
+	if err != nil {
+		return domain.UCPWithdrawListingData{}, -1, "获取提现列表失败", err
+	}
+	page = normalizePage(total, pageSize, page)
+	rows, err := s.store.Withdraws(ctx, uid, page, pageSize)
+	if err != nil {
+		return domain.UCPWithdrawListingData{}, -1, "获取提现列表失败", err
+	}
+	withdrawTotal, err := s.store.SumWithdrawAmount(ctx, uid)
+	if err != nil {
+		return domain.UCPWithdrawListingData{}, -1, "获取提现列表失败", err
+	}
+	return domain.UCPWithdrawListingData{
+		Rows:          processWithdrawRows(rows),
+		WithdrawTotal: formatRMB(withdrawTotal),
+		PageInfo:      pageInfo(total, pageSize, page, "/ucp/withdraw/listing?page=[?]"),
+	}, 0, "", nil
+}
+
+func (s *Service) WithdrawRule(ctx context.Context) (map[string]interface{}, error) {
+	row, err := s.store.CalldataByUUID(ctx, "withdraw.rule")
+	if err != nil {
+		return nil, err
+	}
+	content := ""
+	if str(row["type"]) == "html" {
+		content = strings.TrimSpace(str(row["content"]))
+	}
+	return map[string]interface{}{"content": content}, nil
+}
+
+func processWithdrawRows(rows []map[string]interface{}) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]interface{}{
+			"wdid":            str(row["wdid"]),
+			"uid":             str(row["uid"]),
+			"username":        str(row["username"]),
+			"wdtype":          str(row["wdtype"]),
+			"withdraw_amount": formatRMB(atoi(row["withdraw_amount"])),
+			"remit_amount":    formatRMB(atoi(row["remit_amount"])),
+			"createtime":      formatWithdrawTime(atoi64(row["createtime"])),
+			"lastupdate":      formatWithdrawTime(atoi64(row["lastupdate"])),
+			"name":            str(row["name"]),
+			"cardnum":         str(row["cardnum"]),
+			"bankname":        str(row["bankname"]),
+			"errmsg":          str(row["errmsg"]),
+			"wdstatus":        str(row["wdstatus"]),
+			"checkstatus":     str(row["checkstatus"]),
+		})
+	}
+	return out
+}
+
+func formatWithdrawTime(ts int64) string {
+	if ts <= 0 {
+		return time.Unix(0, 0).Format("2006-01-02 15:04:05")
+	}
+	return time.Unix(ts, 0).Format("2006-01-02 15:04:05")
 }

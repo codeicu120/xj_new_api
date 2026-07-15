@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ var commentsParamKeys = []string{"orderby", "page"}
 
 var ErrLoginRequired = errors.New("community login required")
 var ErrTopicNotFound = errors.New("community topic not found")
+var ErrSearchKeywordRequired = errors.New("community search keyword required")
 
 type AuthStore interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
@@ -31,6 +33,10 @@ type AuthStore interface {
 type Store interface {
 	CountTopics(ctx context.Context, filter communityRepo.TopicFilter) (int, error)
 	ListTopics(ctx context.Context, filter communityRepo.TopicFilter, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
+	Categories(ctx context.Context, parentID int) ([]map[string]interface{}, error)
+	Calldata(ctx context.Context, uuid string) (map[string]interface{}, error)
+	CountTopicSearch(ctx context.Context, wd string) (int, error)
+	ListTopicSearch(ctx context.Context, wd string, total int, page int, pageSize int) ([]map[string]interface{}, error)
 	Servers(ctx context.Context) ([]map[string]interface{}, error)
 	ImagesByTIDs(ctx context.Context, tids []int) (map[int][]map[string]interface{}, error)
 	VideosByTIDs(ctx context.Context, tids []int) (map[int][]map[string]interface{}, error)
@@ -143,6 +149,85 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.Commu
 		Params:       params,
 		Rows:         rows,
 		PageInfo:     vodService.PageInfo(total, pageSize, atoi(params["page"]), pageURL),
+	}, nil
+}
+
+func (s *Service) Categories(ctx context.Context, parentID int) (map[string]interface{}, error) {
+	rows, err := s.store.Categories(ctx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"rows": rows}, nil
+}
+
+func (s *Service) Slides(ctx context.Context) (map[string]interface{}, error) {
+	callrow, err := s.store.Calldata(ctx, "global_adgroup_ad19")
+	if err != nil {
+		return nil, err
+	}
+	rawRows := []map[string]interface{}{}
+	if content := str(callrow["content"]); content != "" {
+		_ = json.Unmarshal([]byte(content), &rawRows)
+	}
+	slides := []map[string]interface{}{}
+	for _, row := range rawRows {
+		pic := s.coverURL(firstNonEmpty(str(row["pic"]), str(row["url"])), 0, nil)
+		switch str(row["type"]) {
+		case "article":
+			id := atoi(row["article_id"])
+			if id <= 0 {
+				continue
+			}
+			slides = append(slides, map[string]interface{}{"type": "post", "id": id, "pic": pic})
+		case "link":
+			link := strings.TrimSpace(str(row["link"]))
+			if link == "" {
+				continue
+			}
+			if !regexp.MustCompile(`(?i)^[a-z]{2,5}://`).MatchString(link) {
+				link = "http://" + link
+			}
+			slides = append(slides, map[string]interface{}{"type": "ad", "url": link, "pic": pic})
+		case "game":
+			slides = append(slides, map[string]interface{}{"type": "game", "gameid": atoi(row["article_id"]), "pic": pic})
+		}
+	}
+	return map[string]interface{}{"rows": slides}, nil
+}
+
+func (s *Service) Search(ctx context.Context, wd string, page int) (map[string]interface{}, error) {
+	wd = strings.TrimSpace(wd)
+	if wd == "" {
+		return nil, ErrSearchKeywordRequired
+	}
+	if page < 1 {
+		page = 1
+	}
+	const pageSize = 16
+	total, err := s.store.CountTopicSearch(ctx, wd)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.store.ListTopicSearch(ctx, wd, total, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	rows, err = s.processTopics(ctx, rows, 0)
+	if err != nil {
+		return nil, err
+	}
+	callrow, err := s.store.Calldata(ctx, "search.hotwords")
+	if err != nil {
+		return nil, err
+	}
+	hotwords := []interface{}{}
+	if str(callrow["type"]) == "json" && str(callrow["content"]) != "" {
+		_ = json.Unmarshal([]byte(str(callrow["content"])), &hotwords)
+	}
+	return map[string]interface{}{
+		"rows":     rows,
+		"hotwords": hotwords,
+		"pageinfo": vodService.PageInfo(total, pageSize, page, "/search?wd="+url.QueryEscape(wd)+"&page=[?]"),
 	}, nil
 }
 
@@ -706,6 +791,15 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func cleanIP(ip string) string {

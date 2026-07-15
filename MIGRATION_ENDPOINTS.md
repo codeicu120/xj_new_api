@@ -82,6 +82,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/*-:params`（上述 action） | ANY | `CommunityHandler.Listing` |
 | `/community/show` | ANY | `CommunityHandler.Show` |
 | `/community/clisting`、`/community/clisting-:params` | ANY | `CommunityHandler.CommentListing` |
+| `/community/categories` | ANY | `CommunityHandler.Categories` |
+| `/community/slides` | ANY | `CommunityHandler.Slides` |
+| `/community/search` | ANY | `CommunityHandler.Search` |
 | `/community/attention` | ANY | `CommunityHandler.Attention` |
 | `/community/up`、`/community/up_comment` | ANY | `CommunityHandler.Up/UpComment` |
 | `/community/comment` | ANY | `CommunityHandler.Comment` |
@@ -123,6 +126,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/account`、`/ucp/account/index` | ANY | `UCPHandler.AccountIndex` |
 | `/ucp/account/balancelog` | ANY | `UCPHandler.BalanceLog` |
 | `/ucp/withdraw`、`/ucp/withdraw/index` | ANY | `UCPHandler.WithdrawIndex` |
+| `/ucp/withdraw/listing` | ANY | `UCPHandler.WithdrawListing` |
+| `/ucp/withdraw/rule` | ANY | `UCPHandler.WithdrawRule` |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | ANY | `UCPHandler.CoinLogIndex` |
 | `/ucp/coinlog/bonuslog` | ANY | `UCPHandler.CoinLogBonusLog` |
 | `/ucp/coinlog/invitelog` | ANY | `UCPHandler.CoinLogInviteLog` |
@@ -155,6 +160,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/amazing/categories` | ANY | `AmazingHandler.Categories` |
 | `/v2/amazing/listing`、`/v2/amazing/recommend`、`/v2/amazing/hot`、`/v2/amazing/latest` | ANY | `AmazingHandler.Listing` |
 | `/v2/amazing/listing-:params`、`/v2/amazing/recommend-:params`、`/v2/amazing/hot-:params`、`/v2/amazing/latest-:params` | ANY | `AmazingHandler.Listing` |
+| `/v2/captcha/req` | ANY | `CaptchaHandler.ReqV2` |
+| `/v2/captcha/pic`、`/v2/captcha/picx` | ANY | `CaptchaHandler.Pic/PicX` |
+| `/v2/captcha/verify` | ANY | `CaptchaHandler.Verify` |
+| `/v2/captcha/test` | ANY | `TestHandler.Test` |
 | `/v2/so/list` | ANY | `SOHandler.List` |
 | `/v2/vod/listing`、`/v2/vod/recommend`、`/v2/vod/hot`、`/v2/vod/latest` | ANY | `VODHandler.Listing` |
 | `/v2/vod/listing-:params`、`/v2/vod/recommend-:params`、`/v2/vod/hot-:params`、`/v2/vod/latest-:params` | ANY | `VODHandler.Listing` |
@@ -162,6 +171,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 | `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `VODHandler.ReqPlay/ReqDown` |
 | `/v2/vod/buy/:vodid` | ANY | `BoughtHandler.Buy` |
+| `/v2/minifavorite`、`/v2/minifavorite/index` | ANY | `handler.EmptyHTML` |
+| `/v2/minifavorite/listing` | ANY | `FavoriteHandler.MiniV2Listing` |
+| `/v2/minifavorite/add`、`/v2/minifavorite/remove` | ANY | `FavoriteHandler.MiniAdd/MiniRemove` |
 
 ### 已注册占位
 
@@ -260,6 +272,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/amazing/hot-:params` | `c.apiv2.amazing->listing` | `AmazingHandler.Listing` | 已重构 |
 | `/v2/amazing/latest` | `c.apiv2.amazing->listing` | `AmazingHandler.Listing` | 已重构，对比通过 |
 | `/v2/amazing/latest-:params` | `c.apiv2.amazing->listing` | `AmazingHandler.Listing` | 已重构 |
+| `/v2/captcha/req` | `c.apiv2.captcha->req` | `CaptchaHandler.ReqV2` | 已重构；返回 URL encode 后的 base64 PNG、`smscaptcha` 和 `captcha_key` |
+| `/v2/captcha/pic`、`/v2/captcha/picx` | `c.apiv2.captcha->pic/picx` | `CaptchaHandler.Pic/PicX` | 已重构；无效 secret 返回 HTTP 404 + `retcode=-4`，有效 secret 输出 100x34 PNG |
+| `/v2/captcha/verify` | `c.apiv2.captcha->verify` | `CaptchaHandler.Verify` | 已重构；本地 `captcha_key/captcha_code` 分支对齐，Google/Tencent/自建验证码外部票据不伪造成功 |
+| `/v2/captcha/test` | `c.apiv2.captcha->test` | `TestHandler.Test` | 已重构；输出 100x34 PNG |
 | `/v2/vod/listing` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/v2/vod/listing-:params` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/v2/vod/recommend` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，随机列表按 shape 对比 |
@@ -271,6 +287,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/show/:vodid` | `c.apiv2.vod->show` | `VODHandler.Show` | 已重构，对比通过；复用视频详情实现 |
 | `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；复用普通视频播放/下载地址请求实现，记录/购买/权限/地址错误、免费/限免和额度内分支可用，扣金币、日志和奖励分支暂不写资产 |
 | `/v2/vod/buy/:vodid` | `c.apiv2.vod->buy` | `BoughtHandler.Buy` | 已重构；复用购买付费影片事务，返回码按 v2 PHP：未登录 `-9999`、余额不足 `4`、不存在 `-1` |
+| `/v2/minifavorite`、`/v2/minifavorite/index` | `c.apiv2.minifavorite->index` | `handler.EmptyHTML` | 已重构；旧 PHP 空方法，返回 `200 text/html` 空 body |
+| `/v2/minifavorite/listing` | `c.apiv2.minifavorite->listing` | `FavoriteHandler.MiniV2Listing` | 已重构；登录只读小视频收藏，支持 `wd` 搜索，rows 按 v2 PHP 包装为 `{vodrow,user}` |
+| `/v2/minifavorite/add` | `c.apiv2.minifavorite->add` | `FavoriteHandler.MiniAdd` | 已重构；复用小视频收藏新增逻辑，登录、视频不存在、重复收藏和成功写入分支迁移；金币奖励默认不改资产 |
+| `/v2/minifavorite/remove` | `c.apiv2.minifavorite->remove` | `FavoriteHandler.MiniRemove` | 已重构；复用小视频取消收藏逻辑，空 `vodids` 返回 `已删除0项` |
 
 ### 非 v2 视频列表接口
 
@@ -340,6 +360,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/*-:params`（上述 action） | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构；参数模板 `$category_id-$type-$orderby-$page` |
 | `/community/show` | `c.api.topic->show` | `CommunityHandler.Show` | 已重构；社区详情，读取主题、媒体和评论树，并保留旧 PHP `visit_count+1` 副作用 |
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | `CommunityHandler.CommentListing` | 已重构，对比通过；评论树列表，`tid` 不存在分支一致 |
+| `/community/categories` | `c.api.topic->categories` | `CommunityHandler.Categories` | 已重构；公共只读分类，保留 `parent_id` 过滤、`status=1` 和 ``order`` DESC/id ASC 排序 |
+| `/community/slides` | `c.api.topic->slides` | `CommunityHandler.Slides` | 已重构；读取 `global_adgroup_ad19` 并映射 article/link/game 为 post/ad/game |
+| `/community/search` | `c.api.topic->search` | `CommunityHandler.Search` | 已重构；空关键词返回 `请输入关键词`，非空按 title/tags 搜索、返回 `rows/hotwords/pageinfo` |
 | `/community/attention` | `c.api.topic->attention` | `CommunityHandler.Attention` | 已重构；登录收藏/取消收藏帖子，支持 `tids` 批量取消收藏并按实际删除更新 `fav_count`；未登录分支 live 对比通过 |
 | `/community/up`、`/community/up_comment` | `c.api.topic->up/up_comment` | `CommunityHandler.Up/UpComment` | 已重构；登录点赞/取消点赞帖子或评论，更新去重表和 `upnum` 计数；未登录分支 live 对比通过 |
 | `/community/comment` | `c.api.topic->comment` | `CommunityHandler.Comment` | 已重构；登录评论发布，保留权限、内容、回复、重复校验和评论树写入，成功评论进入待审核状态 |
@@ -391,6 +414,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | `UCPHandler.BalanceLog` | 已重构，对比通过；登录只读余额日志分页 |
 | `/ucp/account/:action?`（除已列 action） | `c.api.ucp.account->$action` | 不接管 | PHP `ucp/account.php` 仅定义 `index/balancelog`，均已覆盖 |
 | `/ucp/withdraw`、`/ucp/withdraw/index` | `c.api.ucp.withdraw->index` | `UCPHandler.WithdrawIndex` | 已重构；登录只读提现初始化页，返回账户、收款地址、金币折算和提现配置 |
+| `/ucp/withdraw/listing` | `c.api.ucp.withdraw->listing` | `UCPHandler.WithdrawListing` | 已重构；登录只读提现记录，返回 `rows/withdrawTotal/pageinfo`，金额和时间按旧 PHP `procRow` 格式化 |
+| `/ucp/withdraw/rule` | `c.api.ucp.withdraw->rule` | `UCPHandler.WithdrawRule` | 已重构；公共只读提现规则，读取 `withdraw.rule` 的 html 内容 |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | `UCPHandler.CoinLogIndex` | 已重构，对比通过；登录只读金币日志首页，最近 10 条 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
@@ -442,15 +467,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 ## 未重构接口
 
-### 首页、全局配置和工具类
-
-| 接口 | PHP handler | 备注 |
-| --- | --- | --- |
-| `/v2/captcha/req` | `c.apiv2.captcha->req` | PHP 路由存在，Go 未注册；v2 验证码申请，返回 base64 图片和 captcha key |
-| `/v2/captcha/pic`、`/v2/captcha/picx` | `c.apiv2.captcha->pic/picx` | PHP 路由存在，Go 未注册；v2 图片验证码输出 |
-| `/v2/captcha/verify` | `c.apiv2.captcha->verify` | PHP 路由存在，Go 未注册；验证码校验，可能调用 Google/Tencent/自建验证码 |
-| `/v2/captcha/test` | `c.apiv2.captcha->test` | PHP 路由存在，Go 未注册；测试验证码图片 |
-
 ### 非 v2 视频接口
 
 | 接口 | PHP handler | 备注 |
@@ -466,10 +482,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 未重构；金币打赏 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
-| `/v2/minifavorite`、`/v2/minifavorite/index` | `c.apiv2.minifavorite->index` | PHP 路由存在，Go 未注册；旧方法为空，需对比空响应 |
-| `/v2/minifavorite/listing` | `c.apiv2.minifavorite->listing` | PHP 路由存在，Go 未注册；v2 小视频收藏列表 |
-| `/v2/minifavorite/add` | `c.apiv2.minifavorite->add` | PHP 路由存在，Go 未注册；v2 小视频收藏，含收藏任务金币奖励 |
-| `/v2/minifavorite/remove` | `c.apiv2.minifavorite->remove` | PHP 路由存在，Go 未注册；v2 小视频取消收藏 |
 
 ### 用户账号
 
@@ -498,7 +510,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | `c.api.ucp.task->$action` | 未重构；PHP 实际剩余 `sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick/invite`，涉及任务奖励、二维码图片生成或 keylimit 写入 |
-| `/ucp/withdraw/:action?`（除 `/ucp/withdraw`、`/ucp/withdraw/index`） | `c.api.ucp.withdraw->$action` | 未重构；PHP 实际剩余 `create/listing/rule`，其中 `create` 涉及账户余额、银行卡、风控和事务 |
+| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 未重构；提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen/qrcode` 涉及奖励写入或图片生成 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金币兑换和会员资产 |
@@ -528,9 +540,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/community/categories` | `c.api.topic->categories` | PHP 动态路由存在，Go 未注册；社区分类列表 |
-| `/community/slides` | `c.api.topic->slides` | PHP 动态路由存在，Go 未注册；社区轮播/广告位 |
-| `/community/search` | `c.api.topic->search` | PHP 动态路由存在，Go 未注册；社区搜索和热词 |
 | `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源

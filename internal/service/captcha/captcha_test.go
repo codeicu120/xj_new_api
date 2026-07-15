@@ -1,6 +1,7 @@
 package captcha
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,28 @@ func TestServiceReqPic(t *testing.T) {
 	}
 }
 
+func TestServiceReqV2ReturnsBase64ImageAndKey(t *testing.T) {
+	service := NewService(1, 0, nil)
+
+	data, err := service.ReqV2()
+	if err != nil {
+		t.Fatalf("req v2 captcha: %v", err)
+	}
+	if data.SMSCaptcha != 1 {
+		t.Fatalf("unexpected smscaptcha %d", data.SMSCaptcha)
+	}
+	if data.CaptchaKey == "" {
+		t.Fatal("expected captcha key")
+	}
+	decoded, err := url.QueryUnescape(data.PicURL)
+	if err != nil {
+		t.Fatalf("unescape picurl: %v", err)
+	}
+	if !strings.HasPrefix(decoded, "data:image/png;base64,") {
+		t.Fatalf("unexpected picurl prefix %q", decoded[:min(len(decoded), 32)])
+	}
+}
+
 func TestServicePNGRejectsInvalidSecret(t *testing.T) {
 	service := NewService(1, 0, nil)
 
@@ -62,6 +85,25 @@ func TestUnpackSecretMatchesPHPEncryptFormat(t *testing.T) {
 	}
 	if code != "1234" {
 		t.Fatalf("unexpected code %q", code)
+	}
+}
+
+func TestServiceVerify(t *testing.T) {
+	service := NewService(1, 0, nil)
+	data, err := service.Req()
+	if err != nil {
+		t.Fatalf("req captcha: %v", err)
+	}
+	secret := data.PicURL[strings.Index(data.PicURL, "?")+1:]
+	code, err := unpackSecret(secret)
+	if err != nil {
+		t.Fatalf("unpack generated secret: %v", err)
+	}
+	if !service.Verify(secret, code) {
+		t.Fatal("expected verify success")
+	}
+	if service.Verify(secret, code+"x") {
+		t.Fatal("expected verify failure")
 	}
 }
 

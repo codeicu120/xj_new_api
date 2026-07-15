@@ -34,6 +34,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/account`、`/ucp/account/index` | `c.api.ucp.account->index` | 本轮完成 | 登录只读资产主页，读取账户、金币、汇率和最近余额日志，金额与时间格式对齐 PHP。 |
 | `/ucp/account/balancelog` | `c.api.ucp.account->balancelog` | 本轮完成 | 登录只读余额日志分页，读取 `user_balancelogs`，分页和日志字段映射与 PHP 一致。 |
 | `/ucp/withdraw`、`/ucp/withdraw/index` | `c.api.ucp.withdraw->index` | 本轮完成 | 登录只读提现初始化页，返回账户、收款地址、金币折算和提现配置；提现 `create` 未接管。 |
+| `/ucp/withdraw/listing` | `c.api.ucp.withdraw->listing` | 本轮完成 | 登录只读提现记录，返回 `rows/withdrawTotal/pageinfo`；提现 `create` 未接管。 |
 | `/ucp/coinlog`、`/ucp/coinlog/index` | `c.api.ucp.coinlog->index` | 本轮完成 | 登录只读金币日志首页，读取账户、金币、汇率和最近 10 条 `user_coinlogs`，类型、时间、手机号遮罩与 PHP 一致。 |
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | 本轮完成 | 登录只读收益金币日志分页，列表包含 22/32，累计收益统计按 PHP 保持不含 22/32。 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | 本轮完成 | 登录只读邀请金币日志分页，过滤 `cointype IN (201,32,11)`，分页和日志字段映射与 PHP 一致。 |
@@ -45,6 +46,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/favorite/listing`、`/minifavorite/listing` | `c.api.favorite/minifavorite->listing` | 本轮完成 | 登录只读收藏列表；普通视频支持 `wd` 搜索，小视频补 `isfavorite=1`。 |
 | `/favorite/add`、`/minifavorite/add` | `c.api.favorite/minifavorite->add` | 本轮完成 | 登录新增收藏；未登录、视频不存在、重复收藏分支 live 对比通过，成功写入由 fake 覆盖；金币奖励默认不改资产，保留后续 rewarder 接入点。 |
 | `/favorite/remove`、`/minifavorite/remove` | `c.api.favorite/minifavorite->remove` | 本轮完成 | 登录删除收藏记录；空 `vodids` 与 PHP 一样返回 `已删除0项`。 |
+| `/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove` | `c.apiv2.minifavorite->listing/add/remove` | 本轮完成 | 登录小视频收藏；listing 支持 `wd` 并按 v2 PHP 返回 `{vodrow,user}` 包装，add/remove 复用小视频收藏逻辑，金币奖励默认不改资产。 |
 | `/comment/post` | `c.api.comment->post` | 本轮完成 | 登录评论发布；未登录分支 live 对比通过，成功写入由 fake 覆盖；金币奖励和回复通知保留后续接入点。 |
 | `/community/attention` | `c.api.topic->attention` | 本轮完成 | 登录收藏/取消收藏帖子，支持 `tids` 批量取消；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
 | `/community/up`、`/community/up_comment` | `c.api.topic->up/up_comment` | 本轮完成 | 登录点赞/取消点赞帖子或评论；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
@@ -71,5 +73,5 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | 接口 | 原因 |
 | --- | --- |
 | `/ucp/task/*`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
+| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/withdraw/listing`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用。 |

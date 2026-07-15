@@ -65,6 +65,7 @@
 | `/playlog/remove`、`/downlog/remove` | `c.api.playlog/downlog->remove` | 本轮完成 | 播放/下载记录软删除；未登录按游客 sid，空 `vodids` 返回 `已删除0项`。 |
 | `/comment`、`/comment/index` | `c.api.comment->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/favorite`、`/favorite/index`、`/minifavorite`、`/minifavorite/index` | `c.api.favorite/minifavorite->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
+| `/v2/minifavorite`、`/v2/minifavorite/index` | `c.apiv2.minifavorite->index` | 本轮完成 | 旧 PHP 空方法，返回 `200 text/html` 空 body。 |
 | `/minivod/listing`、`/minivod/recommend`、`/minivod/hot`、`/minivod/latest` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频公共列表，支持筛选、排序、分页、随机推荐和 latest 用户包装 rows。 |
 | `/minivod/topzan`、`/minivod/topcomment`、`/minivod/topplay`、`/minivod/topcoin`、`/minivod/topnew`、`/minivod/topday`、`/minivod/topweek`、`/minivod/topmonth` 及 `-params` | `c.api.minivod->listing` | 本轮完成 | 小视频排行榜列表，setting 序列化 ID 排行和日/周/月榜对比通过。 |
 | `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
@@ -77,6 +78,10 @@
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` 及 `-params` | `c.api.topic->list` | 本轮完成 | 社区主题列表；`favorite` 未登录分支、列表主结构和媒体字段 live 对比通过。 |
 | `/community/show` | `c.api.topic->show` | 本轮完成 | 社区详情；返回主题、媒体和评论树，保留旧 PHP `visit_count+1` 副作用。 |
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 本轮完成 | 社区评论列表；`tid` 不存在分支和空评论分页 live 对比通过。 |
+| `/community/categories` | `c.api.topic->categories` | 本轮完成 | 公共只读分类；支持 `parent_id` 过滤，只返回 `status=1` 分类。 |
+| `/community/slides` | `c.api.topic->slides` | 本轮完成 | 公共只读轮播；读取 `global_adgroup_ad19` 并映射 article/link/game。 |
+| `/community/search` | `c.api.topic->search` | 本轮完成 | 公共搜索；空关键词返回 `请输入关键词`，非空返回 `rows/hotwords/pageinfo`。 |
+| `/ucp/withdraw/rule` | `c.api.ucp.withdraw->rule` | 本轮完成 | 公共只读提现规则；读取 `withdraw.rule` 的 HTML 内容。 |
 | `/community/attention` | `c.api.topic->attention` | 本轮完成 | 登录收藏/取消收藏帖子，支持 `tids` 批量取消；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
 | `/community/up`、`/community/up_comment` | `c.api.topic->up/up_comment` | 本轮完成 | 登录点赞/取消点赞帖子或评论；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |
 | `/community/comment` | `c.api.topic->comment` | 本轮完成 | 登录社区评论发布；未登录分支 live 对比通过，成功写入由 fake 覆盖。 |

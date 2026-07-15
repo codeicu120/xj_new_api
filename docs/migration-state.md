@@ -186,6 +186,18 @@
 - 风险边界：扣金币、播放/下载日志写入和奖励分支仍随普通视频接口保留在未重构高风险清单。
 - 测试：`go test ./internal/service/vod ./internal/server` 通过；server 测试覆盖 `/v2/vod/reqplay/0` 和 `/v2/vod/reqdown/0` 已走 Go handler；PHP-Go live 对比两个路径的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
+### `/v2/minifavorite`、`/v2/minifavorite/index`、`/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove`
+
+- PHP: `c.apiv2.minifavorite->index/listing/add/remove`
+- Go: `internal/handler.FavoriteHandler`
+- Service: `internal/service/favorite.Service`
+- Repository: `internal/repository/favorite.Repository`
+- Auth: `listing/add/remove` 要求登录，未登录返回 `retcode=-9999`、`errmsg=请登录后操作`；`index` 为空响应。
+- DB: `listing` 读取 `minivod_favorites LEFT JOIN vods(showtype=1)`，v2 支持 `wd` 过滤标题，再按 `authorid` 批量读取 `users`；`add/remove` 复用小视频收藏写入和删除。
+- 兼容规则：v2 `listing` 与旧版 `/minifavorite/listing` 的差异是 `data.rows` 每行包装为 `{vodrow,user}`，`vodrow.isfavorite=1`，作者不存在时 `user=null`；分页 URL 仍按 PHP 使用 `/minifavorite/listing?page=[?]`，带关键词时追加 `&wd=...`。
+- 风险边界：`add` 的收藏任务金币奖励默认不改资产，后续接入 rewarder/coinlog 后再补事务化奖励。
+- 测试：`go test ./internal/service/favorite` 通过，service 覆盖 v2 rows 包装和 `wd` 分页；server 已补 v2 空 index 与未登录分支测试，但当前 `go test ./internal/server` 被既有 `internal/service/community/community.go:174 undefined: firstNonEmpty` 编译问题阻断。
+
 ### `/vod/{listing,recommend,hot,latest}`
 
 - PHP: `c.api.vod->listing`
@@ -604,6 +616,16 @@
 - DB: 读取 `users_account`、`users_quota`、`user_bankcards`、`settings(setting/game.setting)`。
 - 兼容规则：返回 `account/cardrows/goldcoin/exrate/topupmin/coin2rmb/max2rmb/game_withdrawmin/game_withdrawrate/alipay_withdraw_min/alipay_withdraw_max/bankcard_withdraw_min/bankcard_withdraw_max`；`topupmin/coin2rmb/max2rmb` 为元字符串，提现上下限保持旧配置原始整数值；`create` 提现写入仍未接管。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/withdraw`、`/ucp/withdraw/index` 未登录分支和测试 token 登录成功分支字段值一致，忽略旧 PHP 动态游客 token。
+
+### `/ucp/withdraw/listing`、`/ucp/withdraw/rule`
+
+- PHP: `c.api.ucp.withdraw->listing/rule`
+- Go: `internal/handler.UCPHandler.WithdrawListing/WithdrawRule`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: `listing` 必须登录，未登录返回 `retcode=-9999`、`errmsg=您还没有登录`；`rule` 公共只读。
+- 兼容规则：`listing` 返回 `rows/withdrawTotal/pageinfo`，行字段按 PHP `withdraw->procRow` 处理，金额为元字符串，`createtime/lastupdate` 为 `Y-m-d H:i:s`；`rule` 仅当 `maintain_calldata.withdraw.rule` 类型为 `html` 时返回 trim 后内容。
+- 测试：`go test ./internal/service/ucp -run 'TestWithdraw|TestBalanceLog'`、`go test ./internal/server -run 'TestUCPWithdraw|Test.*Captcha|TestCommunity|TestV2MiniFavoriteRoutes'` 通过；`/ucp/withdraw/create` 仍未迁移，保持高风险资产写入清单。
 
 ### `/ucp/coinlog`、`/ucp/coinlog/index`
 
@@ -1389,8 +1411,24 @@
 ### PHP 路由核对补充
 
 - 核对来源：`/Users/canavs/xjProj/XJBackend/api/api.php`、`src/c/api/topic.php`、`src/c/apiv2/minifavorite.php`、`src/c/apiv2/captcha.php`、`src/c/api/payment.php`、`src/c/respond/*`、`src/c/api/ucp/*`。
-- 补充到未重构清单：`/community/categories`、`/community/slides`、`/community/search`。
-- 补充到未重构清单：`/v2/minifavorite`、`/v2/minifavorite/index`、`/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove`。
+- 补充并迁移 `/community/categories`、`/community/slides`、`/community/search`。
+- 补充并迁移 `/v2/minifavorite`、`/v2/minifavorite/index`、`/v2/minifavorite/listing`、`/v2/minifavorite/add`、`/v2/minifavorite/remove`；其中 v2 listing rows 保持 `{vodrow,user}` 包装。
 - 补充到未重构清单：`/v2/captcha/req`、`/v2/captcha/pic`、`/v2/captcha/picx`、`/v2/captcha/verify`、`/v2/captcha/test`。
-- 修正备注：`/payment/:action` 实际包含 `reqpay`、多组 `pay*`、`gpay*`、`newpay*` 等；`/respond/:action` 实际存在多组回调文件；`/ucp/task` 剩余 action 为 `sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick/invite`；`/ucp/withdraw` 剩余 action 为 `create/listing/rule`。
+- 修正备注：`/payment/:action` 实际包含 `reqpay`、多组 `pay*`、`gpay*`、`newpay*` 等；`/respond/:action` 实际存在多组回调文件；`/ucp/task` 剩余 action 为 `sign/share/qrcode/qrcodeSave/invitecodeInput/adviewClick/invite`；`/ucp/withdraw` 剩余 action 为 `create`。
 - 未发现新增遗漏：`hgame` 仅稳定定义 `index`；`bought/listing/delete/buy` 已迁；`special`、`art`、`game/wali/balance`、`game/lottery/gameList` 均已在已重构区覆盖。
+
+### v2 验证码接口
+
+- 已迁移：`/v2/captcha/req`、`/v2/captcha/pic`、`/v2/captcha/picx`、`/v2/captcha/verify`、`/v2/captcha/test`。
+- PHP: `c.apiv2.captcha->req/pic/picx/verify/test`。
+- Go: `internal/handler.CaptchaHandler`、`internal/service/captcha.Service`；测试图片复用 `TestHandler.Test`。
+- 兼容规则：`req` 返回 URL encode 的 `data:image/png;base64,...`、`smscaptcha`、`captcha_key`；`pic/picx` 无效 secret 返回 HTTP 404 + `retcode=-4`，有效 secret 返回 `image/png`；`verify` 支持本地 `captcha_key/captcha_code` 成功文案 `验证成功`，Google/Tencent/自建外部票据不伪造成功；`test` 返回 100x34 PNG。
+- 测试：`go test ./internal/service/captcha`、`go test ./internal/server -run 'Test.*Captcha'` 通过。
+
+### 社区公共只读补充接口
+
+- 已迁移：`/community/categories`、`/community/slides`、`/community/search`。
+- PHP: `c.api.topic->categories/slides/search`。
+- Go: `internal/handler.CommunityHandler`、`internal/service/community.Service`、`internal/repository/community.Repository`。
+- 兼容规则：`categories` 支持 `parent_id`，只读 `topic_category.status=1` 并按 ``order`` DESC/id ASC；`slides` 读取 `maintain_calldata.global_adgroup_ad19` 并将 article/link/game 映射成 post/ad/game；`search` 空 `wd` 返回 `请输入关键词`，非空搜索 `topics.title/tags`，按 `visit_count DESC` 返回 `rows/hotwords/pageinfo`。
+- 测试：`go test ./internal/service/community`、`go test ./internal/server -run 'Test.*Captcha|TestCommunity|TestEmptyHTMLRoutes|TestV2MiniFavoriteRoutes'` 通过。

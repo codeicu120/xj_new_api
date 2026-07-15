@@ -3,6 +3,8 @@ package favorite
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"xj_comp/internal/domain"
@@ -21,6 +23,7 @@ type Store interface {
 	VODByID(ctx context.Context, vodid int) (map[string]interface{}, error)
 	Count(ctx context.Context, kind favoriteRepo.Kind, uid int, vodid int, since int64) (int, error)
 	Add(ctx context.Context, kind favoriteRepo.Kind, uid int, vodid int, now int64) error
+	UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
 }
 
 type VODProcessor interface {
@@ -35,13 +38,36 @@ type Service struct {
 	store        Store
 	vodProcessor VODProcessor
 	now          func() time.Time
+	resourceBase string
 }
 
 func NewService(auth AuthStore, store Store, vodProcessor VODProcessor) *Service {
 	return &Service{auth: auth, store: store, vodProcessor: vodProcessor, now: time.Now}
 }
 
+func (s *Service) WithResourceBaseURL(base string) *Service {
+	s.resourceBase = strings.TrimRight(base, "/")
+	return s
+}
+
 func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool) (domain.HistoryListingData, int, string, error) {
+	return s.listing(ctx, token, kind, page, keyword, isH5Request, false)
+}
+
+func (s *Service) MiniV2Listing(ctx context.Context, token string, page int, keyword string, isH5Request bool) (domain.HistoryListingData, int, string, error) {
+	data, retcode, errmsg, err := s.listing(ctx, token, favoriteRepo.KindMini, page, keyword, isH5Request, true)
+	if err != nil || retcode != 0 {
+		return data, retcode, errmsg, err
+	}
+	rows, err := s.wrapMiniRowsWithUsers(ctx, data.Rows)
+	if err != nil {
+		return domain.HistoryListingData{}, -1, "获取收藏失败", err
+	}
+	data.Rows = rows
+	return data, 0, "", nil
+}
+
+func (s *Service) listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool, miniKeyword bool) (domain.HistoryListingData, int, string, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return domain.HistoryListingData{}, -1, "获取收藏失败", err
@@ -51,7 +77,11 @@ func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.K
 		return domain.HistoryListingData{}, -9999, "请登录后操作", nil
 	}
 	const pageSize = 20
-	total, rows, err := s.store.Items(ctx, kind, uid, page, pageSize, keyword)
+	effectiveKeyword := keyword
+	if kind == favoriteRepo.KindMini && !miniKeyword {
+		effectiveKeyword = ""
+	}
+	total, rows, err := s.store.Items(ctx, kind, uid, page, pageSize, effectiveKeyword)
 	if err != nil {
 		return domain.HistoryListingData{}, -1, "获取收藏失败", err
 	}
@@ -71,6 +101,9 @@ func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.K
 	baseURL := "/favorite/listing?page=[?]"
 	if kind == favoriteRepo.KindMini {
 		baseURL = "/minifavorite/listing?page=[?]"
+		if miniKeyword && keyword != "" {
+			baseURL += "&wd=" + keyword
+		}
 	} else if keyword != "" {
 		baseURL = "/favorite/listing?page=[?]&wd=" + keyword
 	}
@@ -78,6 +111,26 @@ func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.K
 		Rows:     rows,
 		PageInfo: vodService.PageInfo(total, pageSize, page, baseURL),
 	}, 0, "", nil
+}
+
+func (s *Service) wrapMiniRowsWithUsers(ctx context.Context, rows []map[string]interface{}) ([]map[string]interface{}, error) {
+	users, err := s.store.UsersByIDs(ctx, rowIDs(rows, "authorid"))
+	if err != nil {
+		return nil, err
+	}
+	userByID := map[string]map[string]interface{}{}
+	for _, user := range users {
+		userByID[str(user["uid"])] = processUser(user, s.resourceBase)
+	}
+	out := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		var user interface{}
+		if found, ok := userByID[str(row["authorid"])]; ok {
+			user = found
+		}
+		out = append(out, map[string]interface{}{"vodrow": row, "user": user})
+	}
+	return out, nil
 }
 
 func (s *Service) Remove(ctx context.Context, token string, kind favoriteRepo.Kind, vodids []int) (int, string, error) {
@@ -149,4 +202,48 @@ func atoi(value interface{}) int {
 	var n int
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+func rowIDs(rows []map[string]interface{}, key string) []int {
+	seen := map[int]bool{}
+	ids := []int{}
+	for _, row := range rows {
+		id := atoi(row[key])
+		if id > 0 && !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
+	}
+	return ids
+}
+
+func processUser(row map[string]interface{}, base string) map[string]interface{} {
+	avatar := str(row["avatar"])
+	avatarURL := ""
+	if avatar != "" {
+		if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
+			avatarURL = avatar
+		} else if _, err := strconv.Atoi(avatar); err == nil {
+			avatarURL = avatar
+		} else if strings.HasPrefix(avatar, "avatar/") {
+			avatarURL = strings.TrimRight(base, "/") + "/C1/" + strings.TrimLeft(avatar, "/")
+		} else {
+			avatarURL = strings.TrimRight(base, "/") + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+		}
+	}
+	return map[string]interface{}{
+		"uid":        str(row["uid"]),
+		"username":   str(row["username"]),
+		"nickname":   str(row["nickname"]),
+		"avatar":     avatar,
+		"avatar_url": avatarURL,
+		"gender":     str(row["gender"]),
+	}
+}
+
+func str(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }

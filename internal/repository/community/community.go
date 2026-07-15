@@ -45,6 +45,53 @@ func (r *Repository) ListTopics(ctx context.Context, filter TopicFilter, total i
 	return r.queryRows(ctx, "SELECT * FROM topics WHERE 1=1 "+where+" ORDER BY "+orderBy+" LIMIT ? OFFSET ?", args...)
 }
 
+func (r *Repository) Categories(ctx context.Context, parentID int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	where := " AND status=1"
+	args := []interface{}{}
+	if parentID > 0 {
+		where += " AND parent_id=?"
+		args = append(args, parentID)
+	}
+	return r.queryRows(ctx, "SELECT id,parent_id,title,description FROM topic_category WHERE 1=1 "+where+" ORDER BY `order` DESC, id ASC LIMIT 100", args...)
+}
+
+func (r *Repository) Calldata(ctx context.Context, uuid string) (map[string]interface{}, error) {
+	if r.db == nil || uuid == "" {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM maintain_calldata WHERE uuid=? LIMIT 1", uuid)
+	if err != nil {
+		return nil, fmt.Errorf("query calldata: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) CountTopicSearch(ctx context.Context, wd string) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	var total int
+	like := "%" + wd + "%"
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM topics WHERE 1=1 AND (title LIKE ? OR tags LIKE ?)", like, like).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count topic search: %w", err)
+	}
+	return total, nil
+}
+
+func (r *Repository) ListTopicSearch(ctx context.Context, wd string, total int, page int, pageSize int) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	like := "%" + wd + "%"
+	return r.queryRows(ctx, "SELECT * FROM topics WHERE 1=1 AND (title LIKE ? OR tags LIKE ?) ORDER BY visit_count DESC LIMIT ? OFFSET ?", like, like, pageSize, limitOffset(total, pageSize, page))
+}
+
 func (r *Repository) Servers(ctx context.Context) ([]map[string]interface{}, error) {
 	if r.db == nil {
 		return []map[string]interface{}{}, nil

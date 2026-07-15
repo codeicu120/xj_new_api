@@ -43,6 +43,42 @@ func (h *CommunityHandler) Listing(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *CommunityHandler) Categories(c *gin.Context) {
+	parentID, _ := strconv.Atoi(inputValue(c, "parent_id"))
+	data, err := h.service.Categories(c.Request.Context(), parentID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取社区分类失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *CommunityHandler) Slides(c *gin.Context) {
+	data, err := h.service.Slides(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取社区轮播失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *CommunityHandler) Search(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, err := h.service.Search(c.Request.Context(), inputValue(c, "wd"), page)
+	c.Header("X-Served-By", "newbie")
+	if errors.Is(err, communityService.ErrSearchKeywordRequired) {
+		c.JSON(http.StatusOK, legacyjson.Error("请输入关键词"))
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("社区搜索失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *CommunityHandler) CommentListing(c *gin.Context) {
 	params := strings.TrimPrefix(c.Param("params"), "-")
 	tid, _ := strconv.Atoi(inputValue(c, "tid"))

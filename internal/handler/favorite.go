@@ -27,6 +27,21 @@ func (h *FavoriteHandler) MiniListing(c *gin.Context) {
 	h.listing(c, favoriteRepo.KindMini)
 }
 
+func (h *FavoriteHandler) MiniV2Listing(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	data, retcode, errmsg, err := h.service.MiniV2Listing(c.Request.Context(), authToken(c), page, inputValue(c, "wd"), c.GetHeader("x-cookie-auth") != "")
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *FavoriteHandler) Remove(c *gin.Context) {
 	h.remove(c, favoriteRepo.KindVOD)
 }

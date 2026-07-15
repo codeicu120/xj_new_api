@@ -142,7 +142,7 @@ func NewRouter(opts Options) *gin.Engine {
 	inviteHandler := handler.NewInviteHandler(inviteService.NewService(userRepository, inviteRepo.NewRepository(db)))
 	boughtHandler := handler.NewBoughtHandler(boughtService.NewService(userRepository, boughtRepo.NewRepository(db), vodListingService).WithVIPDiscount(cfg.VIPDiscount))
 	historyHandler := handler.NewHistoryHandler(historyService.NewService(userRepository, historyRepo.NewRepository(db), vodListingService))
-	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService))
+	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService).WithResourceBaseURL(cfg.ResourceBaseURL))
 	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
@@ -290,6 +290,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/account/balancelog", ucpHandler.BalanceLog)
 	router.Any("/ucp/withdraw", ucpHandler.WithdrawIndex)
 	router.Any("/ucp/withdraw/index", ucpHandler.WithdrawIndex)
+	router.Any("/ucp/withdraw/listing", ucpHandler.WithdrawListing)
+	router.Any("/ucp/withdraw/rule", ucpHandler.WithdrawRule)
 	router.Any("/ucp/coinlog", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/index", ucpHandler.CoinLogIndex)
 	router.Any("/ucp/coinlog/bonuslog", ucpHandler.CoinLogBonusLog)
@@ -327,6 +329,9 @@ func NewRouter(opts Options) *gin.Engine {
 		router.Any("/community/"+action+"-:params", communityHandler.Listing)
 	}
 	router.Any("/community/show", communityHandler.Show)
+	router.Any("/community/categories", communityHandler.Categories)
+	router.Any("/community/slides", communityHandler.Slides)
+	router.Any("/community/search", communityHandler.Search)
 	router.Any("/community/clisting", communityHandler.CommentListing)
 	router.Any("/community/clisting-:params", communityHandler.CommentListing)
 	router.Any("/community/attention", communityHandler.Attention)
@@ -380,6 +385,11 @@ func NewRouter(opts Options) *gin.Engine {
 			v2.Any("/amazing/"+action, amazingHandler.Listing)
 			v2.Any("/amazing/"+action+"-:params", amazingHandler.Listing)
 		}
+		v2.Any("/captcha/req", captchaHandler.ReqV2)
+		v2.Any("/captcha/pic", captchaHandler.Pic)
+		v2.Any("/captcha/picx", captchaHandler.PicX)
+		v2.Any("/captcha/verify", captchaHandler.Verify)
+		v2.Any("/captcha/test", testHandler.Test)
 		v2.Any("/so/list", soHandler.List)
 		for _, action := range []string{"listing", "recommend", "hot", "latest"} {
 			v2.Any("/vod/"+action, vodHandler.Listing)
@@ -395,6 +405,11 @@ func NewRouter(opts Options) *gin.Engine {
 		v2.Any("/vod/reqdown/:vodid", vodHandler.ReqDown)
 		v2.Any("/vod/buy/:vodid", boughtHandler.Buy)
 		v2.Any("/vod/errorreport", vodHandler.ErrorReport)
+		v2.Any("/minifavorite", handler.EmptyHTML)
+		v2.Any("/minifavorite/index", handler.EmptyHTML)
+		v2.Any("/minifavorite/listing", favoriteHandler.MiniV2Listing)
+		v2.Any("/minifavorite/add", favoriteHandler.MiniAdd)
+		v2.Any("/minifavorite/remove", favoriteHandler.MiniRemove)
 	}
 
 	router.NoRoute(func(c *gin.Context) {

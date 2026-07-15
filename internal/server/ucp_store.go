@@ -247,6 +247,18 @@ func (s ucpStore) BalanceLogs(ctx context.Context, uid int, page int, pageSize i
 	return s.ucp.BalanceLogs(ctx, uid, page, pageSize)
 }
 
+func (s ucpStore) CountWithdraws(ctx context.Context, uid int) (int, error) {
+	return s.ucp.CountWithdraws(ctx, uid)
+}
+
+func (s ucpStore) Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	return s.ucp.Withdraws(ctx, uid, page, pageSize)
+}
+
+func (s ucpStore) SumWithdrawAmount(ctx context.Context, uid int) (int, error) {
+	return s.ucp.SumWithdrawAmount(ctx, uid)
+}
+
 func (s ucpStore) CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.CoinLogs(ctx, uid, page, pageSize)
 }
