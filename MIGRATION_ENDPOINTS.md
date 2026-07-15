@@ -156,6 +156,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/listing-:params`、`/v2/vod/recommend-:params`、`/v2/vod/hot-:params`、`/v2/vod/latest-:params` | ANY | `VODHandler.Listing` |
 | `/v2/vod/show/:vodid` | ANY | `VODHandler.Show` |
 | `/v2/vod/up/:vodid`、`/v2/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
+| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `VODHandler.ReqPlay/ReqDown` |
 
 ### 已注册占位
 
@@ -164,7 +165,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | ANY | `notImplemented("c.apiv2.user.register")` |
 | `/v2/login` | ANY | `notImplemented("c.apiv2.user.login")` |
 | `/v2/forgot` | ANY | `notImplemented("c.apiv2.user.forgot")` |
-| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | ANY | `notImplemented("c.apiv2.vod.reqplay/reqdown")` |
 | `/v2/vod/buy/:vodid` | ANY | `notImplemented("c.apiv2.vod.buy")` |
 
 ## 已重构接口
@@ -263,6 +263,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/vod/latest` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构，对比通过 |
 | `/v2/vod/latest-:params` | `c.apiv2.vod->listing` | `VODHandler.Listing` | 已重构 |
 | `/v2/vod/show/:vodid` | `c.apiv2.vod->show` | `VODHandler.Show` | 已重构，对比通过；复用视频详情实现 |
+| `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqplay/reqdown` | `VODHandler.ReqPlay/ReqDown` | 已接管可控路径；复用普通视频播放/下载地址请求实现，记录/购买/权限/地址错误、免费/限免和额度内分支可用，扣金币、日志和奖励分支暂不写资产 |
 
 ### 非 v2 视频列表接口
 
@@ -428,8 +429,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/v2/register` | `c.apiv2.user->register` |
 | `/v2/login` | `c.apiv2.user->login` |
 | `/v2/forgot` | `c.apiv2.user->forgot` |
-| `/v2/vod/reqplay/:vodid` | `c.apiv2.vod->reqplay` |
-| `/v2/vod/reqdown/:vodid` | `c.apiv2.vod->reqdown` |
 | `/v2/vod/buy/:vodid` | `c.apiv2.vod->buy` |
 
 ## 未重构接口

@@ -135,5 +135,5 @@
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong`，以及 `/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、播放/下载可控路径和长视频地址转换已完成；剩余多涉及金币事务、奖励或媒体解析。 |
-| `/vod/buy`、`/v2/vod/reqplay`、`/v2/vod/reqdown`、`/v2/vod/buy`，以及 `/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、播放/下载可控路径已完成；剩余涉及购买、扣费、日志写入、奖励和 v2 加密响应。 |
+| `/vod/buy`、`/v2/vod/buy`，以及 `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、播放/下载可控路径已完成；剩余涉及购买、扣费、日志写入和奖励。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

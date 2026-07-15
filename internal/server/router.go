@@ -386,9 +386,9 @@ func NewRouter(opts Options) *gin.Engine {
 		v2.Any("/vod/show/:vodid", vodHandler.Show)
 		v2.Any("/vod/up/:vodid", vodHandler.Up)
 		v2.Any("/vod/down/:vodid", vodHandler.Down)
-		for _, action := range []string{"reqplay", "reqdown", "buy"} {
-			v2.Any("/vod/"+action+"/:vodid", notImplemented("c.apiv2.vod."+action))
-		}
+		v2.Any("/vod/reqplay/:vodid", vodHandler.ReqPlay)
+		v2.Any("/vod/reqdown/:vodid", vodHandler.ReqDown)
+		v2.Any("/vod/buy/:vodid", notImplemented("c.apiv2.vod.buy"))
 		v2.Any("/vod/errorreport", vodHandler.ErrorReport)
 	}
 

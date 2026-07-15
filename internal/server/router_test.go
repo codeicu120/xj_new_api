@@ -2153,7 +2153,7 @@ func TestMiniVODReqMediaRoutes(t *testing.T) {
 func TestVODReqMediaRoutes(t *testing.T) {
 	router := newTestRouter()
 
-	for _, path := range []string{"/vod/reqplay/0", "/vod/reqdown/0"} {
+	for _, path := range []string{"/vod/reqplay/0", "/vod/reqdown/0", "/v2/vod/reqplay/0", "/v2/vod/reqdown/0"} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(rec, req)

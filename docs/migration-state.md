@@ -177,6 +177,15 @@
 - 兼容规则：复用 `/vod/show/:vodid` 详情迁移，返回 `data.vodrow/parentrows/similarrows/likerows`；错误分支 `retcode=-1`、`errmsg=记录不存在或已删除`。
 - 测试：聚焦 `go test ./internal/server ./internal/service/vod` 通过；PHP-Go 对比 `/v2/vod/show/0`、`/v2/vod/show/100` 错误分支忽略动态 `xxx_api_auth` 后一致；`/v2/vod/show/1` 成功详情 status/retcode/资源 URL 和核心字段形态对齐，随机相似/喜欢列表不做逐条完全相等。
 
+### `/v2/vod/reqplay/:vodid`、`/v2/vod/reqdown/:vodid`
+
+- PHP: `c.apiv2.vod->reqplay/reqdown`
+- Go: `internal/handler.VODHandler.ReqPlay/ReqDown`
+- Service: `internal/service/vod.ListingService`
+- 兼容规则：复用 `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 的可控路径迁移；v2 PHP 当前 `ver` 默认仍为 0，稳定错误、权限、免费/限免和额度内分支按普通视频接口返回 legacy JSON。
+- 风险边界：扣金币、播放/下载日志写入和奖励分支仍随普通视频接口保留在未重构高风险清单。
+- 测试：`go test ./internal/service/vod ./internal/server` 通过；server 测试覆盖 `/v2/vod/reqplay/0` 和 `/v2/vod/reqdown/0` 已走 Go handler；PHP-Go live 对比两个路径的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
+
 ### `/vod/{listing,recommend,hot,latest}`
 
 - PHP: `c.api.vod->listing`
