@@ -251,6 +251,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.GET("/ucp/msg", ucpHandler.MsgListing)
 	router.GET("/ucp/msg/index", ucpHandler.MsgListing)
 	router.Any("/ucp/msg/show", ucpHandler.MsgDetail)
+	router.Any("/ucp/msg/send", ucpHandler.MsgSend)
 	router.Any("/ucp/msg/setread", ucpHandler.MsgSetRead)
 	router.Any("/ucp/msg/cleanread", ucpHandler.MsgCleanRead)
 	router.Any("/ucp/msg/delete", ucpHandler.MsgDelete)

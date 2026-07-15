@@ -120,6 +120,42 @@ func (s *Service) MsgDelete(ctx context.Context, token string, cids []int) (int,
 	return 0, "操作成功", nil
 }
 
+func (s *Service) MsgSend(ctx context.Context, token string, cid int, content string, hasRecipients bool) (int, string, error) {
+	uid, retcode, errmsg, err := s.msgActionUser(ctx, token)
+	if retcode != 0 || err != nil {
+		return retcode, errmsg, err
+	}
+	if content == "" {
+		return -1, "请填写信息内容", nil
+	}
+	if len([]rune(content)) > 2000 {
+		return -1, "信息内容不能超过2000字", nil
+	}
+	if cid <= 0 {
+		_ = hasRecipients
+		return -1, "请选择一个用户", nil
+	}
+	crow, err := s.store.MsgConversation(ctx, uid, cid)
+	if err != nil {
+		return -1, "发送失败", err
+	}
+	if len(crow) == 0 {
+		return -1, "您回复的会话不存在", nil
+	}
+	receiverID := atoi(crow["ruid"])
+	touser, err := s.store.UserByID(ctx, receiverID)
+	if err != nil {
+		return -1, "发送失败", err
+	}
+	if len(touser) == 0 {
+		return -1, "接收方不存在", nil
+	}
+	if _, err := s.store.SendMessage(ctx, uid, receiverID, content, cid, s.now().Unix()); err != nil {
+		return -1, "发送失败", err
+	}
+	return 0, "发送成功", nil
+}
+
 func (s *Service) msgActionUser(ctx context.Context, token string) (int, int, string, error) {
 	user, err := s.authenticatedPaymentUser(ctx, token)
 	if err != nil {

@@ -197,6 +197,10 @@ func (s ucpStore) DeleteMsgConversations(ctx context.Context, uid int, cids []in
 	return s.ucp.DeleteMsgConversations(ctx, uid, cids)
 }
 
+func (s ucpStore) SendMessage(ctx context.Context, senderID int, receiverID int, content string, cid int, now int64) (int, error) {
+	return s.ucp.SendMessage(ctx, senderID, receiverID, content, cid, now)
+}
+
 func (s ucpStore) BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.BalanceLogs(ctx, uid, page, pageSize)
 }

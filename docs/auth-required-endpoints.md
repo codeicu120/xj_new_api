@@ -24,6 +24,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/affcenter` | `c.api.ucp.index->affcenter` | 本轮完成 | 登录只读推广中心，读取金币、金豆、播放/下载当日计数和用户组权限，用户与 `uinfo` 字段和 PHP 一致。 |
 | `GET /ucp/feedback` | `c.api.ucp.index->feedback` | 本轮完成 | 登录只读历史反馈列表，读取 `feedbacks`，分页和 `procRow2` 字段映射与 PHP 一致；POST 写入未接管。 |
 | `POST /ucp/feedback`、`/ucp/feedback/create` | `c.api.ucp.index->feedback`、`c.api.ucp.feedback->create` | 本轮完成 | 登录反馈创建；未登录分支 live 对比通过，内容、订单归属、每日次数和写入由 fake 覆盖；图片上传保存和告警通知暂未接管。 |
+| `/ucp/msg/send` | `c.api.ucp.msg->send` | 本轮完成 | 登录站内信发送；会话内回复写库由 fake 覆盖，未登录分支 live 对比通过；用户名群发按 PHP 源码 bug 保持不可用。 |
 | `GET /ucp/feedback/index` | `c.api.ucp.feedback->index` | 本轮完成 | 新版反馈初始化页，读取最近 30 天最多 100 条 `trade_payments`，支付行映射与 PHP 一致；POST 未接管。 |
 | `GET /ucp/feedback/listing` | `c.api.ucp.feedback->listing` | 本轮完成 | 新版反馈列表，读取 `feedbacks`，支持 `type=0/1/2` 过滤，分页和字段映射与 PHP 一致；POST 未接管。 |
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | 本轮完成 | 新版反馈详情，读取单条 `feedbacks`、按 `aids` 顺序读取 `attachs`、按 `payid` 读取关联 `trade_payments`；POST 未接管。 |
@@ -53,7 +54,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 
 | 接口 | 原因 |
 | --- | --- |
-| `/ucp/msg/send`、`/ucp/task/*`（除 `/ucp/task/sharepic`） | 涉及写库、奖励或状态变更，需要单独测试和回滚策略。 |
+| `/ucp/task/*`（除 `/ucp/task/sharepic`） | 涉及写库、奖励或状态变更，需要单独测试和回滚策略。 |
 | `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*`、`/ucp/payment/*` 其他 action、`/ucp/coinlog/exchange`、`/payment/*` | 会员、金币、金豆、支付相关，涉及资产和交易；`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog` 和 `/ucp/coinlog/invitelog` 只读记录已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用。 |
 | `/bought/buy` | 金豆扣费购买影片，涉及资产扣减、事务和订单/日志写入。 |

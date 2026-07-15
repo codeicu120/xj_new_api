@@ -321,9 +321,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `GET /ucp/feedback/detail` | `c.api.ucp.feedback->detail` | `UCPHandler.FeedbackDetail` | 已重构，对比通过；新版反馈详情，校验反馈归属，附件图片和关联支付只读，POST 未接管 |
 | `GET /ucp/msg`、`GET /ucp/msg/index` | `c.api.ucp.msg->index` | `UCPHandler.MsgListing` | 已重构，对比通过；登录只读消息会话列表，写状态 action 未接管 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | `UCPHandler.MsgDetail` | 已重构，对比通过；读取会话详情并复刻 setRead 已读副作用 |
+| `/ucp/msg/send` | `c.api.ucp.msg->send` | `UCPHandler.MsgSend` | 已重构；会话内回复写入 `msgs/msg_maps/msgc/users.newmsg`，未登录分支 live 对比通过；按 PHP 源码变量遮蔽 bug 保持用户名群发不可用 |
 | `/ucp/msg/setread` | `c.api.ucp.msg->setread` | `UCPHandler.MsgSetRead` | 已重构，对比通过；批量会话设为已读，空 `cids` 仍返回操作成功 |
 | `/ucp/msg/cleanread` | `c.api.ucp.msg->cleanread` | `UCPHandler.MsgCleanRead` | 已重构，对比通过；清空当前用户 `newmsg` |
 | `/ucp/msg/delete` | `c.api.ucp.msg->delete` | `UCPHandler.MsgDelete` | 已重构，对比通过；删除当前用户会话、消息映射并递减消息引用计数 |
+| `/ucp/msg/:action?`（除已列 action） | `c.api.ucp.msg->$action` | 不接管 | PHP `ucp/msg.php` 仅定义 `index/show/send/setread/cleanread/delete`，均已覆盖 |
 | `/ucp/payment`、`/ucp/payment/index` | `c.api.ucp.payment->index/listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；兼容旧动态 action 默认入口 |
 | `/ucp/payment/listing` | `c.api.ucp.payment->listing` | `UCPHandler.PaymentListing` | 已重构，对比通过；登录只读支付记录，支持 GET/POST page |
 | `/ucp/payment/safepaylog` | `c.api.ucp.payment->safepaylog` | `UCPHandler.SafePayLog` | 已重构，对比通过；最近 7 天 safepay 记录 |
@@ -420,7 +422,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
-| `/ucp/msg/:action?`（除 `GET /ucp/msg`、`GET /ucp/msg/index`、`/ucp/msg/show`、`/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete`） | `c.api.ucp.msg->$action` | 未重构；剩余 `send` 涉及站内信发送、每日限额和批量收件人 |
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
 | `/ucp/account/:action?`（除 `/ucp/account`、`/ucp/account/index`、`/ucp/account/balancelog`） | `c.api.ucp.account->$action` | 未重构；账户其他 action |
 | `/ucp/bankcard/:action?`（除 `/ucp/bankcard`、`/ucp/bankcard/index`） | `c.api.ucp.bankcard->$action` | 未重构；新增、修改、删除提款地址涉及写库 |

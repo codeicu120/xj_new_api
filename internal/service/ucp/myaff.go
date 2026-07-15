@@ -55,6 +55,7 @@ type UserStore interface {
 	SetMsgRead(ctx context.Context, uid int, cid int) error
 	CleanMsgRead(ctx context.Context, uid int) error
 	DeleteMsgConversations(ctx context.Context, uid int, cids []int) error
+	SendMessage(ctx context.Context, senderID int, receiverID int, content string, cid int, now int64) (int, error)
 	CountBalanceLogs(ctx context.Context, uid int) (int, error)
 	BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)

@@ -29,6 +29,7 @@ type fakeUserStore struct {
 	taskboxLogs        []map[string]interface{}
 	bankcards          []map[string]interface{}
 	banks              []map[string]interface{}
+	sentMessage        map[string]interface{}
 }
 
 func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -377,6 +378,17 @@ func (s fakeUserStore) CleanMsgRead(context.Context, int) error {
 
 func (s fakeUserStore) DeleteMsgConversations(context.Context, int, []int) error {
 	return nil
+}
+
+func (s fakeUserStore) SendMessage(_ context.Context, senderID int, receiverID int, content string, cid int, now int64) (int, error) {
+	if s.sentMessage != nil {
+		s.sentMessage["senderID"] = senderID
+		s.sentMessage["receiverID"] = receiverID
+		s.sentMessage["content"] = content
+		s.sentMessage["cid"] = cid
+		s.sentMessage["now"] = now
+	}
+	return 99, nil
 }
 
 func (s fakeUserStore) BalanceLogs(context.Context, int, int, int) ([]map[string]interface{}, error) {
@@ -1561,6 +1573,60 @@ func TestMsgCleanReadAndDelete(t *testing.T) {
 	}
 	if store.deleteID != 5 || !equalInts(store.deleted, []int{3, 4}) {
 		t.Fatalf("delete uid/cids = %d %#v", store.deleteID, store.deleted)
+	}
+}
+
+func TestMsgSendRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgSend(context.Background(), "", 9, "hello", false)
+	if err != nil {
+		t.Fatalf("msg send: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
+func TestMsgSendValidatesContent(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgSend(context.Background(), "token", 9, "", false)
+	if err != nil {
+		t.Fatalf("msg send: %v", err)
+	}
+	if retcode != -1 || errmsg != "请填写信息内容" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
+func TestMsgSendWithoutConversationKeepsPHPGroupBug(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.MsgSend(context.Background(), "token", 0, "hello", true)
+	if err != nil {
+		t.Fatalf("msg send: %v", err)
+	}
+	if retcode != -1 || errmsg != "请选择一个用户" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
+func TestMsgSendReplySuccess(t *testing.T) {
+	sent := map[string]interface{}{}
+	store := fakeUserStore{user: map[string]interface{}{"uid": "5"}, sentMessage: sent}
+	service := NewService(store, "https://res.example.test")
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	retcode, errmsg, err := service.MsgSend(context.Background(), "token", 9, "hello", false)
+	if err != nil {
+		t.Fatalf("msg send: %v", err)
+	}
+	if retcode != 0 || errmsg != "发送成功" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	if sent["senderID"] != 5 || sent["receiverID"] != 7 || sent["content"] != "hello" || sent["cid"] != 9 || sent["now"] != int64(1700000000) {
+		t.Fatalf("sent=%#v", sent)
 	}
 }
 

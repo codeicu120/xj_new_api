@@ -283,6 +283,13 @@ func (h *UCPHandler) MsgDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) MsgSend(c *gin.Context) {
+	cid, _ := strconv.Atoi(inputValue(c, "cid"))
+	hasRecipients := inputValue(c, "username") != "" || inputValue(c, "usernames") != ""
+	retcode, errmsg, err := h.service.MsgSend(c.Request.Context(), authToken(c), cid, inputValue(c, "content"), hasRecipients)
+	h.msgActionResponse(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) MsgSetRead(c *gin.Context) {
 	retcode, errmsg, err := h.service.MsgSetRead(c.Request.Context(), authToken(c), intArrayValue(c, "cids"))
 	h.msgActionResponse(c, retcode, errmsg, err)

@@ -640,6 +640,72 @@ func (r *Repository) DeleteMsgConversations(ctx context.Context, uid int, cids [
 	return tx.Commit()
 }
 
+func (r *Repository) SendMessage(ctx context.Context, senderID int, receiverID int, content string, cid int, now int64) (int, error) {
+	if r.db == nil || senderID <= 0 || receiverID <= 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin send message: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "INSERT INTO msgs(senderid, content, sendtime, refcount) VALUES(?, ?, ?, ?)", senderID, content, now, 2)
+	if err != nil {
+		return 0, fmt.Errorf("insert message: %w", err)
+	}
+	msgID64, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert message id: %w", err)
+	}
+	msgID := int(msgID64)
+	if cid <= 0 {
+		cid = msgID
+	}
+	if err := insertMsgSide(ctx, tx, senderID, receiverID, msgID, cid, now, false); err != nil {
+		return 0, err
+	}
+	if err := insertMsgSide(ctx, tx, receiverID, senderID, msgID, cid, now, true); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE users SET newmsg=newmsg+1 WHERE uid=?", receiverID); err != nil {
+		return 0, fmt.Errorf("increment receiver newmsg: %w", err)
+	}
+	return msgID, tx.Commit()
+}
+
+func insertMsgSide(ctx context.Context, tx *sql.Tx, uid int, ruid int, msgID int, cid int, now int64, unread bool) error {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO msg_maps(uid, msgid, cid, sendtime) VALUES(?, ?, ?, ?)", uid, msgID, cid, now); err != nil {
+		return fmt.Errorf("insert msg map: %w", err)
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM msgc WHERE uid=? AND cid=?", uid, cid).Scan(&count); err != nil {
+		return fmt.Errorf("count msg conversation: %w", err)
+	}
+	risread := 0
+	newmsg := 0
+	if unread {
+		risread = 1
+		newmsg = 1
+	}
+	if count == 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO msgc(uid, cid, ruid, risread, msgcount, newmsg, last_msgid, last_sendtime)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?)`, uid, cid, ruid, risread, 1, newmsg, msgID, now); err != nil {
+			return fmt.Errorf("insert msg conversation: %w", err)
+		}
+		return nil
+	}
+	if unread {
+		if _, err := tx.ExecContext(ctx, "UPDATE msgc SET msgcount=msgcount+1, newmsg=newmsg+1, last_msgid=?, last_sendtime=? WHERE uid=? AND cid=?", msgID, now, uid, cid); err != nil {
+			return fmt.Errorf("update receiver conversation: %w", err)
+		}
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE msgc SET risread=0, msgcount=msgcount+1, last_msgid=?, last_sendtime=? WHERE uid=? AND cid=?", msgID, now, uid, cid); err != nil {
+		return fmt.Errorf("update sender conversation: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) BalanceLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	if r.db == nil {
 		return []map[string]interface{}{}, nil

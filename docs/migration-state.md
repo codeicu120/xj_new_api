@@ -627,6 +627,18 @@
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比未登录、`cid=0` 会话不存在、`cid=9776805` 成功分支通过；成功分支会按旧 PHP 标记已读，因此 `crow.newmsg` 可能随请求顺序变为 `0`。
 
+### `/ucp/msg/send`
+
+- PHP: `c.api.ucp.msg->send`
+- Go: `internal/handler.UCPHandler.MsgSend`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 必须登录；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 会话内回复写入 `msgs`，为双方写入 `msg_maps`，更新或创建双方 `msgc`，并递增接收方 `users.newmsg`。
+- 兼容规则：空内容返回 `请填写信息内容`；超过 2000 字返回 `信息内容不能超过2000字`；回复会话不存在返回 `您回复的会话不存在`；接收方不存在返回 `接收方不存在`；成功返回 `发送成功`。
+- 风险说明：PHP 源码用户名群发分支存在变量遮蔽 bug，`$user['uid'] != $user['uid']` 永远为 false；Go 保持该分支不可用并返回 `请选择一个用户`，不误开群发。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/msg/send` 未登录分支一致；会话回复成功和群发 bug 分支由 service fake 覆盖。
+
 ### `GET /ucp/feedback/index`
 
 - PHP: `c.api.ucp.feedback->index`
