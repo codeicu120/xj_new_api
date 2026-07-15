@@ -249,7 +249,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/payways` | `c.api.payment->payways` | `PaymentHandler.Payways` | 已重构；只读订单支付方式列表，校验订单存在、未支付和归属后返回 `payrow/payments`；支付通道通过接口隔离，不伪造生产配置 |
 | `/payment/chpayway` | `c.api.payment->chpayway` | `PaymentHandler.ChPayway` | 已重构；修改未支付订单支付方式，保留本人校验、支付通道校验和条件更新防已支付订单被修改 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | `PaymentHandler.Unpaid` | 已重构；旧 PHP 当前直接返回 `data.total_count=0`，后续未执行的 24 小时未支付查询分支不接管 |
-| `/payment/reqpay` | `c.api.payment->reqpay` | `PaymentHandler.ReqPay` | 部分已重构；缺失/已支付/过期/非本人等前置失败分支已迁移，钱包支付、第三方网关请求和下单成功分支暂未接管 |
+| `/payment/reqpay` | `c.api.payment->reqpay` | `PaymentHandler.ReqPay` | 部分已重构；缺失/已支付/过期/非本人和 known payway 支付方式不允许前置失败分支已迁移，钱包支付、第三方网关请求和下单成功分支暂未接管 |
 | `/payment/pay12req` | `c.api.payment->pay12req` | `PaymentHandler.Pay12Req` | 部分已重构；缺失/已支付订单返回 payerror HTML，成功请求 pay12 网关分支暂未接管 |
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | `PaymentHandler.Success/Failed` | 已重构；固定支付状态 JSON 文案，不包含平台回调验签 |
 | `/payment/shangfu`、`/payment/wappay3`、`/payment/wappay4`、`/payment/wappay4a`、`/payment/wappay5`、`/payment/hawpay`、`/payment/easypay`、`/payment/pay6` | `c.api.payment->$action` | `PaymentHandler.Success` | 已重构；PHP public action 固定返回 `retcode=0 errmsg=支付成功回调`，不包含第三方请求和入账 |
@@ -550,7 +550,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 部分未重构；`reqpay/pay12req` 失败分支、常见 public 成功回调文案和支付页面已迁移，钱包支付、第三方网关请求、订单状态写入和成功跳转仍需 provider 配置与网关接口 |
+| `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 部分未重构；`reqpay/pay12req` 失败分支、known payway 支付方式不允许分支、常见 public 成功回调文案和支付页面已迁移，钱包支付、第三方网关请求、订单状态写入和成功跳转仍需 provider 配置与网关接口 |
 | `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 未重构；已注册常见 provider 的失败分支，成功分支仍需先补 `SELECT ... FOR UPDATE` 锁单、幂等入账、`payment->doAction()` 和 provider 验签适配 |
 | `/respond/chan1` | `c.respond.chan1` | 部分未重构；token 校验失败分支已迁移，合法 token 后用户查询、套餐查询、下单、充值入账和赠送 VIP 仍需事务化迁移 |
 

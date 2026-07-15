@@ -41,7 +41,7 @@
 | `/payment/wappay1`、`/payment/wappay2`、`/payment/pay7submit`、`/payment/pay11` | `c.api.payment->wappay1/wappay2/pay7submit/pay11` | 本轮完成 | 支付返回页/只读 HTML 分支；`wappay2?payid=` 只读 `payhtml`，`pay7submit` 生成自动 POST 表单，`pay11` 支持二维码页。 |
 | `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12`、`/payment/gpay1`、`/payment/gpay2`、`/payment/newpay*` 页面 action | `c.api.payment->$action` | 本轮完成 | PHP public action 仅返回支付成功 HTML，Go 已批量接管；对应 `_action` 下单/写入分支未伪造。 |
 | `/payment/shangfu`、`/payment/wappay3`、`/payment/wappay4`、`/payment/wappay4a`、`/payment/wappay5`、`/payment/hawpay`、`/payment/easypay`、`/payment/pay6` | `c.api.payment->$action` | 本轮完成 | 固定 public 成功回调 JSON 文案，返回 `retcode=0 errmsg=支付成功回调`；不包含网关请求或入账。 |
-| `/payment/reqpay`、`/payment/pay12req` | `c.api.payment->reqpay/pay12req` | 本轮完成 | 仅接管缺失/已支付/过期/非本人等前置失败分支；`pay12req` 错误分支返回 payerror HTML，成功请求网关暂未接管。 |
+| `/payment/reqpay`、`/payment/pay12req` | `c.api.payment->reqpay/pay12req` | 本轮完成 | 接管缺失/已支付/过期/非本人和 known payway 支付方式不允许前置失败分支；`pay12req` 错误分支返回 payerror HTML，成功请求网关暂未接管。 |
 | `/respond/*` 常见支付 provider 失败分支 | `c.respond.*` | 本轮完成 | 空请求/解析失败分支返回旧 provider `echoErr()` 文本；成功验签、锁单入账和 `payment->doAction()` 未接管。 |
 | `/respond/chan1` | `c.respond.chan1` | 本轮完成 | 仅接管 `mobi|secret` token 校验失败分支，返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理未接管。 |
 | `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号格式、空账号、无效 step、v2 注册格式、v2 账号不存在、v2 空密码、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |

@@ -1577,3 +1577,11 @@
 - 兼容规则：这些分支均在奖励写入、金币/VIP 变更、图片生成或事务成功路径之前；时间窗口、已领过、推广人数不足等处于事务/锁之后的分支暂不迁移。
 - Subagent：`Pasteur` 核对账号剩余可迁分支并指出 v1 注册参数校验优先级风险；`Poincare` 核对 UCP/task/taskbox；`Gauss` 核对 payment/respond 剩余分支并确认普通 provider 成功路径需等锁单/入账架构。
 - 测试：`go test ./internal/service/user ./internal/service/ucp ./internal/server` 通过。
+
+### Payment reqpay 支付方式前置失败分支
+
+- 已迁移：`/payment/reqpay` known payway 在 `nocheck=0` 且当前支付通道不允许该 `payway.paycode` 时返回 `retcode=-1 errmsg=此项目不能使用此支付方式`。
+- PHP: `src/c/api/payment.php::_walletpay/_shangfu/_wappay*/_pay*/_gpay*/_newpay*` 网关请求前 `checkPayment` 分支。
+- Go: `internal/service/payment.Service.ReqPay`、`knownReqPayPayway`、`paymentCodeAllowed`。
+- 兼容规则：只在已知 payway 且进入 provider/wallet 请求前执行 allow 校验；unknown payway 的 `retcode=1` + `payrow/payments` 需要扩大 handler/service 返回 data，暂未接管。钱包支付、第三方网关请求、订单状态写入和支付成功跳转仍未接管。
+- 测试：`go test ./internal/service/payment ./internal/server` 通过。

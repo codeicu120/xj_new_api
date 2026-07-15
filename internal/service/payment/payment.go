@@ -63,6 +63,16 @@ func (s *Service) ReqPay(ctx context.Context, token string, payID int) (int, str
 	if atoi(payrow["uid"]) > 0 && atoi(user["uid"]) != atoi(payrow["uid"]) {
 		return -1, "此项目需要本人操作", nil
 	}
+	payway := str(payrow["payway"])
+	if knownReqPayPayway(payway) && atoi(payrow["nocheck"]) == 0 {
+		channels, err := s.store.PaymentChannels(ctx, false)
+		if err != nil {
+			return -1, "请求支付失败", err
+		}
+		if !paymentCodeAllowed(channels, atoi(payrow["paytype"]), payway+"."+str(payrow["paycode"])) {
+			return -1, "此项目不能使用此支付方式", nil
+		}
+	}
 	return -1, "支付请求成功分支暂未迁移", nil
 }
 
@@ -281,6 +291,22 @@ func paymentCodeAllowed(channels []map[string]interface{}, payType int, paycode 
 		}
 	}
 	return false
+}
+
+func knownReqPayPayway(payway string) bool {
+	switch payway {
+	case "walletpay", "shangfu", "wappay1", "wappay2", "wappay3", "wappay4", "wappay4a", "wappay5",
+		"hawpay", "easypay", "pay6", "pay7", "pay8", "pay9", "pay10", "pay10a", "pay10b", "pay11", "pay12",
+		"gpay1", "gpay2", "newpaykf", "newpayrq", "newpayhw", "newpaywm", "newpaygcash", "newpayupi",
+		"newpayyhk", "newpaytm", "newpayok", "newpayuz", "newpaygcashqr", "newpaympesa", "newpaymoov",
+		"newpaymtn", "newpayusdt", "newpaybakong", "newpaymomo", "newpayviettel", "newpayzalo",
+		"newpaybb", "newpayphonepe", "newpayindianbank", "newpaytruemoney", "newpaypromptpay",
+		"newpaypromptpayqr", "newpaygopay", "newpayovo", "newpaylinkaja", "newpayqris", "newpayjazzcash",
+		"newpayeasypaisa":
+		return true
+	default:
+		return false
+	}
 }
 
 func mapOrEmpty(value interface{}) map[string]interface{} {

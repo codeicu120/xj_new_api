@@ -138,6 +138,31 @@ func TestQueryReturnsProcessedPayment(t *testing.T) {
 	}
 }
 
+func TestReqPayRejectsDisallowedKnownPayway(t *testing.T) {
+	service := NewService(fakeStore{
+		user: map[string]interface{}{"uid": "5"},
+		payment: map[string]interface{}{
+			"payid":      "10",
+			"paytype":    "8",
+			"payway":     "walletpay",
+			"paycode":    "walletpay",
+			"uid":        "5",
+			"createtime": "9999999999",
+			"ispaid":     "0",
+			"nocheck":    "0",
+		},
+		channels: []map[string]interface{}{},
+	})
+
+	retcode, errmsg, err := service.ReqPay(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 10)
+	if err != nil {
+		t.Fatalf("reqpay: %v", err)
+	}
+	if retcode != -1 || errmsg != "此项目不能使用此支付方式" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+}
+
 func TestPaywaysRejectsMissingOrPaidPayment(t *testing.T) {
 	for _, payment := range []map[string]interface{}{
 		{},
