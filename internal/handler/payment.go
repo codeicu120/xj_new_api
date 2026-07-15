@@ -21,3 +21,16 @@ func (h *PaymentHandler) Unpaid(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
 	c.JSON(http.StatusOK, legacyjson.OK(h.service.Unpaid(c.Request.Context())))
 }
+
+func (h *PaymentHandler) Success(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, legacyjson.Response{
+		RetCode: 0,
+		ErrMsg:  h.service.SuccessMessage(c.Request.Context()),
+	})
+}
+
+func (h *PaymentHandler) Failed(c *gin.Context) {
+	c.Header("X-Served-By", "newbie")
+	c.JSON(http.StatusOK, legacyjson.Error(h.service.FailedMessage(c.Request.Context())))
+}

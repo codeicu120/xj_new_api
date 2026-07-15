@@ -1730,6 +1730,38 @@ func TestPaymentUnpaidRoute(t *testing.T) {
 	}
 }
 
+func TestPaymentCallbackStatusRoutes(t *testing.T) {
+	router := newTestRouter()
+
+	tests := []struct {
+		path    string
+		retcode int
+		errmsg  string
+	}{
+		{path: "/payment/success", retcode: 0, errmsg: "支付成功回调"},
+		{path: "/payment/failed", retcode: -1, errmsg: "支付失败回调"},
+	}
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", tt.path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", tt.path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", tt.path, err)
+		}
+		if body.RetCode != tt.retcode || body.ErrMsg != tt.errmsg {
+			t.Fatalf("%s expected retcode=%d errmsg=%q, got %#v", tt.path, tt.retcode, tt.errmsg, body)
+		}
+	}
+}
+
 func newTestRouter() http.Handler {
 	return NewRouter(Options{
 		Config: config.Config{

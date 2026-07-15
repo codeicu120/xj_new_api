@@ -17,3 +17,14 @@ func TestUnpaidAlwaysReturnsZeroTotal(t *testing.T) {
 		t.Fatalf("expected only total_count, got %#v", data)
 	}
 }
+
+func TestCallbackMessages(t *testing.T) {
+	service := NewService()
+
+	if got := service.SuccessMessage(context.Background()); got != "支付成功回调" {
+		t.Fatalf("unexpected success message %q", got)
+	}
+	if got := service.FailedMessage(context.Background()); got != "支付失败回调" {
+		t.Fatalf("unexpected failed message %q", got)
+	}
+}

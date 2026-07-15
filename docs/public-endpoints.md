@@ -33,6 +33,7 @@
 | `/activity/recommends` | `c.api.activity->recommends` | 本轮完成 | 登录邀请记录只读接口；未登录和无效活动分支对比通过，成功分支由 service fake 覆盖。 |
 | `/invite/info` | `c.api.invite->info` | 本轮完成 | 登录只读当前绑定的邀请码；未登录和登录真实 token 分支对比通过。 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | 本轮完成 | 当前 PHP 运行代码固定返回 `data.total_count=0`；未执行的未支付订单查询分支暂不接管。 |
+| `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | 本轮完成 | 固定支付状态 JSON 文案；不包含第三方支付回调验签或入账逻辑。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
@@ -113,7 +114,7 @@
 | 接口 | 原因 |
 | --- | --- |
 | `/register`、`/login`、`/forgot` | 公共但涉及账号、短信、风控和写库。 |
-| `/payment/*`（除 `/payment/unpaid`）、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
+| `/payment/*`（除 `/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/balance`、`/game/wali/enter`、`/game/lottery/*` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |

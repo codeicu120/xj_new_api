@@ -1098,6 +1098,15 @@
 - 兼容规则：返回 `retcode=0`、`errmsg=""`、`data.total_count=0`；旧 PHP 游客中间件可能追加动态 `xxx_api_auth`，Go 不生成。
 - 测试：`go test ./internal/service/payment ./internal/server` 通过；路由测试覆盖 JSON 壳和 `total_count=0`。
 
+### `/payment/success`、`/payment/failed`
+
+- PHP: `c.api.payment->success/failed`
+- Go: `internal/handler.PaymentHandler.Success/Failed`
+- Service: `internal/service/payment.Service`
+- Auth/DB/External: 无；两个接口只返回固定 JSON 文案，不读取订单、不验签、不调用支付平台。
+- 兼容规则：`success` 返回 `retcode=0`、`errmsg=支付成功回调`、无 `data`；`failed` 返回 `retcode=-1`、`errmsg=支付失败回调`、无 `data`。
+- 测试：`go test ./internal/service/payment ./internal/server` 通过；PHP-Go live 对比两个接口 retcode/errmsg 一致，忽略旧 PHP 游客中间件动态字段。
+
 ### `/init`
 
 - PHP: `c.api.index->init`

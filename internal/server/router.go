@@ -206,6 +206,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/activity/recommends", activityHandler.Recommends)
 	router.Any("/invite/info", inviteHandler.Info)
 	router.Any("/payment/unpaid", paymentHandler.Unpaid)
+	router.Any("/payment/success", paymentHandler.Success)
+	router.Any("/payment/failed", paymentHandler.Failed)
 	router.Any("/bought/listing", boughtHandler.Listing)
 	router.Any("/bought/delete", boughtHandler.Delete)
 	router.Any("/playlog", handler.EmptyHTML)
