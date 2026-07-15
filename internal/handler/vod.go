@@ -121,6 +121,20 @@ func (h *VODHandler) Down(c *gin.Context) {
 	h.vote(c, false)
 }
 
+func (h *VODHandler) Breaking(c *gin.Context) {
+	data, retcode, errmsg, err := h.listingService.Breaking(c.Request.Context())
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
+}
+
 func (h *VODHandler) vote(c *gin.Context, up bool) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
 	retcode, errmsg, err := h.listingService.Vote(c.Request.Context(), authToken(c), vodID, up)

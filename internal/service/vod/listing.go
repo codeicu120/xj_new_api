@@ -51,6 +51,7 @@ type ListingStore interface {
 	IncrementMiniSearchLog(ctx context.Context, keyword string, previous int64, now int64) error
 	TopMiniSearchVODIDs(ctx context.Context) (string, error)
 	MiniVODsByIDs(ctx context.Context, ids []int, orderBy string) ([]map[string]interface{}, error)
+	BreakingVOD(ctx context.Context, cateID int, since int64) (map[string]interface{}, error)
 	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
 	DeleteUpDown(ctx context.Context, uid int, vodID int) error
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
@@ -500,6 +501,22 @@ func (s *ListingService) Vote(ctx context.Context, token string, vodID int, up b
 		return s.voteGuest(ctx, str(row["vodid"]), up)
 	}
 	return s.voteUser(ctx, uid, atoi(str(row["vodid"])), up)
+}
+
+func (s *ListingService) Breaking(ctx context.Context) (map[string]interface{}, int, string, error) {
+	now := s.now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+	row, err := s.store.BreakingVOD(ctx, 99, dayStart)
+	if err != nil {
+		return nil, -1, "获取每日爆料失败", err
+	}
+	if len(row) == 0 || atoi(str(row["showtype"])) > 0 {
+		return nil, -1, "记录不存在或已被删除", nil
+	}
+	return map[string]interface{}{
+		"vodid": row["vodid"],
+		"title": row["title"],
+	}, 0, "ok", nil
 }
 
 func (s *ListingService) voteGuest(ctx context.Context, vodID string, up bool) (int, string, error) {

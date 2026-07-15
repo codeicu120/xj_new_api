@@ -26,6 +26,7 @@ type fakeListingStore struct {
 	miniUpsertCalls     int
 	miniIncrementCalls  int
 	updown              map[string]interface{}
+	breaking            map[string]interface{}
 	savedUpdown         int
 	counters            []string
 }
@@ -186,6 +187,13 @@ func (s *fakeListingStore) IncrementMiniSearchLog(context.Context, string, int64
 
 func (s *fakeListingStore) TopMiniSearchVODIDs(context.Context) (string, error) {
 	return "100", nil
+}
+
+func (s *fakeListingStore) BreakingVOD(context.Context, int, int64) (map[string]interface{}, error) {
+	if s.breaking != nil {
+		return s.breaking, nil
+	}
+	return map[string]interface{}{"vodid": "99", "title": "爆料", "showtype": "0"}, nil
 }
 
 func (s *fakeListingStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
@@ -582,6 +590,34 @@ func TestVoteUserSwitchesState(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "已赞" || store.savedUpdown != 1 {
 		t.Fatalf("response = %d %q saved=%d", retcode, errmsg, store.savedUpdown)
+	}
+}
+
+func TestBreakingReturnsVODIDAndTitle(t *testing.T) {
+	service := NewListingService(&fakeListingStore{}, "https://res.example.test", 100)
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.Breaking(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "ok" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["vodid"] != "99" || data["title"] != "爆料" {
+		t.Fatalf("data = %#v", data)
+	}
+}
+
+func TestBreakingMissing(t *testing.T) {
+	service := NewListingService(&fakeListingStore{breaking: map[string]interface{}{}}, "https://res.example.test", 100)
+
+	_, retcode, errmsg, err := service.Breaking(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "记录不存在或已被删除" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
 

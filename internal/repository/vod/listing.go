@@ -336,6 +336,20 @@ func (r *ListingRepository) MiniVODsByIDs(ctx context.Context, ids []int, orderB
 	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy)
 }
 
+func (r *ListingRepository) BreakingVOD(ctx context.Context, cateID int, since int64) (map[string]interface{}, error) {
+	if r.db == nil {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM vods WHERE cateid=? AND utimestamp>=? LIMIT 1", cateID, since)
+	if err != nil {
+		return nil, fmt.Errorf("query breaking vod: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
 func (r *ListingRepository) MiniSearchVODs(ctx context.Context, keyword string, limit int) ([]map[string]interface{}, error) {
 	if r.db == nil || strings.TrimSpace(keyword) == "" || limit <= 0 {
 		return []map[string]interface{}{}, nil

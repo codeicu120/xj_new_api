@@ -1077,6 +1077,17 @@
 - 兼容规则：保留 PHP 的 `data`、`total_cost`、`current_frozen` 字段；分页 pageSize 为 20；只读 action 不扣金币、不创建求片、不助力。
 - 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比三条接口未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
 
+### `/vod/breaking`
+
+- PHP: `c.api.vod->breaking`
+- Go: `internal/handler.VODHandler.Breaking`
+- Service: `internal/service/vod.ListingService`
+- Repository: `internal/repository/vod.ListingRepository`
+- Auth: 公共只读接口，不要求登录；旧 PHP 游客响应会带动态 `xxx_api_auth`，Go 不生成该字段。
+- DB: 读取 `vods WHERE cateid=99 AND utimestamp>=今日零点 LIMIT 1`。
+- 兼容规则：成功返回 `data.vodid/title` 且 `errmsg=ok`；无记录或 `showtype>0` 返回 `记录不存在或已被删除`。
+- 测试：`go test ./internal/service/vod ./internal/repository/vod ./internal/server` 通过；PHP-Go live 对比当前本地库无记录错误分支 retcode/errmsg 一致，忽略旧 PHP 动态游客 token。
+
 ### `/init`
 
 - PHP: `c.api.index->init`
