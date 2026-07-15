@@ -140,7 +140,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/qrlink` | ANY | `UCPHandler.TaskQRLink` |
 | `/ucp/task/invite` | ANY | `UCPHandler.TaskInvite` |
 | `/ucp/task/sign`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | ANY | `UCPHandler.TaskSign/TaskInviteCodeInput/TaskAdviewClick` |
-| `/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/task/share`、`/ucp/task/qrcode` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/task/qrcodeSave` | ANY | `UCPHandler.TaskQRCodeSave` |
 | `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxShare/TaskboxQRLink` |
 | `/ucp/taskbox/taskboxopen` | ANY | `UCPHandler.TaskboxOpen` |
 | `/ucp/taskbox/qrcode` | ANY | `UCPHandler.HighRiskAction` |
@@ -485,7 +486,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/qrlink` | `c.api.ucp.task->qrlink` | `UCPHandler.TaskQRLink` | 已重构，对比通过；登录只读推广二维码链接，读取推广 URL 和邀请码，不生成图片、不写 keylimit |
 | `/ucp/task/invite` | `c.api.ucp.task->invite` | `UCPHandler.TaskInvite` | 已重构；未登录错误分支对齐，登录后按 PHP 空方法体返回 200 空 body |
 | `/ucp/task/sign`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` | `c.api.ucp.task->$action` | `UCPHandler.TaskSign/TaskInviteCodeInput/TaskAdviewClick` | 部分已重构；`sign` 游客缺失/今日已签到、`invitecodeInput` 今日已保存/邀请码错误、`adviewClick` 今日已送过分支已迁移，签到/奖励/keylimit 写入暂未接管 |
-| `/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave` | `c.api.ucp.task->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支返回 `retcode=-9999 errmsg=您还没有登录`，登录奖励、二维码图片生成和 keylimit 写入分支暂未接管 |
+| `/ucp/task/share`、`/ucp/task/qrcode` | `c.api.ucp.task->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支返回 `retcode=-9999 errmsg=您还没有登录`，登录奖励、二维码图片生成和 keylimit 写入分支暂未接管 |
+| `/ucp/task/qrcodeSave` | `c.api.ucp.task->qrcodeSave` | `UCPHandler.TaskQRCodeSave` | 部分已重构；未登录和今日已保存二维码分支已迁移，保存二维码奖励金币、coinlog/keylimit 写入和事务成功分支暂未接管 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
 | `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | `UCPHandler.TaskboxShare` | 已重构；公共只读任务宝箱分享文案，替换随机/登录邀请码和每日推广 URL，按 shape 对比通过 |
@@ -564,7 +566,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支仍需事务化迁移 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
-| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
+| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支、`qrcodeSave` 今日已保存分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足和收款账号缺失前置分支已迁移，日次数、支付宝/银行卡范围、余额、金币兑换、冻结金额事务和 Telegram 通知仍需迁移 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |

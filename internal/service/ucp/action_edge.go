@@ -133,6 +133,25 @@ func (s *Service) TaskAdviewClickEdge(ctx context.Context, token string) (int, s
 	return -1, "广告点击奖励成功分支暂未迁移", nil
 }
 
+func (s *Service) TaskQRCodeSaveEdge(ctx context.Context, token string) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSaveQRCode, dayStartUnix(s.now()))
+	if err != nil {
+		return -1, "保存二维码失败", err
+	}
+	if count > 0 {
+		return -1, "您今天已经保存过了", nil
+	}
+	return -1, "保存二维码奖励成功分支暂未迁移", nil
+}
+
 func (s *Service) TaskboxOpenEdge(ctx context.Context, token string, taskID int) (int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {

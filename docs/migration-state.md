@@ -1673,3 +1673,12 @@
 - 未迁移：当天提现次数限制、支付宝/银行卡提现范围、账户余额、金币兑换、提现记录创建、冻结余额事务和 Telegram 通知。
 - Subagent：`Maxwell` 核对提现 create 可迁前置分支；主线先采纳不会进入账户/冻结事务的前半段。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
+
+### UCP 保存二维码奖励前置失败分支
+
+- 已迁移：`/ucp/task/qrcodeSave` 的未登录和当天已经保存二维码分支；当天已有 `COINTYPE_SAVE_QRCODE` 记录时返回 `retcode=-1 errmsg=您今天已经保存过了`。
+- PHP: `src/c/api/ucp/task.php::qrcodeSave`。
+- Go: `internal/handler.UCPHandler.TaskQRCodeSave`、`internal/service/ucp.Service.TaskQRCodeSaveEdge`。
+- 未迁移：保存二维码赠送金币、`coinlog->change()`、`taskdone()`、keylimit/任务奖励写入和事务成功路径。
+- Subagent：`Planck` 只读复核该分支位于 `db->begin()` 和 coinlog 写入之前；主线采纳为纯读失败分支。
+- 测试：`go test ./internal/service/ucp ./internal/server` 通过。

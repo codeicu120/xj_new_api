@@ -361,7 +361,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/task/sign", ucpHandler.TaskSign)
 	router.Any("/ucp/task/share", ucpHandler.HighRiskAction("分享奖励成功分支暂未迁移"))
 	router.Any("/ucp/task/qrcode", ucpHandler.HighRiskAction("二维码图片生成成功分支暂未迁移"))
-	router.Any("/ucp/task/qrcodeSave", ucpHandler.HighRiskAction("保存二维码奖励成功分支暂未迁移"))
+	router.Any("/ucp/task/qrcodeSave", ucpHandler.TaskQRCodeSave)
 	router.Any("/ucp/task/invitecodeInput", ucpHandler.TaskInviteCodeInput)
 	router.Any("/ucp/task/adviewClick", ucpHandler.TaskAdviewClick)
 	router.Any("/ucp/taskbox/index", ucpHandler.TaskboxIndex)

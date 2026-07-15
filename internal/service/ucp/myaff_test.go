@@ -825,6 +825,25 @@ func TestTaskRewardEdgePrechecks(t *testing.T) {
 	if retcode != -1 || errmsg != "您今天已经送过了" {
 		t.Fatalf("adview retcode=%d errmsg=%q", retcode, errmsg)
 	}
+
+	one := 1
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, countCoinLogSince: &one}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskQRCodeSaveEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您今天已经保存过了" {
+		t.Fatalf("qrcode save saved retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, countCoinLogSince: &zero}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskQRCodeSaveEdge(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "保存二维码奖励成功分支暂未迁移" {
+		t.Fatalf("qrcode save success placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	}
 }
 
 func TestTaskboxOpenEdgePrechecks(t *testing.T) {

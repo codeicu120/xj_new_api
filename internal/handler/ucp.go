@@ -102,6 +102,11 @@ func (h *UCPHandler) TaskAdviewClick(c *gin.Context) {
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
+func (h *UCPHandler) TaskQRCodeSave(c *gin.Context) {
+	retcode, errmsg, err := h.service.TaskQRCodeSaveEdge(c.Request.Context(), authToken(c))
+	h.respondEdge(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		retcode, errmsg, err := h.service.HighRiskActionEdge(c.Request.Context(), authToken(c), message)
