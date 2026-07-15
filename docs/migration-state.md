@@ -943,3 +943,45 @@
 - DB: 读取 `user_bankcards WHERE uid=? ORDER BY isdef DESC` 和 `banks WHERE showtype=0 ORDER BY sortnum ASC, bankid ASC`。
 - 兼容规则：返回 `data.cardrows/maxallow/allowtype/banknames/bankRows`；`maxallow=3`，`allowtype=7`，`bankRows` 只保留 `bankid/bankname/coverpic` 并按 PHP 转换 `bankid` 为 int。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/bankcard` 未登录分支一致，登录测试 token 下 cardrows、bankRows、限制字段和首行内容一致。
+
+### `/init`
+
+- PHP: `c.api.index->init`
+- Go: `internal/handler.IndexHandler.Init`
+- Service: `internal/service/index.InitService`
+- Repository: `internal/server.indexStore` 组合 `user.Repository`、`ucp.Repository`、`index.SettingsRepository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；无 token 返回游客 user 壳。
+- DB: 读取 session/user、user_groups、users_quota、users_goldbean、`settings(setting/baseset/promotion.bonus)` 和 `maintain_calldata(global.appver/playHeaders/全局配置)`。
+- 兼容规则：返回 `globalData/invite_bonus/user/appver/notification_all/inviteCodeUrl/inviteCodeAppid/playHeaders/urlHosts/csurl/sitelogo/isclosed/closetips/externalUrlDating`；顶层 `appver` 不受 `ver` query 覆盖，`globalData.appver` 保持 `/getGlobalData` 的覆盖规则。
+- 测试：`go test ./internal/service/index ./internal/server` 通过；PHP-Go live 对比 `/init?ver=1.2.3` 游客和测试 token 登录分支，核心 key、user、appver/globalData.appver、通知空值和站点配置一致，忽略旧 PHP 动态 `xxx_api_auth`。
+
+### `/`、`/index`
+
+- PHP: `c.api.index->index`
+- Go: `internal/handler.IndexHandler.Index`
+- Service: `internal/service/index.HomeService`
+- Repository: `internal/repository/vod.ListingRepository` 复用 `maintain_calldata` 和 `vods` 查询。
+- Auth: 公共首页接口；当前 Go 不写旧 PHP 的 `appversion` 访问记录副作用。
+- DB: 读取 `maintain_calldata(index.slide/index.slide.v2/index.slide.pc/index.slide.mb/index.recommend.vods/index.tagvods)`，并读取 `vods` 生成 `dayrows/latestrows/likerows/a_vodrows/b_vodrows/c_vodrows/d_vodrows/tagvodrows/hotrows`。
+- 兼容规则：返回 `sliderows/v2sliderows/pcsliderows/mbsliderows/dayrows/latestrows/likerows/a_vodrows/b_vodrows/c_vodrows/d_vodrows/tagvodrows/hotrows`；资源路径按 `RESOURCE_BASE_URL` 拼接，视频行复用 VOD `ProcessRows`。
+- 测试：`go test ./internal/service/index ./internal/repository/vod ./internal/server` 通过；PHP-Go live 对比 `/index` 和 `/` 的 `retcode/errmsg/key 集合/主要 count` 一致，忽略旧 PHP 动态游客 token 和首页访问版本写入。
+
+### `/getCover`
+
+- PHP: `c.api.index->getCover`
+- Go: `internal/handler.IndexHandler.GetCover`
+- Service: `internal/service/index.CoverService`
+- Cache/Client: 默认内存 TTL cache，外部封面服务通过 `CoverFetcher` 接口注入；后续接 Redis 时替换 `CoverCache`。
+- DB: 读取 `settings.uuid=setting` 的 `getCoverUrl`，缺省为旧 PHP 的 `http://172.22.0.7:8026/coverpic`。
+- 兼容规则：缓存命中直接返回 `data.data`；缓存未命中请求 `getCoverUrl?pic=...`，用 `substr(pic,10,32)` 等价 key 做 AES-256-CBC/PKCS7 加密，再 base64，返回 `Cache-Control: max-age=86400`；非法/缺失/外部空响应返回 `记录不存在或已被删除`。
+- 测试：`go test ./internal/service/index ./internal/server` 通过；成功加密和缓存分支由 fake 覆盖；live 验证 `/getCover?pic=short` Go 返回旧错误壳且不阻塞，旧 PHP 在缺省内网封面服务不可达时 3 秒超时无响应。
+
+### `/sms/sendv`、`/sms/sendu`、`/email/send`
+
+- PHP: `c.api.sms->sendv/sendu`、`c.api.email->send`
+- Go: `internal/handler.VerificationHandler`
+- Service: `internal/service/verification.Service`
+- Repository: `internal/server.indexStore` 读取 `settings.uuid=setting` 和登录用户 session。
+- External: `CaptchaVerifier`、`SMSSender`、`MailSender`、`Limiter` 均为接口；默认 sender 不直连真实短信/邮件平台，生产接入时替换具体 client。
+- 兼容规则：保留手机号/邮箱格式错误、sendu 未登录、缺图形验证码、验证码失败、频控、平台未配置等 legacy errmsg；成功响应使用 PHP `Json::ok($errmsg)` 形态，`retcode=0` 且消息在 `errmsg`。
+- 测试：`go test ./internal/service/verification ./internal/server` 通过；PHP-Go live 对比 `/sms/sendv?mobi=bad`、`/email/send?email=bad`、`/sms/sendu` 未登录错误分支一致；成功发送分支由 fake sender/captcha/limiter 覆盖。

@@ -11,15 +11,17 @@ import (
 )
 
 type ListingFilter struct {
-	CateIDs    []int
-	AreaID     int
-	YearID     int
-	Definition int
-	Duration   int
-	FreeType   int
-	Mosaic     int
-	LangVoice  int
-	Recommend  bool
+	CateIDs     []int
+	AreaID      int
+	YearID      int
+	Definition  int
+	Duration    int
+	FreeType    int
+	Mosaic      int
+	LangVoice   int
+	Recommend   bool
+	CTimeAfter  int64
+	CTimeBefore int64
 }
 
 type SpecialFilter struct {
@@ -622,6 +624,14 @@ func buildWhere(filter ListingFilter) (string, []interface{}) {
 	if filter.LangVoice > 0 {
 		parts = append(parts, "langvoice=?")
 		args = append(args, filter.LangVoice)
+	}
+	if filter.CTimeAfter > 0 {
+		parts = append(parts, "ctimestamp>?")
+		args = append(args, filter.CTimeAfter)
+	}
+	if filter.CTimeBefore > 0 {
+		parts = append(parts, "ctimestamp<?")
+		args = append(args, filter.CTimeBefore)
 	}
 	parts = append(parts, "showtype=0")
 	return " AND " + strings.Join(parts, " AND "), args

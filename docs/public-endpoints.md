@@ -15,7 +15,8 @@
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | 已完成 | 忽略旧中间件动态字段 `data.xxx_api_auth` 后一致。 |
 | `/logout` | `c.api.user->logout` | 本轮完成 | 退出登录；无 token/非法 token 分支对比通过，成功删除 session 由 service fake 覆盖。 |
-| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | 本轮完成 | 短信/邮件默认空入口，返回 `200 text/html` 空 body；发送验证码 action 未接管。 |
+| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | 本轮完成 | 短信/邮件默认空入口，返回 `200 text/html` 空 body。 |
+| `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | 本轮完成 | 验证码发送入口；手机号/邮箱/未登录错误分支 live 对比通过，成功发送由 sender/captcha/limiter fake 覆盖，默认不直连真实平台。 |
 | `/captcha/req` | `c.api.captcha->req` | 本轮完成 | `picurl` secret 动态生成，对比稳定结构、前缀和 `smscaptcha`。 |
 | `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | 本轮完成 | 图片验证码输出；无效 secret 404 JSON 对比一致，有效 PHP/Go secret 均返回 `image/png`、100x34 PNG。 |
 | `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | 本轮完成 | 附件空入口和系统头像更新；空响应、未登录、登录非法参数对比通过，成功更新由 service fake 覆盖。 |
@@ -64,8 +65,11 @@
 | `/game/games` | `c.api.game.index->games` | 本轮完成 | 读 `game`，支持 `platform_id/category_id`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | 本轮完成 | 复用 VOD 行处理，按旧 PHP 固定返回 6 条随机猜你喜欢。 |
+| `/getCover` | `c.api.index->getCover` | 本轮完成 | 封面加密代理；缓存/外部服务/AES 成功分支由 fake 覆盖，非法 pic 返回旧错误壳且避免外部服务阻塞。 |
 | `/getCertUuid` | `c.api.index->getCertUuid` | 本轮完成 | 证书 UUID 外部查询代理；本地错误分支对比一致，成功分支通过 fake client 覆盖。 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | 本轮完成 | 全局配置聚合；核心 key shape、版本覆盖、热门标签/分类和开关字段 live 对比通过，忽略旧 PHP 动态游客 token。 |
+| `/init` | `c.api.index->init` | 本轮完成 | 客户端初始化聚合；游客/登录用户核心字段、顶层 appver、globalData appver 覆盖、通知和站点配置 live 对比通过。 |
+| `/`、`/index` | `c.api.index->index` | 本轮完成 | 首页聚合；广告 slide、推荐、最新、猜你喜欢、分类分组、标签视频和热片核心 key/count live 对比通过。 |
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
 | `/game/wali/test` | `c.api.game.wali->ping` | 本轮完成 | 瓦力平台 ping；读取 `game_platform.json` 后 AES-ECB 加密、MD5 签名并外呼，live 对比一致。 |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | 本轮完成 | 需要登录但无本地写入；复用瓦力 AES/签名外呼，返回外部平台余额。 |
@@ -97,7 +101,7 @@
 
 | 优先级 | 接口 | PHP handler | 风险 |
 | --- | --- | --- | --- |
-| 1 | `/init` | `c.api.index->init` | 中；依赖系统设置、游客初始化、较多字段。 |
+| 1 | `/register`、`/login`、`/forgot` | `c.api.user` | 高；账号、验证码、session 写入和风控。 |
 
 ## 暂缓
 

@@ -59,6 +59,7 @@ import (
 	statsService "xj_comp/internal/service/stats"
 	ucpService "xj_comp/internal/service/ucp"
 	userService "xj_comp/internal/service/user"
+	verificationService "xj_comp/internal/service/verification"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -105,18 +106,27 @@ func NewRouter(opts Options) *gin.Engine {
 		gameService.NewWaliService(gameRepo.NewPlatformRepository(db), userRepository, nil),
 	)
 	indexRepository := indexRepo.NewSettingsRepository(db)
-	indexHandler := handler.NewIndexHandler(indexService.NewCertService(indexRepository, nil), indexService.NewGlobalService(indexRepository, cfg.ResourceBaseURL))
+	ucpRepository := ucpRepo.NewRepository(db)
+	vodRepository := vodRepo.NewListingRepository(db)
+	vodListingService := vodService.NewListingService(vodRepository, cfg.ResourceBaseURL, cfg.VIPDiscount)
+	idxStore := indexStore{user: userRepository, ucp: ucpRepository, index: indexRepository}
+	globalService := indexService.NewGlobalService(indexRepository, cfg.ResourceBaseURL)
+	indexHandler := handler.NewIndexHandler(
+		indexService.NewCertService(indexRepository, nil),
+		globalService,
+		indexService.NewInitService(idxStore, globalService, cfg.ResourceBaseURL),
+		indexService.NewHomeService(vodRepository, vodListingService, cfg.ResourceBaseURL),
+		indexService.NewCoverService(idxStore, nil, nil),
+	)
 	amazingHandler := handler.NewAmazingHandler(
 		amazingService.NewCategoryService(amazingRepo.NewCategoryRepository(db)),
 		amazingService.NewListingService(amazingRepo.NewSoftwareRepository(db), cfg.ResourceBaseURL),
 	)
 	soHandler := handler.NewSOHandler(soService.NewConfigService(soRepo.NewConfigRepository(db)))
-	vodRepository := vodRepo.NewListingRepository(db)
-	vodListingService := vodService.NewListingService(vodRepository, cfg.ResourceBaseURL, cfg.VIPDiscount)
 	vodHandler := handler.NewVODHandler(vodListingService)
 	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db), vodListingService, cfg.ResourceBaseURL))
 	specialHandler := handler.NewSpecialHandler(vodService.NewSpecialService(vodRepository, userRepository, cfg.ResourceBaseURL, 100))
-	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepo.NewRepository(db)}, cfg.ResourceBaseURL))
+	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepository}, cfg.ResourceBaseURL))
 	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepository, vodRepository))
 	commentHandler := handler.NewCommentHandler(commentService.NewService(commentRepo.NewRepository(db), cfg.ResourceBaseURL))
 	communityHandler := handler.NewCommunityHandler(communityService.NewService(userRepository, communityRepo.NewRepository(db), cfg.ResourceBaseURL))
@@ -135,15 +145,21 @@ func NewRouter(opts Options) *gin.Engine {
 	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env))
+	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
+	router.Any("/", indexHandler.Index)
+	router.Any("/index", indexHandler.Index)
 	router.Any("/sysavatar", userHandler.SysAvatar)
 	router.Any("/logout", userHandler.Logout)
 	router.Any("/sms", handler.EmptyHTML)
 	router.Any("/sms/index", handler.EmptyHTML)
+	router.Any("/sms/sendv", verificationHandler.SMSSendV)
+	router.Any("/sms/sendu", verificationHandler.SMSSendU)
 	router.Any("/email", handler.EmptyHTML)
 	router.Any("/email/index", handler.EmptyHTML)
+	router.Any("/email/send", verificationHandler.EmailSend)
 	router.Any("/captcha/req", captchaHandler.Req)
 	router.Any("/captcha/pic", captchaHandler.Pic)
 	router.Any("/captcha/picx", captchaHandler.PicX)
@@ -165,7 +181,9 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/attach/index", attachHandler.Index)
 	router.Any("/attach/upavatar", attachHandler.UpAvatar)
 	router.Any("/getLikeRows", vodHandler.LikeRows)
+	router.Any("/getCover", indexHandler.GetCover)
 	router.Any("/getGlobalData", indexHandler.GetGlobalData)
+	router.Any("/init", indexHandler.Init)
 	router.Any("/search", vodHandler.Search)
 	router.Any("/minisearch", vodHandler.MiniSearch)
 	router.Any("/shortcutstats/add", statsHandler.ShortcutAdd)

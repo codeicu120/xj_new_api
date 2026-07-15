@@ -26,9 +26,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/healthz` | GET | `healthHandler` |
 | `/readyz` | GET | `healthHandler` |
+| `/`、`/index` | ANY | `IndexHandler.Index` |
 | `/sysavatar` | ANY | `UserHandler.SysAvatar` |
 | `/logout` | ANY | `UserHandler.Logout` |
 | `/sms`、`/sms/index`、`/email`、`/email/index` | ANY | `handler.EmptyHTML` |
+| `/sms/sendv`、`/sms/sendu`、`/email/send` | ANY | `VerificationHandler` |
 | `/captcha/req` | ANY | `CaptchaHandler.Req` |
 | `/captcha/pic`、`/captcha/picx` | ANY | `CaptchaHandler.Pic/PicX` |
 | `/test` | ANY | `TestHandler.Test` |
@@ -47,6 +49,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/attach`、`/attach/index`、`/attach/upavatar` | ANY | `AttachHandler.Index/UpAvatar` |
 | `/:size/:uri`（`C*`/`T*`/`R*`/`M`/`N`） | ANY | `PicHandler.Index` |
 | `/getLikeRows` | ANY | `VODHandler.LikeRows` |
+| `/getCover` | ANY | `IndexHandler.GetCover` |
 | `/search` | ANY | `VODHandler.Search` |
 | `/minisearch` | ANY | `VODHandler.MiniSearch` |
 | `/shortcutstats/add`、`/adstats/add`、`/playstats/add` | ANY | `StatsHandler` |
@@ -80,6 +83,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/aiundress/index` | ANY | `handler.EmptyHTML` |
 | `/getCertUuid` | ANY | `IndexHandler.GetCertUUID` |
 | `/getGlobalData` | ANY | `IndexHandler.GetGlobalData` |
+| `/init` | ANY | `IndexHandler.Init` |
 | `/ucp/index` | ANY | `UCPHandler.Index` |
 | `/ucp/user`、`/ucp/user/index` | ANY | `UCPHandler.UserIndex` |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | ANY | `UCPHandler.BankcardIndex` |
@@ -140,14 +144,17 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- | --- |
 | `/sysavatar` | `c.api.user->sysavatar` | `UserHandler.SysAvatar` | 已重构，对比通过 |
 | `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
-| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body，发送验证码 action 未接管 |
+| `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body |
+| `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | `VerificationHandler` | 已重构；手机号/邮箱/未登录错误分支 live 对比通过，成功发送通过 sender/captcha/limiter fake 覆盖，默认不直连真实短信/邮件平台 |
 | `/captcha/req` | `c.api.captcha->req` | `CaptchaHandler.Req` | 已重构，动态 secret 按 shape 对比通过 |
 | `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | `CaptchaHandler.Pic/PicX` | 已重构；无效 secret 404 JSON 对比通过，有效 PHP secret 和 Go req secret 均输出 100x34 PNG |
 | `/test` | `c.api.test->test` | `TestHandler.Test` | 已重构，动态 PNG 按 status/content-type/PNG 尺寸对比通过 |
 | `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | `AttachHandler.Index/UpAvatar` | 已重构；空响应、未登录和登录非法头像分支对比通过，成功更新分支由 service fake 覆盖 |
 | `/:size/:uri`（`C*`/`T*`/`R*`/`M`/`N`） | `c.api.pic->index` | `PicHandler.Index` | 已重构；无效/不存在文件 404 分支对比通过，图片生成由 service 测试覆盖 |
 | `/iploc/:ip` | `c.api.index->iploc` | `IPLocHandler.Find` | 已重构，对比通过 |
+| `/`、`/index` | `c.api.index->index` | `IndexHandler.Index` | 已重构，对比通过；首页广告、推荐、最新、猜你喜欢和视频分组聚合，核心 key/count 与旧 PHP 一致 |
 | `/getLikeRows` | `c.api.index->getLikeRows` | `VODHandler.LikeRows` | 已重构，对比通过 |
+| `/getCover` | `c.api.index->getCover` | `IndexHandler.GetCover` | 已重构；缓存/外部服务/AES 成功分支由 fake 覆盖，非法 pic 错误壳对齐并避免外部服务阻塞 |
 | `/getCertUuid` | `c.api.index->getCertUuid` | `IndexHandler.GetCertUUID` | 已重构，本地错误分支对比通过；成功分支用 fake client 覆盖 |
 | `/shortcutstats/add` | `c.api.shortcutstats->add` | `StatsHandler.ShortcutAdd` | 已重构，对比通过；按 IP 去重写入快捷方式统计 |
 | `/adstats/add` | `c.api.adstats->add` | `StatsHandler.AdAdd` | 已重构，对比通过；复刻无 token 游客 sid 创建和广告点击/安装统计 |
@@ -286,6 +293,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | `AIUndressHandler.Listing` | 已重构，对比通过；登录只读 AI 任务历史，支持 `module/page`，未登录 `retcode=-1` |
 | `/aiundress/index` | `c.api.aiundress->index` | `handler.EmptyHTML` | 已重构，对比通过；按本地旧 PHP 运行时行为返回 `200 text/html` 空 body，AI 业务 action 未接管 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | `IndexHandler.GetGlobalData` | 已重构；全局配置/版本/广告/弹窗/开关聚合，核心 key shape 和版本覆盖对比通过 |
+| `/init` | `c.api.index->init` | `IndexHandler.Init` | 已重构；客户端初始化聚合，复用 globalData，登录/游客 user、appver、通知、邀请和站点配置 live 对比通过 |
 
 ### 需要登录但不需要验证码
 
@@ -351,11 +359,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/init` | `c.api.index->init` | 未重构；依赖登录/游客初始化、系统设置、版本、广告、全局数据、通知等 |
-| `/`、`/index` | `c.api.index->index` | 未重构；首页聚合，多表、多广告配置 |
-| `/getCover` | `c.api.index->getCover` | 未重构；Redis、外部封面服务、AES 加密 |
-| `/sms/:action?`（除 `/sms`、`/sms/index`） | `c.api.sms->$action` | 未重构；剩余 `sendv/sendu` 涉及验证码、短信平台、频控 |
-| `/email/:action?`（除 `/email`、`/email/index`） | `c.api.email->$action` | 未重构；剩余 `send` 涉及验证码、邮件平台、频控 |
 
 ### 非 v2 视频接口
 
@@ -463,9 +466,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 ## 建议后续顺序
 
-1. 继续公共接口：`/init`、`/`、`/index`；这些依赖全局设置、广告、首页聚合和游客初始化。
-2. 中风险接口：`/getCover`、`/sms/:action?`、`/email/:action?`。
-3. 高风险接口最后迁移：支付、金币/金豆、购买、任务奖励、提现、游戏上分/下分、验证码注册/登录。
+1. 高风险写入接口：评论发布、收藏新增、点赞踩、播放/下载授权、购买、任务奖励。
+2. 资产/外部平台接口：支付、金币/金豆、提现、游戏上分/下分、AI 上传/生成、直播平台。
 
 ## 当前验证命令
 
