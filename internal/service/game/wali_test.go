@@ -10,11 +10,16 @@ import (
 )
 
 type fakeWaliStore struct {
-	row map[string]interface{}
+	row      map[string]interface{}
+	settings map[string]string
 }
 
 func (s fakeWaliStore) PlatformByID(context.Context, int) (map[string]interface{}, error) {
 	return s.row, nil
+}
+
+func (s fakeWaliStore) Setting(_ context.Context, key string) (string, error) {
+	return s.settings[key], nil
 }
 
 type fakeWaliAuthStore struct {
@@ -101,6 +106,35 @@ func TestWaliServiceBalanceRequiresLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "您还没有登录" {
 		t.Fatalf("unexpected auth result %d %q", retcode, errmsg)
+	}
+}
+
+func TestWaliTransferEdgePrechecks(t *testing.T) {
+	service := NewWaliService(fakeWaliStore{settings: map[string]string{"gamecoinlimit": "100"}}, fakeWaliAuthStore{}, &fakeWaliClient{})
+
+	retcode, errmsg, err := service.TopupEdge(context.Background(), "", "0", "")
+	if err != nil {
+		t.Fatalf("topup unauth: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected unauth response %d %q", retcode, errmsg)
+	}
+
+	service = NewWaliService(fakeWaliStore{settings: map[string]string{"gamecoinlimit": "100"}}, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, &fakeWaliClient{})
+	retcode, errmsg, err = service.TopupEdge(context.Background(), "token", "99", "上分成功分支暂未迁移")
+	if err != nil {
+		t.Fatalf("topup low: %v", err)
+	}
+	if retcode != -1 || errmsg != "转入金币不能低于100" {
+		t.Fatalf("unexpected low response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.WithdrawEdge(context.Background(), "token", "0", "下分成功分支暂未迁移")
+	if err != nil {
+		t.Fatalf("withdraw invalid: %v", err)
+	}
+	if retcode != -1 || errmsg != "金额输入不正确" {
+		t.Fatalf("unexpected withdraw response %d %q", retcode, errmsg)
 	}
 }
 

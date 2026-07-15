@@ -36,6 +36,7 @@ type Store interface {
 	Random(ctx context.Context, pageSize int) ([]map[string]interface{}, error)
 	VODByID(ctx context.Context, vodID int) (map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	UserQuota(ctx context.Context, uid int) (map[string]interface{}, error)
 	SimilarVODsByTagIDs(ctx context.Context, tagIDs []int, excludeID int, pageSize int) ([]map[string]interface{}, error)
 	RandomVODsExcept(ctx context.Context, pageSize int, excludeID int, cateID int) ([]map[string]interface{}, error)
 	Setting(ctx context.Context, key string) (string, error)
@@ -87,6 +88,13 @@ type ListingRequest struct {
 	PathParams  string
 	QueryPage   string
 	IsH5Request bool
+}
+
+type ThrowCoinRequest struct {
+	Token  string
+	VODID  int
+	Method string
+	Coin   int
 }
 
 func NewService(store Store, vodProcessor VODProcessor, resourceBaseURL string) *Service {
@@ -398,15 +406,56 @@ func (s *Service) ReqCoin(ctx context.Context, token string, logid int) (int, st
 	return retcode, errmsg, nil
 }
 
-func (s *Service) ThrowCoinEdge(ctx context.Context, token string) (int, string, error) {
-	user, err := s.userByToken(ctx, token)
+func (s *Service) ThrowCoinEdge(ctx context.Context, req ThrowCoinRequest) (map[string]interface{}, int, string, error) {
+	user, err := s.userByToken(ctx, req.Token)
 	if err != nil {
-		return -9999, "需登录后方可使用投币功能", err
+		return nil, -9999, "需登录后方可使用投币功能", err
 	}
 	if atoi(user["uid"]) == 0 {
-		return -9999, "需登录后方可使用投币功能", nil
+		return nil, -9999, "需登录后方可使用投币功能", nil
 	}
-	return -1, "小视频投币成功分支暂未迁移", nil
+	row, err := s.store.VODByID(ctx, req.VODID)
+	if err != nil {
+		return nil, -1, "小视频投币失败", err
+	}
+	if len(row) == 0 || atoi(row["showtype"]) != 1 {
+		return nil, -1, "记录不存在或已被删除", nil
+	}
+	author, err := s.store.UserByID(ctx, atoi(row["authorid"]))
+	if err != nil {
+		return nil, -1, "小视频投币失败", err
+	}
+	if len(author) == 0 {
+		return nil, -1, "作者不存在", nil
+	}
+	mincoin, err := s.store.Setting(ctx, "mincoin")
+	if err != nil {
+		return nil, -1, "小视频投币失败", err
+	}
+	maxcoin, err := s.store.Setting(ctx, "maxcoin")
+	if err != nil {
+		return nil, -1, "小视频投币失败", err
+	}
+	minCoin := atoi(mincoin)
+	maxCoin := atoi(maxcoin)
+	if strings.ToUpper(req.Method) != "POST" {
+		quota, err := s.store.UserQuota(ctx, atoi(user["uid"]))
+		if err != nil {
+			return nil, -1, "小视频投币失败", err
+		}
+		return map[string]interface{}{
+			"mincoin":  minCoin,
+			"maxcoin":  maxCoin,
+			"goldcoin": atoi(quota["goldcoin"]),
+		}, 0, "", nil
+	}
+	if req.Coin <= 0 {
+		return nil, -1, "已投币成功", nil
+	}
+	if (minCoin > 0 || maxCoin > 0) && (req.Coin < minCoin || req.Coin > maxCoin) {
+		return nil, -1, "投币数额请在合理范围", nil
+	}
+	return nil, -1, "小视频投币成功分支暂未迁移", nil
 }
 
 func (s *Service) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {

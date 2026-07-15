@@ -75,6 +75,48 @@ func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interfac
 	return row, nil
 }
 
+func (r *Repository) UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(mobi) == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users WHERE mobi=?", mobi)
+	if err != nil {
+		return nil, fmt.Errorf("query user by mobi: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) UserByEmail(ctx context.Context, email string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(email) == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users WHERE email=?", email)
+	if err != nil {
+		return nil, fmt.Errorf("query user by email: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) UserByUsername(ctx context.Context, username string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(username) == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users WHERE username=?", username)
+	if err != nil {
+		return nil, fmt.Errorf("query user by username: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
 func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil

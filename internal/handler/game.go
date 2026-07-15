@@ -128,6 +128,30 @@ func (h *GameHandler) HighRiskAction(message string) gin.HandlerFunc {
 	}
 }
 
+func (h *GameHandler) TransferTopup(message string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		retcode, errmsg, err := h.waliService.TopupEdge(c.Request.Context(), authToken(c), inputValue(c, "amount"), message)
+		c.Header("X-Served-By", "newbie")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+			return
+		}
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+	}
+}
+
+func (h *GameHandler) TransferWithdraw(message string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		retcode, errmsg, err := h.waliService.WithdrawEdge(c.Request.Context(), authToken(c), inputValue(c, "amount"), message)
+		c.Header("X-Served-By", "newbie")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+			return
+		}
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+	}
+}
+
 func (h *GameHandler) Categories(c *gin.Context) {
 	parentID, _ := strconv.Atoi(c.Query("parent_id"))
 	data, err := h.categoryService.List(c.Request.Context(), parentID)

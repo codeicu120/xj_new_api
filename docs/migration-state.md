@@ -1548,3 +1548,19 @@
 - 已迁移 AI 脱衣未登录分支：`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`，返回 `retcode=-1 errmsg=请先登录`；图片上传、第三方 AI、Redis 并发锁、删除外部资源和金豆扣减暂未接管。
 - Subagent：`Confucius` 梳理 payment/respond/starlive/game 安全候选；`Halley` 梳理 media/AI/UCP/account 安全候选。主线按确定、低副作用分支落地，未采纳需要事务、支付、资产或外部 provider 的成功路径。
 - 测试：`go test ./internal/service/aiundress ./internal/service/ucp ./internal/service/minivod ./internal/service/starlive ./internal/server` 通过。
+
+### 账号、小视频投币和游戏金额前置分支
+
+- 已迁移账号只读/失败分支：`/v2/login` 手机/邮箱/用户名不存在；`/forgot`、`/v2/forgot` step1 手机/邮箱不存在和 `step1->step2`；`/changePhone` 相同手机号、手机号已存在和 `step1->step2`。
+- PHP: `src/c/api/user.php::forgot`、`src/c/apiv2/user.php::login/forgot`、`src/c/api/user2.php::changePhone`。
+- Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`、`internal/repository/user.Repository`。
+- 兼容规则：仅做用户表只读查询和本地参数判断；登录成功、验证码校验、session 写入、改密、注销 Redis 和换绑事务仍未接管。
+- 已迁移小视频投币前置/GET 分支：`/minivod/throwcoin/:vodid` 的视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST `coinnum<=0` 和超出 min/max 范围。
+- PHP: `src/c/api/minivod.php::throwcoin`。
+- Go: `internal/handler.MiniVODHandler.ThrowCoin`、`internal/service/minivod.Service.ThrowCoinEdge`、`internal/repository/minivod.Repository.UserQuota`。
+- 兼容规则：GET 只读 `settings.mincoin/maxcoin` 和 `users_quota.goldcoin`；POST 成功投币、作者收益、金币日志和事务扣费仍未接管。
+- 已迁移游戏金额前置分支：`/game/wali/topup`、`/game/lottery/topup` 低于 `gamecoinlimit`，`/game/wali/withdraw`、`/game/lottery/withdraw` 金额输入不正确。
+- PHP: `src/c/api/game/wali.php::topup/withdraw`、`src/c/api/game/lottery.php::topup/withdraw`。
+- Go: `internal/handler.GameHandler.TransferTopup/TransferWithdraw`、`internal/service/game.WaliService.TopupEdge/WithdrawEdge`、`internal/repository/game.PlatformRepository.Setting`。
+- Subagent：`Harvey` 核对四个游戏金额失败分支，确认均发生在外部平台请求和资产事务之前。
+- 测试：`go test ./internal/service/user ./internal/service/minivod ./internal/service/game ./internal/server` 通过。

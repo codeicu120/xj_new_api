@@ -44,7 +44,7 @@
 | `/payment/reqpay`、`/payment/pay12req` | `c.api.payment->reqpay/pay12req` | 本轮完成 | 仅接管缺失/已支付/过期/非本人等前置失败分支；`pay12req` 错误分支返回 payerror HTML，成功请求网关暂未接管。 |
 | `/respond/*` 常见支付 provider 失败分支 | `c.respond.*` | 本轮完成 | 空请求/解析失败分支返回旧 provider `echoErr()` 文本；成功验签、锁单入账和 `payment->doAction()` 未接管。 |
 | `/respond/chan1` | `c.respond.chan1` | 本轮完成 | 仅接管 `mobi|secret` token 校验失败分支，返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理未接管。 |
-| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 仅接管安全前置失败分支：未同意协议、未登录、手机号格式、空账号、无效 step 等；成功注册/登录/改密/注销/换绑仍未接管。 |
+| `/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` | `c.api.user/user2`、`c.apiv2.user` | 本轮完成 | 接管安全前置失败/只读推进分支：未同意协议、未登录、手机号格式、空账号、无效 step、v2 账号不存在、forgot/changePhone step1 等；成功注册/登录/改密/注销/换绑仍未接管。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
 | `/explore/notification`、`/explore/notification/index` | `c.api.explore.notification->index` | 本轮完成 | 旧 PHP 空 OK 入口；Go 不回传动态游客 token。 |
 | `/explore/notification/clean` | `c.api.explore.notification->clean` | 本轮完成 | 发现页红点清理，`tabkey` 空/不存在错误分支对比通过，`all` 和指定 tab 更新由 fake 覆盖。 |
@@ -105,9 +105,9 @@
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
 | `/game/wali/test` | `c.api.game.wali->ping` | 本轮完成 | 瓦力平台 ping；读取 `game_platform.json` 后 AES-ECB 加密、MD5 签名并外呼，live 对比一致。 |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | 本轮完成 | 需要登录但无本地写入；复用瓦力 AES/签名外呼，返回外部平台余额。 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | 本轮完成 | 仅接管未登录分支，返回 `retcode=-9999 errmsg=您还没有登录`；金币事务、外部平台请求和进入游戏成功分支未接管。 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、下分金额不正确分支；余额不足、金币事务、外部平台请求和进入游戏成功分支未接管。 |
 | `/game/lottery/gameList` | `c.api.game.lottery->gameList` | 本轮完成 | 彩票普通分类只读列表；`category_id=5` 游客返回旧 PHP 未登录错误，登录常玩列表后续单独接管。 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 本轮完成 | 仅接管未登录分支；彩票平台资产、余额和进入游戏成功分支未接管。 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、下分金额不正确分支；彩票平台资产、余额和进入游戏成功分支未接管。 |
 | `/hgame/index` | `c.api.hgame->index` | 本轮完成 | HGame 公共只读列表，返回 `data.data.list/slide`，`/hgame` 本身保持旧 PHP 404 未接管。 |
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
@@ -149,7 +149,7 @@
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | 本轮完成 | 直播余额查询；返回 raw JSON `{code,data}`，游客长 memberId 余额为 0，用户余额按 `users_quota.goldcoin*10`。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | 本轮完成 | 接管 raw JSON 安全失败分支：游客长 `memberId`、未知用户和 `tryAgain` 未知业务类型；资产变更、下注结算、翻译扣款和外部回调未接管。 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | 本轮完成 | 小视频播放任务金币领取；登录用户写金币日志，游客更新游客金币，保留旧 PHP 未校验 log 归属行为。 |
-| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 本轮完成 | 仅接管未登录失败分支，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；金币投币事务和作者收益未接管。 |
+| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 本轮完成 | 接管未登录、视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST 非正数和范围校验分支；金币投币事务和作者收益未接管。 |
 
 ## 优先候选
 
@@ -161,15 +161,15 @@
 
 | 接口 | 原因 |
 | --- | --- |
-| `/register`、`/login`、`/forgot` 成功路径 | 失败分支已迁；成功路径涉及账号、短信/邮箱验证码、风控、session 和写库。 |
+| `/register`、`/login`、`/forgot` 成功路径 | 失败和部分 step1 只读分支已迁；成功路径涉及账号、短信/邮箱验证码、风控、session 和写库。 |
 | `/payment/*` 剩余下单/跳转 action、`/respond/*` 成功分支 | 支付页面、只读分支和回调失败分支已迁；`/respond/chan1` 已接管 token 校验失败分支；剩余涉及支付平台请求、下单状态写入、回调验签、锁单入账、短信通知或 `payment->doAction()`，需要独立 reviewer/灰度/回滚策略。 |
 | `/ucp/*` 高风险写入接口的登录成功路径 | 未登录和部分参数前置失败分支已迁；剩余涉及任务奖励、VIP/金币/金豆资产、提现、支付订单、求片扣费、用户资料写入、密码校验、二维码生成或外部通知。 |
 | `/game/*` 上下分、进入游戏和彩票余额成功路径 | 未登录分支已迁；剩余涉及金币资产、订单、外部平台和失败补偿。 |
 | `/invite/bind` 成功路径 | 前置失败分支已迁；剩余涉及绑定推荐关系、VIP 赠送、金币奖励和事务回滚。 |
 | `/onego/bet` 成功路径 | 前置失败分支已迁；剩余涉及投注金币扣减、号码生成、订单写入和事务回滚。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数前置失败已迁；剩余游戏资产、余额或外部平台调用需要登录、事务、灰度和回滚策略。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
-| `/minivod/throwcoin` 成功路径、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币未登录分支和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
+| `/minivod/throwcoin` 成功路径、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |
 | `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询和未登录失败分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、删除外部资源和金豆扣减。 |

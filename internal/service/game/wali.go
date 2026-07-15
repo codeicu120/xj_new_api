@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,10 @@ import (
 
 type WaliPlatformStore interface {
 	PlatformByID(ctx context.Context, id int) (map[string]interface{}, error)
+}
+
+type WaliSettingStore interface {
+	Setting(ctx context.Context, key string) (string, error)
 }
 
 type WaliAuthStore interface {
@@ -120,6 +125,57 @@ func (s *WaliService) ActionEdge(ctx context.Context, token string, pendingMessa
 		pendingMessage = "游戏成功分支暂未迁移"
 	}
 	return -1, pendingMessage, nil
+}
+
+func (s *WaliService) TopupEdge(ctx context.Context, token string, amount string, pendingMessage string) (int, string, error) {
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -1, "获取用户失败", err
+	}
+	if atoi(fmt.Sprint(user["uid"])) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	limit, err := s.gameCoinLimit(ctx)
+	if err != nil {
+		return -1, "游戏上分失败", err
+	}
+	coins := atoi(amount)
+	if coins == 0 || coins < limit {
+		return -1, fmt.Sprintf("转入金币不能低于%d", limit), nil
+	}
+	if pendingMessage == "" {
+		pendingMessage = "游戏上分成功分支暂未迁移"
+	}
+	return -1, pendingMessage, nil
+}
+
+func (s *WaliService) WithdrawEdge(ctx context.Context, token string, amount string, pendingMessage string) (int, string, error) {
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -1, "获取用户失败", err
+	}
+	if atoi(fmt.Sprint(user["uid"])) == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	if atof(amount) <= 0 {
+		return -1, "金额输入不正确", nil
+	}
+	if pendingMessage == "" {
+		pendingMessage = "游戏下分成功分支暂未迁移"
+	}
+	return -1, pendingMessage, nil
+}
+
+func (s *WaliService) gameCoinLimit(ctx context.Context) (int, error) {
+	store, ok := s.store.(WaliSettingStore)
+	if !ok || store == nil {
+		return 0, nil
+	}
+	value, err := store.Setting(ctx, "gamecoinlimit")
+	if err != nil {
+		return 0, err
+	}
+	return atoi(value), nil
 }
 
 func (s *WaliService) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, error) {
@@ -225,4 +281,9 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 func waliSign(param string, unixTime int64, signKey string) string {
 	sum := md5.Sum([]byte(param + fmt.Sprint(unixTime) + signKey))
 	return hex.EncodeToString(sum[:])
+}
+
+func atof(value string) float64 {
+	n, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	return n
 }

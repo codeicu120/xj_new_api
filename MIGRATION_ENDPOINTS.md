@@ -43,9 +43,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | ANY | `GameHandler.WaliGames` |
 | `/game/wali/test` | ANY | `GameHandler.WaliTest` |
 | `/game/wali/balance` | ANY | `GameHandler.WaliBalance` |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | ANY | `GameHandler.HighRiskAction` |
+| `/game/wali/topup`、`/game/wali/withdraw` | ANY | `GameHandler.TransferTopup/TransferWithdraw` |
+| `/game/wali/enter` | ANY | `GameHandler.HighRiskAction` |
 | `/game/lottery/gameList` | ANY | `GameHandler.LotteryGames` |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | ANY | `GameHandler.HighRiskAction` |
+| `/game/lottery/topup`、`/game/lottery/withdraw` | ANY | `GameHandler.TransferTopup/TransferWithdraw` |
+| `/game/lottery/enter`、`/game/lottery/balance` | ANY | `GameHandler.HighRiskAction` |
 | `/hgame/index` | ANY | `HGameHandler.Index` |
 | `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | ANY | `StarLiveHandler` |
 | `/art`、`/art/index` | ANY | `ArtHandler.Index` |
@@ -210,10 +212,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/sysavatar` | `c.api.user->sysavatar` | `UserHandler.SysAvatar` | 已重构，对比通过 |
 | `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
 | `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议和已登录，不执行验证码、注册写库、邀请奖励或 session |
-| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录和 v2 空账号 `用户名未注册`，不执行密码/验证码校验或 session 写入 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、空手机号邮箱、无效 step，不执行查用户、验证码或改密 |
+| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录、v2 空账号、v2 手机/邮箱/用户名未注册，不执行密码/验证码校验或 session 写入 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在和 step1 推进，不执行验证码或改密 |
 | `/delete` | `c.api.user2->delAccount` | `UserHandler.Delete` | 部分已重构；未登录 `retcode=-9999` 分支，不写 Redis 注销申请、不删除 session |
-| `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式和步骤错误分支，不执行手机号存在校验、验证码或换绑事务 |
+| `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式、步骤错误、相同手机号、手机号已存在和 step1 推进分支，不执行验证码或换绑事务 |
 | `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | `VerificationHandler` | 已重构；手机号/邮箱/未登录错误分支 live 对比通过，成功发送通过 sender/captcha/limiter fake 覆盖，默认不直连真实短信/邮件平台 |
 | `/captcha/req` | `c.api.captcha->req` | `CaptchaHandler.Req` | 已重构，动态 secret 按 shape 对比通过 |
@@ -282,9 +284,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
 | `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，上下分金币事务、外部平台请求和进入游戏成功分支暂未接管 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit` 和下分金额不正确分支已迁移，余额不足、上下分金币事务、外部平台请求和进入游戏成功分支暂未接管 |
 | `/game/lottery/gameList` | `c.api.game.lottery->gameList` | `GameHandler.LotteryGames` | 已重构；彩票普通分类只读列表，`category_id=5` 游客未登录分支已对齐 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，彩票平台资产、余额和进入游戏成功分支暂未接管 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit` 和下分金额不正确分支已迁移，彩票平台资产、余额和进入游戏成功分支暂未接管 |
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 不接管 | PHP `c.api.hgame` 仅定义 `index`，未发现其他稳定 action；不伪造业务响应 |
 | `/onego` | `c.api.onego->rules`（旧路由默认行为） | `OneGoHandler.Rules` | 已重构，对比通过；裸路径与旧服务一致返回一元购规则/未开放错误壳 |
@@ -384,7 +386,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | `MiniVODHandler.Up/Down` | 已重构；小视频赞踩状态切换，登录用户写 `vod_updowns`，游客用进程内 limiter；无效视频分支 live 对比通过 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，扣金币与任务奖励分支暂不写资产 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | `MiniVODHandler.ReqCoin` | 已重构；领取小视频播放任务金币，事务锁定任务日志，登录用户写 `users_quota/user_coinlogs(cointype=25)`，游客更新 `user_guests.goldcoin`；保留旧 PHP 未校验 log 归属行为 |
-| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录固定错误 `需登录后方可使用投币功能` 已迁移，视频/作者只读校验、GET 初始化和金币打赏事务暂未接管 |
+| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录、视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST 非正数和范围校验分支已迁移，金币打赏事务暂未接管 |
 | `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已接管可控读取路径；从现有待展示 viewlog 读取小视频并包装作者/收藏状态，拉取推荐、标记已浏览和广告插入副作用暂不执行 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
@@ -527,7 +529,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/minivod/reqlist` 的拉取/标记/广告副作用 | `c.api.minivod->reqlist` | 部分未重构；`pullViewLogs`、`mUpdate(showtype=1)` 和随机广告插入仍需单独迁移 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；超限扣金币、播放/下载日志写入、播放任务、推荐奖励仍需事务化迁移 |
-| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录分支已迁移，视频/作者只读校验、GET 初始化和金币打赏事务仍需迁移 |
+| `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录、视频/作者只读校验、GET 初始化和 POST 参数校验已迁移，金币打赏事务仍需迁移 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 未重构；媒体解析 |
 
 ### 用户账号
@@ -535,10 +537,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议/已登录等失败分支已迁移，成功注册、验证码、IP 频控、邀请奖励和写库仍未迁移 |
-| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v2 空账号用户名未注册等失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式/空手机号邮箱/无效 step 等失败分支已迁移，step1/2 查用户、验证码和 step3 改密仍未迁移 |
+| `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v2 空账号和 v2 账号不存在失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式/空手机号邮箱/无效 step、step1 查用户和 step1 推进已迁移，step2 验证码和 step3 改密仍未迁移 |
 | `/delete` | `c.api.user2->delAccount` | 部分未重构；未登录分支已迁移，验证码、Redis 注销申请和退出登录仍未迁移 |
-| `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误等失败分支已迁移，手机号存在校验、验证码和 step2 事务换绑仍未迁移 |
+| `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误、手机号存在校验和 step1 推进已迁移，step2 验证码和事务换绑仍未迁移 |
 
 ### 支付和回调
 
@@ -574,10 +576,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/game/wali/topup` | `c.api.game.wali->topup` | 部分未重构；未登录分支已迁移，上分金币扣减、外部平台请求和失败归还金币仍需事务化迁移 |
-| `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 部分未重构；未登录分支已迁移，下分外部平台请求、金币增加和订单写入仍需迁移 |
+| `/game/wali/topup` | `c.api.game.wali->topup` | 部分未重构；未登录和低于最低转入金币分支已迁移，余额不足、上分金币扣减、外部平台请求和失败归还金币仍需事务化迁移 |
+| `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 部分未重构；未登录和金额输入不正确分支已迁移，下分外部平台请求、金币增加和订单写入仍需迁移 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 部分未重构；未登录分支已迁移，外部平台进入游戏成功分支仍需迁移 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；未登录分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；topup/withdraw 的未登录、最低转入金币和金额输入不正确分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
 | `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`） | `c.api.starlive->$action` | 部分未重构；资产 action 的游客/未知用户/未知业务类型前置失败分支已迁移，重复订单查询、下注扣款、中奖加钱和钻石兑换事务仍需迁移 |
 | `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/bet`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 部分未重构；`bet` 前置失败分支已迁移，投注金币扣减、号码生成和订单写入成功分支仍需事务化迁移 |
 

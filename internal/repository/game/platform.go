@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -94,6 +95,20 @@ func (r *PlatformRepository) PlatformByID(ctx context.Context, id int) (map[stri
 		return map[string]interface{}{}, nil
 	}
 	return items[0], nil
+}
+
+func (r *PlatformRepository) Setting(ctx context.Context, key string) (string, error) {
+	if r.db == nil || strings.TrimSpace(key) == "" {
+		return "", nil
+	}
+	var value sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT value FROM settings WHERE uuid=?", key).Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("query setting %s: %w", key, err)
+	}
+	return value.String, nil
 }
 
 func (r *GameRepository) ListActive(ctx context.Context, platformID int, categoryID int) ([]map[string]interface{}, error) {

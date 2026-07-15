@@ -98,13 +98,20 @@ func (h *MiniVODHandler) ReqCoin(c *gin.Context) {
 }
 
 func (h *MiniVODHandler) ThrowCoin(c *gin.Context) {
-	retcode, errmsg, err := h.service.ThrowCoinEdge(c.Request.Context(), authToken(c))
+	vodID, _ := strconv.Atoi(c.Param("vodid"))
+	coin, _ := strconv.Atoi(inputValue(c, "coinnum"))
+	data, retcode, errmsg, err := h.service.ThrowCoinEdge(c.Request.Context(), minivodService.ThrowCoinRequest{
+		Token:  authToken(c),
+		VODID:  vodID,
+		Method: c.Request.Method,
+		Coin:   coin,
+	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
 		return
 	}
-	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
 }
 
 func (h *MiniVODHandler) ReqPlay(c *gin.Context) {

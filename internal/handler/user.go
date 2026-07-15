@@ -51,13 +51,13 @@ func (h *UserHandler) LoginV2(c *gin.Context) {
 }
 
 func (h *UserHandler) Forgot(c *gin.Context) {
-	retcode, errmsg := h.authEdgeService.Forgot(authEdgeRequest(c), false)
-	respondUserEdge(c, retcode, errmsg, nil)
+	retcode, errmsg, err := h.authEdgeService.Forgot(c.Request.Context(), authEdgeRequest(c), false)
+	respondUserEdge(c, retcode, errmsg, err)
 }
 
 func (h *UserHandler) ForgotV2(c *gin.Context) {
-	retcode, errmsg := h.authEdgeService.Forgot(authEdgeRequest(c), true)
-	respondUserEdge(c, retcode, errmsg, nil)
+	retcode, errmsg, err := h.authEdgeService.Forgot(c.Request.Context(), authEdgeRequest(c), true)
+	respondUserEdge(c, retcode, errmsg, err)
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {

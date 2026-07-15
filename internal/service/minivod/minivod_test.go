@@ -26,6 +26,8 @@ type fakeStore struct {
 	reqCoinRet int
 	reqCoinMsg string
 	reqCoin    map[string]interface{}
+	quota      map[string]interface{}
+	settings   map[string]string
 }
 
 func (s *fakeStore) Categories(context.Context) ([]map[string]interface{}, error) {
@@ -86,6 +88,13 @@ func (s *fakeStore) UserByID(context.Context, int) (map[string]interface{}, erro
 	return map[string]interface{}{"uid": "7", "username": "u", "nickname": "n", "avatar": "avatar.jpg", "gender": "1"}, nil
 }
 
+func (s *fakeStore) UserQuota(context.Context, int) (map[string]interface{}, error) {
+	if s.quota != nil {
+		return s.quota, nil
+	}
+	return map[string]interface{}{"goldcoin": "88"}, nil
+}
+
 func (s *fakeStore) SimilarVODsByTagIDs(context.Context, []int, int, int) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{{"vodid": "10", "authorid": "8", "title": "similar"}}, nil
 }
@@ -100,6 +109,9 @@ func (s *fakeStore) RandomVODsExcept(_ context.Context, pageSize int, _ int, _ i
 
 func (s *fakeStore) Setting(_ context.Context, key string) (string, error) {
 	s.actionKey = key
+	if s.settings != nil {
+		return s.settings[key], nil
+	}
 	return "9,8", nil
 }
 
@@ -491,11 +503,40 @@ func TestReqCoinPassesStoreError(t *testing.T) {
 func TestThrowCoinEdgeRequiresLogin(t *testing.T) {
 	service := NewService(&fakeStore{}, fakeProcessor{}, "https://res.test")
 
-	retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), "")
+	_, retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{})
 	if err != nil {
 		t.Fatalf("throwcoin: %v", err)
 	}
 	if retcode != -9999 || errmsg != "需登录后方可使用投币功能" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestThrowCoinEdgePrechecks(t *testing.T) {
+	store := &fakeStore{settings: map[string]string{"mincoin": "5", "maxcoin": "10"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithAuth(fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}})
+
+	data, retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{Token: "token", VODID: 9, Method: "GET"})
+	if err != nil {
+		t.Fatalf("throwcoin get: %v", err)
+	}
+	if retcode != 0 || errmsg != "" || atoi(data["mincoin"]) != 5 || atoi(data["maxcoin"]) != 10 || atoi(data["goldcoin"]) != 88 {
+		t.Fatalf("unexpected get response data=%#v retcode=%d errmsg=%q", data, retcode, errmsg)
+	}
+
+	_, retcode, errmsg, err = service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{Token: "token", VODID: 9, Method: "POST", Coin: 0})
+	if err != nil {
+		t.Fatalf("throwcoin zero: %v", err)
+	}
+	if retcode != -1 || errmsg != "已投币成功" {
+		t.Fatalf("unexpected zero response %d %q", retcode, errmsg)
+	}
+
+	_, retcode, errmsg, err = service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{Token: "token", VODID: 9, Method: "POST", Coin: 11})
+	if err != nil {
+		t.Fatalf("throwcoin range: %v", err)
+	}
+	if retcode != -1 || errmsg != "投币数额请在合理范围" {
+		t.Fatalf("unexpected range response %d %q", retcode, errmsg)
 	}
 }
