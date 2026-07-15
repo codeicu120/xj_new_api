@@ -1066,6 +1066,17 @@
 - 兼容规则：套餐字段按 PHP `procRow2` 输出，金额按分转元字符串两位小数；支付通道通过 `PaymentChannels` 接口隔离，当前 repository 默认返回空列表，不伪造旧 PHP `conf/payment.php` 和后台支付通道配置。
 - 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比三类套餐未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
 
+### `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`
+
+- PHP: `c.api.ucp.vodorder->myorders/mysupports/historyorders`
+- Go: `internal/handler.UCPHandler.VODOrderMyOrders/VODOrderMySupports/VODOrderHistoryOrders`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: `myorders` 读取 `user_vod_order` 本人记录、成功消耗金币、冻结金币和本人助力金币汇总；`mysupports` 读取 `user_vod_support` 按 `void` 汇总后关联 `user_vod_order`；`historyorders` 读取 `user_vod_order.status=1`。
+- 兼容规则：保留 PHP 的 `data`、`total_cost`、`current_frozen` 字段；分页 pageSize 为 20；只读 action 不扣金币、不创建求片、不助力。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；PHP-Go live 对比三条接口未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
+
 ### `/init`
 
 - PHP: `c.api.index->init`

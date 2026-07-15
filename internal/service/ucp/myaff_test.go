@@ -38,6 +38,8 @@ type fakeUserStore struct {
 	calldata           map[string]map[string]interface{}
 	packages           []map[string]interface{}
 	payments           []map[string]interface{}
+	vodOrders          []map[string]interface{}
+	vodSupports        []map[string]interface{}
 	sentMessage        map[string]interface{}
 }
 
@@ -566,6 +568,36 @@ func (s fakeUserStore) PaymentChannels(context.Context, bool) ([]map[string]inte
 	return s.payments, nil
 }
 
+func (s fakeUserStore) CountVODOrders(context.Context, int, *int) (int, error) {
+	return len(s.vodOrders), nil
+}
+
+func (s fakeUserStore) VODOrders(context.Context, int, *int, int, int, string) ([]map[string]interface{}, error) {
+	return s.vodOrders, nil
+}
+
+func (s fakeUserStore) SumVODOrderCoins(_ context.Context, _ int, status int) (int, error) {
+	if status == 1 {
+		return 100, nil
+	}
+	return 30, nil
+}
+
+func (s fakeUserStore) CountVODSupports(context.Context, int) (int, error) {
+	return len(s.vodSupports), nil
+}
+
+func (s fakeUserStore) VODSupports(context.Context, int, int, int) ([]map[string]interface{}, error) {
+	return s.vodSupports, nil
+}
+
+func (s fakeUserStore) SumVODSupportCoins(_ context.Context, _ int, onlyFrozen bool) (int, error) {
+	if onlyFrozen {
+		return 7, nil
+	}
+	return 11, nil
+}
+
 func TestTaskSharePicEmpty(t *testing.T) {
 	service := NewService(fakeUserStore{}, "https://res.example.test")
 
@@ -996,6 +1028,75 @@ func TestCoinPackageIndexFormatsBonusCoins(t *testing.T) {
 	rows := data["pkgrows"].([]map[string]interface{})
 	if rows[0]["rmbprice"] != "12.00" || rows[0]["bonus_coins"] != 300 {
 		t.Fatalf("pkgrows = %#v", rows)
+	}
+}
+
+func TestVODOrderMyOrdersRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	_, retcode, errmsg, err := service.VODOrderMyOrders(context.Background(), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestVODOrderMyOrdersReturnsTotals(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user:      map[string]interface{}{"uid": "5"},
+		vodOrders: []map[string]interface{}{{"id": "1", "uid": "5", "coins": "100", "status": "0"}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.VODOrderMyOrders(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["total_cost"] != 111 || data["current_frozen"] != 37 {
+		t.Fatalf("totals = %#v", data)
+	}
+	if len(data["data"].([]map[string]interface{})) != 1 {
+		t.Fatalf("data = %#v", data["data"])
+	}
+}
+
+func TestVODOrderMySupportsReturnsRows(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5"},
+		vodSupports: []map[string]interface{}{{"void": "9", "coins": "12"}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.VODOrderMySupports(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if len(data["data"].([]map[string]interface{})) != 1 {
+		t.Fatalf("data = %#v", data["data"])
+	}
+}
+
+func TestVODOrderHistoryOrdersReturnsRows(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user:      map[string]interface{}{"uid": "5"},
+		vodOrders: []map[string]interface{}{{"id": "2", "status": "1"}},
+	}, "https://res.example.test")
+
+	data, retcode, errmsg, err := service.VODOrderHistoryOrders(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if len(data["data"].([]map[string]interface{})) != 1 {
+		t.Fatalf("data = %#v", data["data"])
 	}
 }
 

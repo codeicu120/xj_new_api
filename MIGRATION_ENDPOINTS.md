@@ -113,6 +113,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vippkg`、`/ucp/vippkg/index` | ANY | `UCPHandler.VIPPkgIndex` |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | ANY | `UCPHandler.CoinPkgIndex` |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | ANY | `UCPHandler.BeanPkgIndex` |
+| `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders` | ANY | `UCPHandler.VODOrderMyOrders/MySupports/HistoryOrders` |
 | `/vod/show/:vodid` | ANY | `VODHandler.Show` |
 | `/vod/up/:vodid`、`/vod/down/:vodid` | ANY | `VODHandler.Up/Down` |
 | `/vod/preView/:vodid/index.m3u8` | ANY | `VODHandler.Preview` |
@@ -357,6 +358,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | `c.api.ucp.beanpkg->index` | `UCPHandler.BeanPkgIndex` | 已重构，对比通过；登录只读金豆套餐列表和 safepayurl，支付通道通过接口隔离 |
+| `/ucp/vodorder/myorders` | `c.api.ucp.vodorder->myorders` | `UCPHandler.VODOrderMyOrders` | 已重构，对比通过；登录只读我的求片记录、累计消耗和当前冻结金币 |
+| `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
+| `/ucp/vodorder/historyorders` | `c.api.ucp.vodorder->historyorders` | `UCPHandler.VODOrderHistoryOrders` | 已重构，对比通过；登录只读成功的历史求片记录 |
 
 ### 个人中心公开只读
 
@@ -447,7 +451,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金币兑换和会员资产 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 未重构；`placeorder` 涉及支付下单和金币资产 |
 | `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 未重构；`placeorder/coinorder` 涉及支付下单、金豆和金币兑换 |
-| `/ucp/vodorder/:action?` | `c.api.ucp.vodorder->$action` | 未重构；视频订单 |
+| `/ucp/vodorder/:action?`（除 `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`） | `c.api.ucp.vodorder->$action` | 未重构；`index/create/support` 涉及榜单聚合、求片金币扣减或助力写入 |
 
 ### 活动、邀请、发现页
 

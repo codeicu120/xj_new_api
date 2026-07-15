@@ -266,3 +266,27 @@ func (s ucpStore) PackageRows(ctx context.Context, kind string) ([]map[string]in
 func (s ucpStore) PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error) {
 	return s.ucp.PaymentChannels(ctx, gameOnly)
 }
+
+func (s ucpStore) CountVODOrders(ctx context.Context, uid int, status *int) (int, error) {
+	return s.ucp.CountVODOrders(ctx, uid, status)
+}
+
+func (s ucpStore) VODOrders(ctx context.Context, uid int, status *int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error) {
+	return s.ucp.VODOrders(ctx, uid, status, page, pageSize, orderBy)
+}
+
+func (s ucpStore) SumVODOrderCoins(ctx context.Context, uid int, status int) (int, error) {
+	return s.ucp.SumVODOrderCoins(ctx, uid, status)
+}
+
+func (s ucpStore) CountVODSupports(ctx context.Context, uid int) (int, error) {
+	return s.ucp.CountVODSupports(ctx, uid)
+}
+
+func (s ucpStore) VODSupports(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
+	return s.ucp.VODSupports(ctx, uid, page, pageSize)
+}
+
+func (s ucpStore) SumVODSupportCoins(ctx context.Context, uid int, onlyFrozen bool) (int, error) {
+	return s.ucp.SumVODSupportCoins(ctx, uid, onlyFrozen)
+}

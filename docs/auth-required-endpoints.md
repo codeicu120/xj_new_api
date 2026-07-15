@@ -55,6 +55,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | 本轮完成 | 登录只读 VIP 套餐；支付通道通过接口隔离，当前不伪造旧 PHP `conf/payment.php`。 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | 本轮完成 | 登录只读金币套餐；保留套餐字段和 `safepayurl`。 |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | `c.api.ucp.beanpkg->index` | 本轮完成 | 登录只读金豆套餐；保留套餐字段和 `safepayurl`。 |
+| `/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders` | `c.api.ucp.vodorder->myorders/mysupports/historyorders` | 本轮完成 | 登录只读求片/助力/历史成功记录；`create/support/index` 未接管。 |
 
 ## 暂缓
 

@@ -491,8 +491,37 @@ func (h *UCPHandler) BeanPkgIndex(c *gin.Context) {
 	h.pkgIndex(c, h.service.BeanPkgIndex)
 }
 
+func (h *UCPHandler) VODOrderMyOrders(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	h.vodOrderList(c, page, h.service.VODOrderMyOrders)
+}
+
+func (h *UCPHandler) VODOrderMySupports(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	h.vodOrderList(c, page, h.service.VODOrderMySupports)
+}
+
+func (h *UCPHandler) VODOrderHistoryOrders(c *gin.Context) {
+	page, _ := strconv.Atoi(inputValue(c, "page"))
+	h.vodOrderList(c, page, h.service.VODOrderHistoryOrders)
+}
+
 func (h *UCPHandler) pkgIndex(c *gin.Context, fn func(context.Context, string) (map[string]interface{}, int, string, error)) {
 	data, retcode, errmsg, err := fn(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) vodOrderList(c *gin.Context, page int, fn func(context.Context, string, int) (map[string]interface{}, int, string, error)) {
+	data, retcode, errmsg, err := fn(c.Request.Context(), authToken(c), page)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
