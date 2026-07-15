@@ -696,16 +696,16 @@
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
 - 测试：聚焦 `go test ./internal/service/ucp ./internal/server` 通过；PHP-Go 对比 GET `/ucp/feedback/detail?id=1917132` 成功响应一致，`picurls=null`、无 payment 时 `itemname=null/paidtime=""`；GET `id=0` 的不存在错误壳一致；未登录分支除旧 PHP 动态 `xxx_api_auth` 外语义一致。
 
-### `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee`
+### `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/lucky`、`/onego/marquee`
 
-- PHP: `c.api.onego->rules/rooms/current/last/hash/lucky/marquee`
+- PHP: `c.api.onego->index/rules/rooms/current/last/hash/lucky/marquee`
 - Go: `internal/handler.OneGoHandler`
 - Service: `internal/service/onego.Service`
 - Repository: `internal/repository/onego.Repository`
 - Auth: 公共接口，不要求登录；旧 `c.api.__init__` 可能在 `data.xxx_api_auth` 写入动态游客 token，Go 本轮不生成该动态字段。
 - DB: `/onego/rules` 读取 `one_go LIMIT 1`；`/onego/rooms` 读取 `one_go_rooms ORDER BY id ASC LIMIT 10`；`/onego/current` 读取当前房间未开奖记录；`/onego/last` 读取最近已开奖 period 或指定 room 的已开奖记录；`/onego/hash` 不访问 DB；`/onego/lucky` 读取 `one_go_records` 的 `SUM(awards), winner` 排行和每个 winner 的 `COUNT(*), room_id` 获奖次数；`/onego/marquee` 先查最近已开奖记录，再查规则和最近 period 的 `one_go_records ORDER BY id DESC LIMIT 10`，按 `room_id` 查房间名。
-- 兼容规则：规则表无数据时返回 PHP 默认错误壳 `retcode=-1`、`errmsg=系统尚未开放该活动`；`last/marquee` 无已开奖记录返回 `暂无数据`；记录行按 PHP `onego.record->procRow` 将核心数字字段转 int，并按 winner 查 `users` 或 `bot_users`；`hash` 对 `plaintext` trim 后计算 SHA256，提取 hash 中末尾 6 位数字，首位为 0 时继续向前取，空参数返回 `请传入参数`；`lucky` 保留旧 PHP `getRankWinCoins` 虽接收 page/pagesize 但 SQL 不分页的行为，并对 `total_awards/winner/wins/room_id` 转 int；`marquee` 过滤 `awards=0`，房间缺失跳过，按 `one_go.marquee` 替换 `{user}/{room}/{period}/{awards}/{win_rate}`；支持 GET/POST，匹配旧 `Route::any('/onego/?(:action)?')` 的 method 范围。
-- 测试：聚焦 `go test ./internal/service/onego ./internal/server` 通过；PHP-Go 对比 `/onego/rules` 本地空表错误一致；`/onego/rooms` GET/POST 房间列表业务数据一致；`/onego/current?roomid=1` 和 `/onego/last` 本地错误分支一致；`/onego/hash?plaintext=abc` 和缺少 plaintext 错误分支一致；`/onego/lucky` GET/POST 业务数据一致；`/onego/marquee` GET/POST 本地无最新期错误一致；均忽略旧 PHP 动态 `data.xxx_api_auth`。
+- 兼容规则：裸 `/onego` 按旧服务默认到规则入口，规则表无数据时返回 PHP 默认错误壳 `retcode=-1`、`errmsg=系统尚未开放该活动`；`/onego/index` 为空方法，返回 `text/html` 空 body；`last/marquee` 无已开奖记录返回 `暂无数据`；记录行按 PHP `onego.record->procRow` 将核心数字字段转 int，并按 winner 查 `users` 或 `bot_users`；`hash` 对 `plaintext` trim 后计算 SHA256，提取 hash 中末尾 6 位数字，首位为 0 时继续向前取，空参数返回 `请传入参数`；`lucky` 保留旧 PHP `getRankWinCoins` 虽接收 page/pagesize 但 SQL 不分页的行为，并对 `total_awards/winner/wins/room_id` 转 int；`marquee` 过滤 `awards=0`，房间缺失跳过，按 `one_go.marquee` 替换 `{user}/{room}/{period}/{awards}/{win_rate}`；支持 GET/POST，匹配旧 `Route::any('/onego/?(:action)?')` 的 method 范围。
+- 测试：聚焦 `go test ./internal/service/onego ./internal/server` 通过；PHP-Go 对比 `/onego` 未开放错误壳一致，`/onego/index` 空 body 一致；`/onego/rules` 本地空表错误一致；`/onego/rooms` GET/POST 房间列表业务数据一致；`/onego/current?roomid=1` 和 `/onego/last` 本地错误分支一致；`/onego/hash?plaintext=abc` 和缺少 plaintext 错误分支一致；`/onego/lucky` GET/POST 业务数据一致；`/onego/marquee` GET/POST 本地无最新期错误一致；均忽略旧 PHP 动态 `data.xxx_api_auth`。
 
 ### `/special/index`、`/special/listing`、`/special/listing-:params`、`/special/detail/:spid`、`/special/detail/:spid-:params`
 

@@ -321,6 +321,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/special/detail/:spid", specialHandler.Detail)
 	router.Any("/special/up/:spid", specialHandler.Up)
 	router.Any("/special/down/:spid", specialHandler.Down)
+	router.Any("/onego", onegoHandler.Rules)
+	router.Any("/onego/index", handler.EmptyHTML)
 	router.Any("/onego/rules", onegoHandler.Rules)
 	router.Any("/onego/rooms", onegoHandler.Rooms)
 	router.Any("/onego/current", onegoHandler.Current)

@@ -458,6 +458,43 @@ func TestOneGoRulesNotOpenWithoutMySQL(t *testing.T) {
 	}
 }
 
+func TestOneGoRootUsesRules(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "系统尚未开放该活动" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
+func TestOneGoEmptyIndexRoute(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/onego/index", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "text/html" {
+		t.Fatalf("expected text/html content type, got %q", contentType)
+	}
+	if body := rec.Body.String(); body != "" {
+		t.Fatalf("expected empty body, got %q", body)
+	}
+}
+
 func TestOneGoRoomsNotOpenWithoutMySQL(t *testing.T) {
 	router := newTestRouter()
 
