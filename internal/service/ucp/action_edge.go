@@ -2,6 +2,7 @@ package ucp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -194,6 +195,13 @@ func (s *Service) UserPasswdEdge(ctx context.Context, token string, password str
 }
 
 func (s *Service) CoinLogExchangeEdge(ctx context.Context, token string, extype int, exnum int) (int, string, error) {
+	exrate, err := s.store.SettingExRate(ctx)
+	if err != nil {
+		return -1, "金币兑换失败", err
+	}
+	if exrate == 0 {
+		return -1, "系统已关闭兑换功能", nil
+	}
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
 		return -9999, "您还没有登录", err
@@ -209,6 +217,14 @@ func (s *Service) CoinLogExchangeEdge(ctx context.Context, token string, extype 
 	}
 	if exnum > 1000000 {
 		return -1, "兑换数量100万以上请分次兑换", nil
+	}
+	if extype == 1 {
+		if exnum < exrate {
+			return -1, fmt.Sprintf("提交金币最小数量为:%d", exrate), nil
+		}
+		if exnum/exrate == 0 {
+			return -1, "兑换计算所得人民币为0", nil
+		}
 	}
 	return -1, "金币兑换成功分支暂未迁移", nil
 }

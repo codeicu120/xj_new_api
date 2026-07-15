@@ -1595,3 +1595,14 @@
 - 兼容规则：只读分支止步于 provider/wallet 请求、`payment->save()`、账户锁、支付记录更新和 `payment->doAction()` 之前；真实支付通道数据仍由 `PaymentChannels` 仓储接口提供，本地空实现可能返回 `payments=[]`，不伪造生产配置。
 - Subagent：`Newton` 核对 payment/respond 可迁分支；`Bacon` 核对账号流剩余验证码/注销顺序；`Aquinas` 核对 UCP/game/media/AI 剩余低风险候选，后续优先考虑 invite bind、game topup 余额不足、onego bet 只读失败、UCP 提现/套餐/求片前置失败等。
 - 测试：`go test ./internal/service/respond ./internal/service/payment ./internal/handler ./internal/server` 通过。
+
+### Invite/Game/OneGo/UCP 低风险前置失败补齐
+
+- 已迁移：`/invite/bind` 已绑定邀请码、无效邀请码和无法绑定自己分支；保持 PHP 顺序为登录、已绑定、空邀请码、邀请码用户、禁止绑定自己，后续推荐关系、VIP/金币奖励和事务写入仍未接管。
+- 已迁移：`/game/wali/topup`、`/game/lottery/topup` 上分余额不足分支；只读 `users_quota.goldcoin`，停止于金币扣减、外部平台请求和失败归还之前。
+- 已迁移：`/onego/bet` 无效场次、无效期号、未开始、已结束、未知用户和余额不足分支；只读房间、期号和 quota，投注扣金币、号码生成和订单写入仍未接管。
+- 已迁移：`/ucp/coinlog/exchange` 兑换关闭、金币换人民币最小金币和兑换计算为 0 分支；按 PHP 顺序先检查 `exrate==0` 再检查登录，金币/余额双写事务仍未接管。
+- PHP: `src/c/api/invite.php::bind`、`src/c/api/game/wali.php::topup`、`src/c/api/game/lottery.php::topup`、`src/c/api/onego.php::bet`、`src/c/api/ucp/coinlog.php::exchange`。
+- Go: `internal/service/invite.Service.BindEdge`、`internal/service/game.WaliService.TopupEdge`、`internal/service/onego.Service.BetEdge`、`internal/service/ucp.Service.CoinLogExchangeEdge` 及对应 repository/handler。
+- Subagent：`Carson` 核对 invite/game/onego 的可迁顺序和错误文案；`Franklin` 核对 UCP 剩余项，建议优先做 coinlog exchange 与 vodorder 只读失败，暂缓支付通道复杂 placeorder。
+- 测试：`go test ./internal/service/invite ./internal/service/game ./internal/service/onego ./internal/service/ucp ./internal/server` 通过。

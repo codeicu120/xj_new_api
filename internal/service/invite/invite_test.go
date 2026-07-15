@@ -6,8 +6,9 @@ import (
 )
 
 type fakeStore struct {
-	user map[string]interface{}
-	row  map[string]interface{}
+	user    map[string]interface{}
+	row     map[string]interface{}
+	inviter map[string]interface{}
 }
 
 func (s fakeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -16,6 +17,10 @@ func (s fakeStore) UserBySession(context.Context, string) (map[string]interface{
 
 func (s fakeStore) RecordRecommend(context.Context, int) (map[string]interface{}, error) {
 	return s.row, nil
+}
+
+func (s fakeStore) UserByInviteKey(context.Context, string) (map[string]interface{}, error) {
+	return s.inviter, nil
 }
 
 func TestInfoRequiresLogin(t *testing.T) {
@@ -60,17 +65,22 @@ func TestBindEdgePrechecks(t *testing.T) {
 	tests := []struct {
 		name    string
 		user    map[string]interface{}
+		row     map[string]interface{}
+		inviter map[string]interface{}
 		code    string
 		retcode int
 		errmsg  string
 	}{
 		{name: "guest", retcode: -9999, errmsg: "您还没有登录"},
+		{name: "alreadyBoundBeforeMissingCode", user: map[string]interface{}{"uid": "5"}, row: map[string]interface{}{"uniqkey": "12345"}, retcode: -1, errmsg: "您已经绑定了邀请码:9ix"},
 		{name: "missingCode", user: map[string]interface{}{"uid": "5"}, retcode: -1, errmsg: "请输入邀请码"},
-		{name: "pendingSuccess", user: map[string]interface{}{"uid": "5"}, code: "abc", retcode: -1, errmsg: "邀请码绑定成功分支暂未迁移"},
+		{name: "invalidCode", user: map[string]interface{}{"uid": "5"}, code: "abc", retcode: -1, errmsg: "无效邀请码"},
+		{name: "self", user: map[string]interface{}{"uid": "5"}, inviter: map[string]interface{}{"uid": "5"}, code: "5", retcode: -1, errmsg: "无法绑定自己"},
+		{name: "pendingSuccess", user: map[string]interface{}{"uid": "5"}, inviter: map[string]interface{}{"uid": "8"}, code: "abc", retcode: -1, errmsg: "邀请码绑定成功分支暂未迁移"},
 	}
 
 	for _, tt := range tests {
-		service := NewService(fakeStore{user: tt.user}, fakeStore{})
+		service := NewService(fakeStore{user: tt.user}, fakeStore{row: tt.row, inviter: tt.inviter})
 		retcode, errmsg, err := service.BindEdge(context.Background(), "token", tt.code)
 		if err != nil {
 			t.Fatalf("%s bind edge: %v", tt.name, err)

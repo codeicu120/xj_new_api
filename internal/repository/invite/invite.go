@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,6 +24,29 @@ func (r *Repository) RecordRecommend(ctx context.Context, uid int) (map[string]i
 	rows, err := r.db.QueryContext(ctx, "SELECT * FROM user_recommend AS r LEFT JOIN users AS u ON r.recommend_uid=u.uid WHERE r.uid=?", uid)
 	if err != nil {
 		return nil, fmt.Errorf("query recommend record: %w", err)
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
+func (r *Repository) UserByInviteKey(ctx context.Context, inviteCode string) (map[string]interface{}, error) {
+	if r.db == nil {
+		return map[string]interface{}{}, nil
+	}
+	uniqkey, err := strconv.ParseInt(strings.TrimSpace(inviteCode), 36, 64)
+	if err != nil || uniqkey <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM users WHERE uniqkey=?", uniqkey)
+	if err != nil {
+		return nil, fmt.Errorf("query invite user by key: %w", err)
 	}
 	defer rows.Close()
 	items, err := scanRows(rows)

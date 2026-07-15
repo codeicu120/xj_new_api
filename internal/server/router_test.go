@@ -262,7 +262,6 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 		"/ucp/user/verifyemail",
 		"/ucp/user/bindmobi",
 		"/ucp/withdraw/create",
-		"/ucp/coinlog/exchange",
 		"/ucp/vippkg/placeorder",
 		"/ucp/vippkg/coinorder",
 		"/ucp/coinpkg/placeorder",
@@ -289,12 +288,26 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/ucp/task/sign", nil)
+	req := httptest.NewRequest(http.MethodPost, "/ucp/coinlog/exchange", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/ucp/coinlog/exchange: expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("/ucp/coinlog/exchange decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "系统已关闭兑换功能" {
+		t.Fatalf("/ucp/coinlog/exchange unexpected response %#v", body)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/ucp/task/sign", nil)
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/ucp/task/sign: expected status %d, got %d", http.StatusOK, rec.Code)
 	}
-	var body legacyjson.Response
+	body = legacyjson.Response{}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("/ucp/task/sign decode response: %v", err)
 	}

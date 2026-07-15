@@ -104,7 +104,8 @@ func (h *OneGoHandler) History(c *gin.Context) {
 
 func (h *OneGoHandler) Bet(c *gin.Context) {
 	quantity, _ := strconv.Atoi(inputValue(c, "quantity"))
-	retcode, errmsg, err := h.service.BetEdge(c.Request.Context(), authToken(c), quantity)
+	roomID, _ := strconv.Atoi(inputValue(c, "roomid"))
+	retcode, errmsg, err := h.service.BetEdge(c.Request.Context(), authToken(c), inputValue(c, "period"), roomID, quantity)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

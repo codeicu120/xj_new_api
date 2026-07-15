@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type fakeStore struct {
@@ -22,6 +23,7 @@ type fakeStore struct {
 	rankBetCoins   []map[string]interface{}
 	user           map[string]interface{}
 	bot            map[string]interface{}
+	quota          map[string]interface{}
 	err            error
 }
 
@@ -91,6 +93,10 @@ func (s fakeStore) UserByID(context.Context, int) (map[string]interface{}, error
 
 func (s fakeStore) BotByID(context.Context, int) (map[string]interface{}, error) {
 	return s.bot, s.err
+}
+
+func (s fakeStore) Quota(context.Context, int) (map[string]interface{}, error) {
+	return s.quota, s.err
 }
 
 func TestRulesReturnsData(t *testing.T) {
@@ -303,7 +309,7 @@ func TestHistoryRequiresLogin(t *testing.T) {
 func TestBetEdgePrechecks(t *testing.T) {
 	service := NewService(fakeStore{})
 
-	retcode, errmsg, err := service.BetEdge(context.Background(), "", 0)
+	retcode, errmsg, err := service.BetEdge(context.Background(), "", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,12 +318,39 @@ func TestBetEdgePrechecks(t *testing.T) {
 	}
 
 	service = NewService(fakeStore{}, fakeAuth{user: map[string]interface{}{"uid": "5"}})
-	retcode, errmsg, err = service.BetEdge(context.Background(), "token", 0)
+	retcode, errmsg, err = service.BetEdge(context.Background(), "token", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "押注数量不能为零" {
 		t.Fatalf("quantity retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	now := time.Unix(1000, 0)
+	tests := []struct {
+		name    string
+		store   fakeStore
+		retcode int
+		errmsg  string
+	}{
+		{name: "room", store: fakeStore{}, retcode: -1, errmsg: "无效场次"},
+		{name: "period", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}}, retcode: -1, errmsg: "无效的活动期号"},
+		{name: "notStarted", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1001", "end_time": "2000"}}, retcode: -1, errmsg: "活动尚未开始"},
+		{name: "ended", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "999"}}, retcode: -1, errmsg: "活动已结束"},
+		{name: "unknownUser", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}}, retcode: -1, errmsg: "未知用户"},
+		{name: "balance", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}, quota: map[string]interface{}{"goldcoin": "9"}}, retcode: -1, errmsg: "余额不足"},
+		{name: "pending", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}, quota: map[string]interface{}{"goldcoin": "20"}}, retcode: -1, errmsg: "一元购投注成功分支暂未迁移"},
+	}
+	for _, tt := range tests {
+		service = NewService(tt.store, fakeAuth{user: map[string]interface{}{"uid": "5"}})
+		service.now = func() time.Time { return now }
+		retcode, errmsg, err = service.BetEdge(context.Background(), "token", "2026071501", 1, 1)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if retcode != tt.retcode || errmsg != tt.errmsg {
+			t.Fatalf("%s retcode=%d errmsg=%q", tt.name, retcode, errmsg)
+		}
 	}
 }
 

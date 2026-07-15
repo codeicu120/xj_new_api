@@ -32,7 +32,7 @@
 | `/activity/ranking`、`/activity/receive` | `c.api.activity->ranking/receive` | 本轮完成 | 登录活动排名/领奖结果预览；未登录和无效活动分支对比通过，成功分支由 service fake 覆盖。 |
 | `/activity/recommends` | `c.api.activity->recommends` | 本轮完成 | 登录邀请记录只读接口；未登录和无效活动分支对比通过，成功分支由 service fake 覆盖。 |
 | `/invite/info` | `c.api.invite->info` | 本轮完成 | 登录只读当前绑定的邀请码；未登录和登录真实 token 分支对比通过。 |
-| `/invite/bind` | `c.api.invite->bind` | 本轮完成 | 仅接管未登录和缺邀请码前置失败分支；绑定关系、VIP/金币奖励和事务写入成功分支未接管。 |
+| `/invite/bind` | `c.api.invite->bind` | 本轮完成 | 接管未登录、已绑定、缺邀请码、无效邀请码和无法绑定自己前置失败分支；绑定关系、VIP/金币奖励和事务写入成功分支未接管。 |
 | `/payment/index`、`/payment/query` | `c.api.payment->index/query` | 本轮完成 | 只读订单状态查询；校验订单归属，未授权返回 `无权限`；裸 `/payment` 旧 PHP 为 404，不接管。 |
 | `/payment/payways` | `c.api.payment->payways` | 本轮完成 | 只读订单支付方式列表；校验订单存在、未支付和归属，支付通道通过接口隔离，不伪造生产配置。 |
 | `/payment/chpayway` | `c.api.payment->chpayway` | 本轮完成 | 修改未支付订单支付方式；保留本人校验、支付方式白名单校验和条件更新，避免已支付订单被修改。 |
@@ -105,9 +105,9 @@
 | `/game/wali/gameList` | `c.api.game.wali->games` | 本轮完成 | 瓦力平台游戏列表，普通分类只读对齐；`category_id=5` 游客返回旧 PHP 未登录错误。 |
 | `/game/wali/test` | `c.api.game.wali->ping` | 本轮完成 | 瓦力平台 ping；读取 `game_platform.json` 后 AES-ECB 加密、MD5 签名并外呼，live 对比一致。 |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | 本轮完成 | 需要登录但无本地写入；复用瓦力 AES/签名外呼，返回外部平台余额。 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、下分金额不正确分支；余额不足、金币事务、外部平台请求和进入游戏成功分支未接管。 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、上分余额不足、下分金额不正确分支；金币事务、外部平台请求和进入游戏成功分支未接管。 |
 | `/game/lottery/gameList` | `c.api.game.lottery->gameList` | 本轮完成 | 彩票普通分类只读列表；`category_id=5` 游客返回旧 PHP 未登录错误，登录常玩列表后续单独接管。 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、下分金额不正确分支；彩票平台资产、余额和进入游戏成功分支未接管。 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 本轮完成 | 接管未登录、上分低于 `gamecoinlimit`、上分余额不足、下分金额不正确分支；彩票平台资产、余额和进入游戏成功分支未接管。 |
 | `/hgame/index` | `c.api.hgame->index` | 本轮完成 | HGame 公共只读列表，返回 `data.data.list/slide`，`/hgame` 本身保持旧 PHP 404 未接管。 |
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
@@ -116,7 +116,7 @@
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志；未登录错误、登录测试 token 分页和首行内容 live 对比通过。 |
 | `/ucp/task/invite` | `c.api.ucp.task->invite` | 本轮完成 | 未登录返回旧错误；登录后 PHP 方法体为空，Go 返回 200 空 body。 |
 | `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.*` | 本轮完成 | 接管高风险写入接口未登录及部分只读失败分支：`sign` 已签到/游客缺失、邀请码错误、广告今日已送、宝箱不存在/金币为 0；登录成功奖励、资产、支付下单、提现、二维码/图片生成仍未接管。 |
-| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | 本轮完成 | 接管未登录、缺兑换类型、缺兑换数量和超过 100 万数量前置失败分支；金币兑换成功分支未接管。 |
+| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | 本轮完成 | 接管兑换关闭、未登录、缺兑换类型、缺兑换数量、超过 100 万、金币换人民币最小金币和计算为 0 前置失败分支；金币兑换成功分支未接管。 |
 | `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->create/support` | 本轮完成 | 接管未登录、求片缺番号/名称、求片金币低于 100 和助力记录缺失前置失败分支；求片扣费、助力写入和通知未接管。 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | `c.api.ucp.msg->setread/cleanread/delete` | 本轮完成 | 登录消息状态写入；未登录和空数组成功分支对比通过，旧 PHP 动态 `xxx_api_auth` 不回传。 |
@@ -127,7 +127,7 @@
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
 | `/onego/hash` | `c.api.onego->hash` | 本轮完成 | 一元购公共哈希计算接口，复刻 PHP `hash('sha256')` 和末尾数字期号截取规则。 |
 | `/onego/history` | `c.api.onego->history` | 本轮完成 | 登录只读本人投注历史；未登录和测试 token 空历史 live 对比通过。 |
-| `/onego/bet` | `c.api.onego->bet` | 本轮完成 | 仅接管未登录和押注数量为 0 前置失败分支；金币扣减、号码生成和订单写入成功分支未接管。 |
+| `/onego/bet` | `c.api.onego->bet` | 本轮完成 | 接管未登录、押注数量为 0、无效场次、无效期号、未开始、已结束、未知用户和余额不足前置失败分支；金币扣减、号码生成和订单写入成功分支未接管。 |
 | `/onego/lucky` | `c.api.onego->lucky` | 本轮完成 | 一元购幸运榜公共只读接口，按获奖金币总数排序并附带各房间获奖次数；保留 PHP 未分页排行 SQL。 |
 | `/onego/bet_ranks` | `c.api.onego->bet_ranks` | 本轮完成 | 押注排行只读接口；无效场次和无效期号 live 对比通过，本地无订单样本，成功分支由 service fake 覆盖。 |
 | `/onego/marquee` | `c.api.onego->marquee` | 本轮完成 | 一元购跑马灯公共只读接口，读取最近已开奖期前 10 条记录并按规则模板生成中奖消息。 |
@@ -168,7 +168,7 @@
 | `/invite/bind` 成功路径 | 前置失败分支已迁；剩余涉及绑定推荐关系、VIP 赠送、金币奖励和事务回滚。 |
 | `/onego/bet` 成功路径 | 前置失败分支已迁；剩余涉及投注金币扣减、号码生成、订单写入和事务回滚。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数前置失败已迁；剩余游戏资产、余额或外部平台调用需要登录、事务、灰度和回滚策略。 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 金额参数和 topup 余额不足前置失败已迁；剩余游戏资产、外部平台调用需要登录、事务、灰度和回滚策略。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
 | `/minivod/throwcoin` 成功路径、`/minivod/parselong`，以及 `/minivod/reqlist` 的拉取/标记/广告副作用、`/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取路径、播放/下载可控路径、任务金币领取、投币前置/GET 分支和长视频地址转换已完成；剩余多涉及金币事务、奖励、媒体解析或推荐副作用。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费日志奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；剩余涉及播放/下载扣费、日志写入和奖励。 |

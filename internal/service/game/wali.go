@@ -27,6 +27,10 @@ type WaliSettingStore interface {
 	Setting(ctx context.Context, key string) (string, error)
 }
 
+type WaliQuotaStore interface {
+	Quota(ctx context.Context, uid int) (map[string]interface{}, error)
+}
+
 type WaliAuthStore interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
 }
@@ -142,6 +146,19 @@ func (s *WaliService) TopupEdge(ctx context.Context, token string, amount string
 	coins := atoi(amount)
 	if coins == 0 || coins < limit {
 		return -1, fmt.Sprintf("转入金币不能低于%d", limit), nil
+	}
+	if store, ok := s.store.(WaliQuotaStore); ok && store != nil {
+		quota, err := store.Quota(ctx, atoi(fmt.Sprint(user["uid"])))
+		if err != nil {
+			return -1, "游戏上分失败", err
+		}
+		goldcoin := ""
+		if quota["goldcoin"] != nil {
+			goldcoin = fmt.Sprint(quota["goldcoin"])
+		}
+		if len(quota) == 0 || atoi(goldcoin) < coins {
+			return -1, "余额不足:" + goldcoin, nil
+		}
 	}
 	if pendingMessage == "" {
 		pendingMessage = "游戏上分成功分支暂未迁移"

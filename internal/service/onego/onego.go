@@ -39,6 +39,7 @@ type Store interface {
 	RankBetCoins(ctx context.Context, period string, roomID int, page int, pageSize int) ([]map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	BotByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	Quota(ctx context.Context, uid int) (map[string]interface{}, error)
 }
 
 type AuthStore interface {
@@ -251,7 +252,7 @@ func (s *Service) History(ctx context.Context, token string, page int) (domain.O
 	return domain.OneGoData{Data: orders}, 0, "", nil
 }
 
-func (s *Service) BetEdge(ctx context.Context, token string, quantity int) (int, string, error) {
+func (s *Service) BetEdge(ctx context.Context, token string, period string, roomID int, quantity int) (int, string, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return -9999, "您还没有登录", err
@@ -261,6 +262,37 @@ func (s *Service) BetEdge(ctx context.Context, token string, quantity int) (int,
 	}
 	if quantity < 1 {
 		return -1, "押注数量不能为零", nil
+	}
+	room, err := s.store.RoomByID(ctx, roomID)
+	if err != nil {
+		return -1, "一元购投注失败", err
+	}
+	if len(room) == 0 {
+		return -1, "无效场次", nil
+	}
+	record, err := s.store.RecordByPeriod(ctx, period, roomID)
+	if err != nil {
+		return -1, "一元购投注失败", err
+	}
+	if len(record) == 0 {
+		return -1, "无效的活动期号", nil
+	}
+	now := s.now().Unix()
+	if int64(atoi(record["start_time"])) > now {
+		return -1, "活动尚未开始", nil
+	}
+	if int64(atoi(record["end_time"])) < now {
+		return -1, "活动已结束", nil
+	}
+	quota, err := s.store.Quota(ctx, atoi(user["uid"]))
+	if err != nil {
+		return -1, "一元购投注失败", err
+	}
+	if len(quota) == 0 {
+		return -1, "未知用户", nil
+	}
+	if atoi(quota["goldcoin"]) < quantity*atoi(room["coins"]) {
+		return -1, "余额不足", nil
 	}
 	return -1, "一元购投注成功分支暂未迁移", nil
 }

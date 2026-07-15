@@ -111,6 +111,25 @@ func (r *PlatformRepository) Setting(ctx context.Context, key string) (string, e
 	return value.String, nil
 }
 
+func (r *PlatformRepository) Quota(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT uid, goldcoin FROM users_quota WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query game user quota: %w", err)
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
 func (r *GameRepository) ListActive(ctx context.Context, platformID int, categoryID int) ([]map[string]interface{}, error) {
 	if r.db == nil {
 		return []map[string]interface{}{}, nil

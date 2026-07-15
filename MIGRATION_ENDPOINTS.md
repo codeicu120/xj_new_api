@@ -244,7 +244,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/activity/receive` | `c.api.activity->receive` | `ActivityHandler.Receive` | 已重构，对比通过；登录领奖结果预览只读，按源码未写入领取状态 |
 | `/activity/recommends` | `c.api.activity->recommends` | `ActivityHandler.Recommends` | 已重构，对比通过；登录邀请记录只读，复刻用户行处理 |
 | `/invite/info` | `c.api.invite->info` | `InviteHandler.Info` | 已重构，对比通过；登录只读当前绑定邀请码 |
-| `/invite/bind` | `c.api.invite->bind` | `InviteHandler.Bind` | 部分已重构；未登录和缺少邀请码分支已迁移，绑定关系、VIP/金币奖励和事务写入成功分支暂未接管 |
+| `/invite/bind` | `c.api.invite->bind` | `InviteHandler.Bind` | 部分已重构；未登录、已绑定、缺少邀请码、无效邀请码和无法绑定自己分支已迁移，绑定关系、VIP/金币奖励和事务写入成功分支暂未接管 |
 | `/payment/index`、`/payment/query` | `c.api.payment->index/query` | `PaymentHandler.Query` | 已重构；只读订单状态查询，校验订单归属后返回 `payrow`；裸 `/payment` 旧 PHP 为 404，不接管 |
 | `/payment/payways` | `c.api.payment->payways` | `PaymentHandler.Payways` | 已重构；只读订单支付方式列表，校验订单存在、未支付和归属后返回 `payrow/payments`；支付通道通过接口隔离，不伪造生产配置 |
 | `/payment/chpayway` | `c.api.payment->chpayway` | `PaymentHandler.ChPayway` | 已重构；修改未支付订单支付方式，保留本人校验、支付通道校验和条件更新防已支付订单被修改 |
@@ -287,9 +287,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
 | `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit` 和下分金额不正确分支已迁移，余额不足、上下分金币事务、外部平台请求和进入游戏成功分支暂未接管 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足和下分金额不正确分支已迁移，上下分金币事务、外部平台请求和进入游戏成功分支暂未接管 |
 | `/game/lottery/gameList` | `c.api.game.lottery->gameList` | `GameHandler.LotteryGames` | 已重构；彩票普通分类只读列表，`category_id=5` 游客未登录分支已对齐 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit` 和下分金额不正确分支已迁移，彩票平台资产、余额和进入游戏成功分支暂未接管 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足和下分金额不正确分支已迁移，彩票平台资产、余额和进入游戏成功分支暂未接管 |
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 不接管 | PHP `c.api.hgame` 仅定义 `index`，未发现其他稳定 action；不伪造业务响应 |
 | `/onego` | `c.api.onego->rules`（旧路由默认行为） | `OneGoHandler.Rules` | 已重构，对比通过；裸路径与旧服务一致返回一元购规则/未开放错误壳 |
@@ -297,7 +297,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
 | `/onego/hash` | `c.api.onego->hash` | `OneGoHandler.Hash` | 已重构；公共哈希计算接口，复刻 SHA256 后提取末尾数字期号规则 |
 | `/onego/history` | `c.api.onego->history` | `OneGoHandler.History` | 已重构，对比通过；登录只读本人投注历史，未登录 `retcode=-9999` |
-| `/onego/bet` | `c.api.onego->bet` | `OneGoHandler.Bet` | 部分已重构；未登录和押注数量为 0 分支已迁移，金币扣减、号码生成和订单写入成功分支暂未接管 |
+| `/onego/bet` | `c.api.onego->bet` | `OneGoHandler.Bet` | 部分已重构；未登录、押注数量为 0、无效场次、无效期号、未开始、已结束、未知用户和余额不足分支已迁移，金币扣减、号码生成和订单写入成功分支暂未接管 |
 | `/onego/lucky` | `c.api.onego->lucky` | `OneGoHandler.Lucky` | 已重构，对比通过；一元购幸运榜公共只读，保留旧 PHP 排行 SQL 未分页行为 |
 | `/onego/bet_ranks` | `c.api.onego->bet_ranks` | `OneGoHandler.BetRanks` | 已重构；押注排行只读，错误分支 live 对比通过，本地无订单样本成功分支由 fake 覆盖 |
 | `/onego/marquee` | `c.api.onego->marquee` | `OneGoHandler.Marquee` | 已重构，对比通过；一元购跑马灯公共只读，按最近已开奖期生成中奖消息 |
@@ -491,7 +491,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，二维码图片生成暂未接管 |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，会员升级和金币扣减成功分支暂未接管 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
-| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；未登录、兑换类型、兑换数量和 100 万上限前置分支已迁移，金币/余额互换事务写入暂未接管 |
+| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币和计算为 0 前置分支已迁移，金币/余额互换事务写入暂未接管 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，支付下单、金币兑换和会员资产成功分支暂未接管 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
@@ -563,7 +563,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录分支已迁移，提现申请涉及账户余额、金币兑换、银行卡、风控、冻结金额事务和 Telegram 通知 |
-| `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 未登录分支已迁移，金币兑换写入仍需迁移 |
+| `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 未登录分支已迁移，支付下单、金币兑换和会员资产仍需迁移 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录分支已迁移，支付下单和金币资产仍需迁移 |
@@ -574,19 +574,19 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 部分未重构；`bind` 未登录和缺邀请码分支已迁移，绑定关系、VIP/金币奖励写入成功分支仍需事务化迁移 |
+| `/invite/:action?`（除 `/invite/info`） | `c.api.invite->$action` | 部分未重构；`bind` 未登录、已绑定、缺邀请码、无效邀请码和无法绑定自己分支已迁移，绑定关系、VIP/金币奖励写入成功分支仍需事务化迁移 |
 | `/explore/signtask/:action?`（除 `/explore/signtask`、`/explore/signtask/index`） | `c.api.explore.signtask->$action` | 未重构；签到任务 |
 
 ### 游戏、直播、一元购
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/game/wali/topup` | `c.api.game.wali->topup` | 部分未重构；未登录和低于最低转入金币分支已迁移，余额不足、上分金币扣减、外部平台请求和失败归还金币仍需事务化迁移 |
+| `/game/wali/topup` | `c.api.game.wali->topup` | 部分未重构；未登录、低于最低转入金币和余额不足分支已迁移，上分金币扣减、外部平台请求和失败归还金币仍需事务化迁移 |
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 部分未重构；未登录和金额输入不正确分支已迁移，下分外部平台请求、金币增加和订单写入仍需迁移 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 部分未重构；未登录分支已迁移，外部平台进入游戏成功分支仍需迁移 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；topup/withdraw 的未登录、最低转入金币和金额输入不正确分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；topup/withdraw 的未登录、最低转入金币、余额不足和金额输入不正确分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
 | `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`） | `c.api.starlive->$action` | 部分未重构；资产 action 的游客/未知用户/未知业务类型前置失败分支已迁移，重复订单查询、下注扣款、中奖加钱和钻石兑换事务仍需迁移 |
-| `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/bet`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 部分未重构；`bet` 前置失败分支已迁移，投注金币扣减、号码生成和订单写入成功分支仍需事务化迁移 |
+| `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/bet`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 部分未重构；`bet` 只读前置失败分支已迁移，投注金币扣减、号码生成和订单写入成功分支仍需事务化迁移 |
 
 ### 社区、HGame、AI
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	userRepo "xj_comp/internal/repository/user"
 )
@@ -14,6 +15,7 @@ type AuthStore interface {
 
 type Store interface {
 	RecordRecommend(ctx context.Context, uid int) (map[string]interface{}, error)
+	UserByInviteKey(ctx context.Context, inviteCode string) (map[string]interface{}, error)
 }
 
 type Service struct {
@@ -56,8 +58,29 @@ func (s *Service) BindEdge(ctx context.Context, token string, inviteCode string)
 	if atoi(user["uid"]) == 0 {
 		return -9999, "您还没有登录", nil
 	}
+	row, err := s.store.RecordRecommend(ctx, atoi(user["uid"]))
+	if err != nil {
+		return -1, "绑定邀请码失败", err
+	}
+	if len(row) > 0 {
+		key := ""
+		if uniqkey := atoi(row["uniqkey"]); uniqkey > 0 {
+			key = strconv.FormatInt(int64(uniqkey), 36)
+		}
+		return -1, "您已经绑定了邀请码:" + key, nil
+	}
 	if inviteCode == "" {
 		return -1, "请输入邀请码", nil
+	}
+	inviter, err := s.store.UserByInviteKey(ctx, inviteCode)
+	if err != nil {
+		return -1, "绑定邀请码失败", err
+	}
+	if len(inviter) == 0 {
+		return -1, "无效邀请码", nil
+	}
+	if atoi(inviter["uid"]) == atoi(user["uid"]) {
+		return -1, "无法绑定自己", nil
 	}
 	return -1, "邀请码绑定成功分支暂未迁移", nil
 }
@@ -81,4 +104,12 @@ func atoi(value interface{}) int {
 	var n int
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+func inviteBase10(inviteCode string) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(inviteCode), 36, 64)
+	if err != nil {
+		return 0
+	}
+	return value
 }

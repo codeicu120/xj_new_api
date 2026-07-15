@@ -12,6 +12,7 @@ import (
 type fakeWaliStore struct {
 	row      map[string]interface{}
 	settings map[string]string
+	quota    map[string]interface{}
 }
 
 func (s fakeWaliStore) PlatformByID(context.Context, int) (map[string]interface{}, error) {
@@ -20,6 +21,10 @@ func (s fakeWaliStore) PlatformByID(context.Context, int) (map[string]interface{
 
 func (s fakeWaliStore) Setting(_ context.Context, key string) (string, error) {
 	return s.settings[key], nil
+}
+
+func (s fakeWaliStore) Quota(context.Context, int) (map[string]interface{}, error) {
+	return s.quota, nil
 }
 
 type fakeWaliAuthStore struct {
@@ -127,6 +132,24 @@ func TestWaliTransferEdgePrechecks(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "转入金币不能低于100" {
 		t.Fatalf("unexpected low response %d %q", retcode, errmsg)
+	}
+
+	service = NewWaliService(fakeWaliStore{settings: map[string]string{"gamecoinlimit": "100"}, quota: map[string]interface{}{"goldcoin": "120"}}, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, &fakeWaliClient{})
+	retcode, errmsg, err = service.TopupEdge(context.Background(), "token", "200", "上分成功分支暂未迁移")
+	if err != nil {
+		t.Fatalf("topup balance: %v", err)
+	}
+	if retcode != -1 || errmsg != "余额不足:120" {
+		t.Fatalf("unexpected balance response %d %q", retcode, errmsg)
+	}
+
+	service = NewWaliService(fakeWaliStore{settings: map[string]string{"gamecoinlimit": "100"}, quota: map[string]interface{}{"goldcoin": "220"}}, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, &fakeWaliClient{})
+	retcode, errmsg, err = service.TopupEdge(context.Background(), "token", "200", "上分成功分支暂未迁移")
+	if err != nil {
+		t.Fatalf("topup pending: %v", err)
+	}
+	if retcode != -1 || errmsg != "上分成功分支暂未迁移" {
+		t.Fatalf("unexpected pending response %d %q", retcode, errmsg)
 	}
 
 	retcode, errmsg, err = service.WithdrawEdge(context.Background(), "token", "0", "下分成功分支暂未迁移")

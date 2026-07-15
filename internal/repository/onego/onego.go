@@ -162,6 +162,20 @@ func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface
 	return rows[0], nil
 }
 
+func (r *Repository) Quota(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT uid, goldcoin FROM users_quota WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query onego user quota: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
 func offset(page int, pageSize int) int {
 	if page < 1 {
 		page = 1

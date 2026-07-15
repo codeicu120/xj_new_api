@@ -42,6 +42,7 @@ type fakeUserStore struct {
 	payments           []map[string]interface{}
 	withdraws          []map[string]interface{}
 	withdrawTotal      int
+	exrate             *int
 	vodOrders          []map[string]interface{}
 	vodSupports        []map[string]interface{}
 	latestVODIssue     map[string]interface{}
@@ -605,6 +606,9 @@ func (s fakeUserStore) SumWithdrawAmount(context.Context, int) (int, error) {
 }
 
 func (s fakeUserStore) SettingExRate(context.Context) (int, error) {
+	if s.exrate != nil {
+		return *s.exrate, nil
+	}
 	return 10, nil
 }
 
@@ -883,8 +887,18 @@ func TestUserContactEdges(t *testing.T) {
 
 func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	zero := 0
+	closed := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, exrate: &zero}, "https://res.example.test")
 
-	retcode, errmsg, err := service.CoinLogExchangeEdge(context.Background(), "token", 0, 0)
+	retcode, errmsg, err := closed.CoinLogExchangeEdge(context.Background(), "token", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "系统已关闭兑换功能" {
+		t.Fatalf("exchange closed retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -898,6 +912,22 @@ func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "请指定兑换数量" {
 		t.Fatalf("exchange num retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 1, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "提交金币最小数量为:10" {
+		t.Fatalf("exchange min retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "金币兑换成功分支暂未迁移" {
+		t.Fatalf("exchange pending retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
 	retcode, errmsg, err = service.VODOrderCreateEdge(context.Background(), "token", "", "", 0)
