@@ -1174,6 +1174,17 @@
 - 兼容规则：订单不存在或已支付返回 `retcode=-1`、`errmsg=记录不存在或已支付`；越权返回 `无权限`；成功返回 `data.payrow/payments`，支付字段复用 `payment.procRow2` 映射，通道按订单 `paytype` 过滤。
 - 测试：`go test ./internal/service/payment ./internal/server` 和 `go test ./...` 通过；单测覆盖缺失/已支付、越权和成功过滤支付通道，路由测试覆盖缺 `payid` 错误壳；PHP-Go live 对比缺 `payid` 分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
 
+### `/payment/chpayway`
+
+- PHP: `c.api.payment->chpayway`
+- Go: `internal/handler.PaymentHandler.ChPayway`
+- Service: `internal/service/payment.Service`
+- Repository: 复用 `internal/server.ucpStore` 的 `UserBySession`、`PaymentByID`、`PaymentChannels` 和 `UpdatePaymentPayway`。
+- Auth: 订单 `uid>0` 时必须与登录用户一致，否则返回 `此项目需要本人操作`；`uid=0` 订单允许游客操作。
+- DB/Config: 读取 `trade_payments` 单条记录；支付通道通过 `PaymentChannels` 接口隔离；更新时使用 `WHERE payid=? AND ispaid=0`，避免校验后订单已支付仍被改支付方式。
+- 兼容规则：订单不存在或已支付返回 `retcode=-1`、`errmsg=记录不存在或已支付`；支付方式不在当前订单 `paytype` 允许通道内时返回 `支付方式错误或不被允许`；成功返回 `retcode=0`、`errmsg=支付方式已修改`、无 `data`。
+- 测试：`go test ./internal/service/payment ./internal/repository/ucp ./internal/server` 和 `go test ./...` 通过；单测覆盖缺失/已支付、越权、非法支付方式和成功更新字段，路由测试覆盖缺 `payid` 错误壳；PHP-Go live 对比 `/payment/chpayway` 缺 `payid` 分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/payment/success`、`/payment/failed`
 
 - PHP: `c.api.payment->success/failed`

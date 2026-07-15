@@ -34,6 +34,7 @@
 | `/invite/info` | `c.api.invite->info` | 本轮完成 | 登录只读当前绑定的邀请码；未登录和登录真实 token 分支对比通过。 |
 | `/payment/index`、`/payment/query` | `c.api.payment->index/query` | 本轮完成 | 只读订单状态查询；校验订单归属，未授权返回 `无权限`；裸 `/payment` 旧 PHP 为 404，不接管。 |
 | `/payment/payways` | `c.api.payment->payways` | 本轮完成 | 只读订单支付方式列表；校验订单存在、未支付和归属，支付通道通过接口隔离，不伪造生产配置。 |
+| `/payment/chpayway` | `c.api.payment->chpayway` | 本轮完成 | 修改未支付订单支付方式；保留本人校验、支付方式白名单校验和条件更新，避免已支付订单被修改。 |
 | `/payment/unpaid` | `c.api.payment->unpaid` | 本轮完成 | 当前 PHP 运行代码固定返回 `data.total_count=0`；未执行的未支付订单查询分支暂不接管。 |
 | `/payment/success`、`/payment/failed` | `c.api.payment->success/failed` | 本轮完成 | 固定支付状态 JSON 文案；不包含第三方支付回调验签或入账逻辑。 |
 | `/bought/delete` | `c.api.bought->delete` | 本轮完成 | 登录删除已购影片记录；未登录和登录空 `vodids` 分支对比通过。 |
@@ -122,7 +123,7 @@
 | 接口 | 原因 |
 | --- | --- |
 | `/register`、`/login`、`/forgot` | 公共但涉及账号、短信、风控和写库。 |
-| `/payment/*`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付相关，需要独立 reviewer/灰度/回滚策略。 |
+| `/payment/*`（除 `/payment/index`、`/payment/query`、`/payment/payways`、`/payment/chpayway`、`/payment/unpaid`、`/payment/success`、`/payment/failed`）、`/respond/*` | 支付下单、外部平台请求或回调，需要独立 reviewer/灰度/回滚策略。 |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | 验证码、短信/邮件平台、频控和风控。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |

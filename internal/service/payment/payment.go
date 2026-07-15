@@ -14,6 +14,7 @@ type Store interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
 	PaymentByID(ctx context.Context, payid int) (map[string]interface{}, error)
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
+	UpdatePaymentPayway(ctx context.Context, payid int, payway string, paycode string) (int, error)
 }
 
 type Service struct {
@@ -86,6 +87,46 @@ func (s *Service) Payways(ctx context.Context, token string, payID int) (map[str
 	}, 0, "", nil
 }
 
+func (s *Service) ChangePayway(ctx context.Context, token string, payID int, rawPaycode string) (int, string, error) {
+	if s.store == nil {
+		return -1, "记录不存在或已支付", nil
+	}
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -1, "修改支付方式失败", err
+	}
+	payrow, err := s.store.PaymentByID(ctx, payID)
+	if err != nil {
+		return -1, "修改支付方式失败", err
+	}
+	if len(payrow) == 0 || atoi(payrow["ispaid"]) > 0 {
+		return -1, "记录不存在或已支付", nil
+	}
+	if atoi(payrow["uid"]) > 0 && atoi(user["uid"]) != atoi(payrow["uid"]) {
+		return -1, "此项目需要本人操作", nil
+	}
+	paycode := strings.TrimSpace(rawPaycode)
+	channels, err := s.store.PaymentChannels(ctx, false)
+	if err != nil {
+		return -1, "修改支付方式失败", err
+	}
+	if !paymentCodeAllowed(channels, atoi(payrow["paytype"]), paycode) {
+		return -1, "支付方式错误或不被允许", nil
+	}
+	parts := strings.SplitN(paycode, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return -1, "支付方式错误或不被允许", nil
+	}
+	affected, err := s.store.UpdatePaymentPayway(ctx, atoi(payrow["payid"]), parts[0], parts[1])
+	if err != nil {
+		return -1, "修改支付方式失败", err
+	}
+	if affected == 0 {
+		return -1, "记录不存在或已支付", nil
+	}
+	return 0, "支付方式已修改", nil
+}
+
 func (s *Service) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, error) {
 	sid := userRepo.CleanToken(strings.TrimSpace(token))
 	if sid == "" {
@@ -154,6 +195,21 @@ func paywayAllowsType(payway map[string]interface{}, payType int) bool {
 	for _, platform := range platforms {
 		if platform == "ALL" || platform == "" {
 			return true
+		}
+	}
+	return false
+}
+
+func paymentCodeAllowed(channels []map[string]interface{}, payType int, paycode string) bool {
+	if paycode == "" {
+		return false
+	}
+	for _, channel := range filterPaymentChannels(channels, payType) {
+		payways, _ := channel["payways"].([]map[string]interface{})
+		for _, payway := range payways {
+			if str(payway["paycode"]) == paycode {
+				return true
+			}
 		}
 	}
 	return false

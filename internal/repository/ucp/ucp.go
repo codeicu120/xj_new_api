@@ -744,6 +744,21 @@ func (r *Repository) PaymentByID(ctx context.Context, payid int) (map[string]int
 	return row, nil
 }
 
+func (r *Repository) UpdatePaymentPayway(ctx context.Context, payid int, payway string, paycode string) (int, error) {
+	if r.db == nil || payid <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "UPDATE trade_payments SET payway=?, paycode=? WHERE payid=? AND ispaid=0", payway, paycode, payid)
+	if err != nil {
+		return 0, fmt.Errorf("update payment payway: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("update payment payway affected rows: %w", err)
+	}
+	return int(affected), nil
+}
+
 func (r *Repository) AttachByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error) {
 	if r.db == nil || len(ids) == 0 {
 		return []map[string]interface{}{}, nil

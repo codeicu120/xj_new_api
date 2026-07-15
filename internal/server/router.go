@@ -209,6 +209,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/payment/index", paymentHandler.Query)
 	router.Any("/payment/query", paymentHandler.Query)
 	router.Any("/payment/payways", paymentHandler.Payways)
+	router.Any("/payment/chpayway", paymentHandler.ChPayway)
 	router.Any("/payment/unpaid", paymentHandler.Unpaid)
 	router.Any("/payment/success", paymentHandler.Success)
 	router.Any("/payment/failed", paymentHandler.Failed)

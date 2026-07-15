@@ -199,6 +199,10 @@ func (s ucpStore) PaymentByID(ctx context.Context, payid int) (map[string]interf
 	return s.ucp.PaymentByID(ctx, payid)
 }
 
+func (s ucpStore) UpdatePaymentPayway(ctx context.Context, payid int, payway string, paycode string) (int, error) {
+	return s.ucp.UpdatePaymentPayway(ctx, payid, payway, paycode)
+}
+
 func (s ucpStore) AttachByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error) {
 	return s.ucp.AttachByIDs(ctx, ids)
 }

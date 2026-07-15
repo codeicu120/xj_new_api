@@ -1986,6 +1986,28 @@ func TestPaymentPaywaysRouteMissingPayment(t *testing.T) {
 	}
 }
 
+func TestPaymentChPaywayRouteMissingPayment(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/payment/chpayway", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "记录不存在或已支付" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestPaymentCallbackStatusRoutes(t *testing.T) {
 	router := newTestRouter()
 
