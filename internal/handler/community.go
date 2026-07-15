@@ -83,6 +83,28 @@ func (h *CommunityHandler) Show(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *CommunityHandler) Up(c *gin.Context) {
+	tid, _ := strconv.Atoi(inputValue(c, "tid"))
+	retcode, errmsg, err := h.service.UpTopic(c.Request.Context(), authToken(c), tid)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func (h *CommunityHandler) UpComment(c *gin.Context) {
+	cid, _ := strconv.Atoi(inputValue(c, "cid"))
+	retcode, errmsg, err := h.service.UpComment(c.Request.Context(), authToken(c), cid)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
 func communityAction(path string) string {
 	path = strings.TrimPrefix(path, "/community/")
 	if index := strings.Index(path, "-"); index >= 0 {

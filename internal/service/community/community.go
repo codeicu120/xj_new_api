@@ -37,9 +37,14 @@ type Store interface {
 	UpTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error)
 	TopicByID(ctx context.Context, tid int) (map[string]interface{}, error)
 	IncrementTopicVisit(ctx context.Context, tid int) error
+	SetTopicUp(ctx context.Context, tid int, uid int, up bool, now int64) error
+	IncrementTopicUp(ctx context.Context, tid int, delta int) error
 	CountComments(ctx context.Context, tid int) (int, error)
 	ListComments(ctx context.Context, tid int, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
 	UpCommentIDs(ctx context.Context, uid int, ids []int) (map[int]int, error)
+	CommentByID(ctx context.Context, cid int) (map[string]interface{}, error)
+	SetCommentUp(ctx context.Context, cid int, uid int, up bool, now int64) error
+	IncrementCommentUp(ctx context.Context, cid int, delta int) error
 }
 
 type Service struct {
@@ -222,6 +227,82 @@ func (s *Service) Show(ctx context.Context, req ShowRequest) (map[string]interfa
 		"totalCommentCount": total,
 		"comments":          s.processComments(comments),
 	}, nil
+}
+
+func (s *Service) UpTopic(ctx context.Context, token string, tid int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "社区点赞失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "请登录后操作", nil
+	}
+	topic, err := s.store.TopicByID(ctx, tid)
+	if err != nil {
+		return -1, "社区点赞失败", err
+	}
+	if len(topic) == 0 {
+		return -1, "记录不存在或已删除", nil
+	}
+	upIDs, err := s.store.UpTopicIDs(ctx, uid, []int{tid})
+	if err != nil {
+		return -1, "社区点赞失败", err
+	}
+	if upIDs[tid] > 0 {
+		if err := s.store.SetTopicUp(ctx, tid, uid, false, s.now().Unix()); err != nil {
+			return -1, "社区点赞失败", err
+		}
+		if err := s.store.IncrementTopicUp(ctx, tid, -1); err != nil {
+			return -1, "社区点赞失败", err
+		}
+		return 0, "取消赞成功", nil
+	}
+	if err := s.store.SetTopicUp(ctx, tid, uid, true, s.now().Unix()); err != nil {
+		return -1, "社区点赞失败", err
+	}
+	if err := s.store.IncrementTopicUp(ctx, tid, 1); err != nil {
+		return -1, "社区点赞失败", err
+	}
+	return 0, "已赞", nil
+}
+
+func (s *Service) UpComment(ctx context.Context, token string, cid int) (int, string, error) {
+	user, err := s.userByToken(ctx, token)
+	if err != nil {
+		return -1, "社区评论点赞失败", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "请登录后操作", nil
+	}
+	comment, err := s.store.CommentByID(ctx, cid)
+	if err != nil {
+		return -1, "社区评论点赞失败", err
+	}
+	if len(comment) == 0 {
+		return -1, "记录不存在或已删除", nil
+	}
+	upIDs, err := s.store.UpCommentIDs(ctx, uid, []int{cid})
+	if err != nil {
+		return -1, "社区评论点赞失败", err
+	}
+	if upIDs[cid] > 0 {
+		if err := s.store.SetCommentUp(ctx, cid, uid, false, s.now().Unix()); err != nil {
+			return -1, "社区评论点赞失败", err
+		}
+		if err := s.store.IncrementCommentUp(ctx, cid, -1); err != nil {
+			return -1, "社区评论点赞失败", err
+		}
+		return 0, "取消赞成功", nil
+	}
+	if err := s.store.SetCommentUp(ctx, cid, uid, true, s.now().Unix()); err != nil {
+		return -1, "社区评论点赞失败", err
+	}
+	if err := s.store.IncrementCommentUp(ctx, cid, 1); err != nil {
+		return -1, "社区评论点赞失败", err
+	}
+	return 0, "已赞", nil
 }
 
 func (s *Service) processTopics(ctx context.Context, rows []map[string]interface{}, uid int) ([]map[string]interface{}, error) {

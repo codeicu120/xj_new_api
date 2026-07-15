@@ -480,6 +480,30 @@ func TestCommunityShowMissingTopic(t *testing.T) {
 	}
 }
 
+func TestCommunityUpRoutesRequireLogin(t *testing.T) {
+	router := newTestRouter()
+
+	for _, path := range []string{"/community/up?tid=9", "/community/up_comment?cid=1"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected status %d, got %d", path, http.StatusOK, rec.Code)
+		}
+		if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+			t.Fatalf("%s expected X-Served-By newbie, got %q", path, servedBy)
+		}
+		var body legacyjson.Response
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode response: %v", path, err)
+		}
+		if body.RetCode != -9999 || body.ErrMsg != "请登录后操作" {
+			t.Fatalf("%s unexpected response %#v", path, body)
+		}
+	}
+}
+
 func TestOneGoRootUsesRules(t *testing.T) {
 	router := newTestRouter()
 

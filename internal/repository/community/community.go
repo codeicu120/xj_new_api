@@ -114,6 +114,32 @@ func (r *Repository) IncrementTopicVisit(ctx context.Context, tid int) error {
 	return nil
 }
 
+func (r *Repository) SetTopicUp(ctx context.Context, tid int, uid int, up bool, now int64) error {
+	if r.db == nil || tid <= 0 || uid <= 0 {
+		return nil
+	}
+	if !up {
+		if _, err := r.db.ExecContext(ctx, "DELETE FROM topic_ups WHERE tid=? AND uid=?", tid, uid); err != nil {
+			return fmt.Errorf("delete topic up: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO topic_ups(uid,tid,created_at) VALUES(?,?,?)", uid, tid, now); err != nil {
+		return fmt.Errorf("insert topic up: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) IncrementTopicUp(ctx context.Context, tid int, delta int) error {
+	if r.db == nil || tid <= 0 || delta == 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE topics SET upnum=upnum+? WHERE tid=?", delta, tid); err != nil {
+		return fmt.Errorf("increment topic up: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) CountComments(ctx context.Context, tid int) (int, error) {
 	if r.db == nil || tid <= 0 {
 		return 0, nil
@@ -153,6 +179,46 @@ func (r *Repository) ListComments(ctx context.Context, tid int, total int, page 
 		row["__closenum__"] = prevDepth
 	}
 	return rows, nil
+}
+
+func (r *Repository) CommentByID(ctx context.Context, cid int) (map[string]interface{}, error) {
+	if r.db == nil || cid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT * FROM topic_comments WHERE id=?", cid)
+	if err != nil {
+		return nil, fmt.Errorf("query topic comment by id: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func (r *Repository) SetCommentUp(ctx context.Context, cid int, uid int, up bool, now int64) error {
+	if r.db == nil || cid <= 0 || uid <= 0 {
+		return nil
+	}
+	if !up {
+		if _, err := r.db.ExecContext(ctx, "DELETE FROM topic_comments_ups WHERE cid=? AND uid=?", cid, uid); err != nil {
+			return fmt.Errorf("delete topic comment up: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO topic_comments_ups(uid,cid,created_at) VALUES(?,?,?)", uid, cid, now); err != nil {
+		return fmt.Errorf("insert topic comment up: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) IncrementCommentUp(ctx context.Context, cid int, delta int) error {
+	if r.db == nil || cid <= 0 || delta == 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE topic_comments SET upnum=upnum+? WHERE id=?", delta, cid); err != nil {
+		return fmt.Errorf("increment topic comment up: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) UpCommentIDs(ctx context.Context, uid int, ids []int) (map[int]int, error) {

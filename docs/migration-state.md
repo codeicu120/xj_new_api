@@ -1021,6 +1021,17 @@
 - 兼容规则：缺失 `tid` 或记录不存在返回 `retcode=-1`、`errmsg=记录不存在或已删除`；成功返回 `row/totalCommentCount/comments`，`orderby=1` 时评论按点赞数排序，否则按时间倒序。
 - 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 和 `go test ./...` 通过；单测覆盖成功详情和缺失主题，路由测试覆盖 `/community/show?tid=0` 错误壳；PHP-Go live 对比 `/community/show?tid=0` 业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
 
+### `/community/up`、`/community/up_comment`
+
+- PHP: `c.api.topic->up/up_comment`
+- Go: `internal/handler.CommunityHandler.Up/UpComment`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 必须登录，未登录返回 `retcode=-9999`、`errmsg=请登录后操作`。
+- DB: `up` 读取 `topics`，切换 `topic_ups` 并更新 `topics.upnum`；`up_comment` 读取 `topic_comments`，切换 `topic_comments_ups` 并更新 `topic_comments.upnum`。
+- 兼容规则：记录不存在返回 `记录不存在或已删除`；已点赞时取消并返回 `取消赞成功`；未点赞时插入点赞记录并返回 `已赞`。
+- 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 通过；单测覆盖未登录、帖子点赞和评论取消点赞，路由测试覆盖两条未登录错误壳；PHP-Go live 对比 `/community/up?tid=9` 和 `/community/up_comment?cid=1` 未登录分支业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/getGlobalData`
 
 - PHP: `c.api.index->getGlobalData`

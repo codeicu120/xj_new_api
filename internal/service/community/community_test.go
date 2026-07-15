@@ -14,6 +14,10 @@ type fakeStore struct {
 	missingTopic bool
 	visitCount   int
 	commentOrder string
+	topicUp      bool
+	commentUp    bool
+	topicDelta   int
+	commentDelta int
 }
 
 func (s *fakeStore) CountTopics(_ context.Context, filter communityRepo.TopicFilter) (int, error) {
@@ -40,7 +44,10 @@ func (s *fakeStore) FavoriteTopicIDs(context.Context, int, []int) (map[int]int, 
 	return map[int]int{9: 1}, nil
 }
 func (s *fakeStore) UpTopicIDs(context.Context, int, []int) (map[int]int, error) {
-	return map[int]int{9: 1}, nil
+	if s.topicUp {
+		return map[int]int{9: 1}, nil
+	}
+	return map[int]int{}, nil
 }
 func (s *fakeStore) TopicByID(context.Context, int) (map[string]interface{}, error) {
 	if s.missingTopic {
@@ -52,13 +59,35 @@ func (s *fakeStore) IncrementTopicVisit(context.Context, int) error {
 	s.visitCount++
 	return nil
 }
+func (s *fakeStore) SetTopicUp(_ context.Context, _ int, _ int, up bool, _ int64) error {
+	s.topicUp = up
+	return nil
+}
+func (s *fakeStore) IncrementTopicUp(_ context.Context, _ int, delta int) error {
+	s.topicDelta += delta
+	return nil
+}
 func (s *fakeStore) CountComments(context.Context, int) (int, error) { return 1, nil }
 func (s *fakeStore) ListComments(_ context.Context, _ int, _ int, _ int, _ int, orderBy string) ([]map[string]interface{}, error) {
 	s.commentOrder = orderBy
 	return []map[string]interface{}{{"id": "1", "tid": "9", "uid": "7", "addtime": "1699999940", "subrows": []map[string]interface{}{}}}, nil
 }
 func (s *fakeStore) UpCommentIDs(context.Context, int, []int) (map[int]int, error) {
-	return map[int]int{1: 1}, nil
+	if s.commentUp {
+		return map[int]int{1: 1}, nil
+	}
+	return map[int]int{}, nil
+}
+func (s *fakeStore) CommentByID(context.Context, int) (map[string]interface{}, error) {
+	return map[string]interface{}{"id": "1", "tid": "9"}, nil
+}
+func (s *fakeStore) SetCommentUp(_ context.Context, _ int, _ int, up bool, _ int64) error {
+	s.commentUp = up
+	return nil
+}
+func (s *fakeStore) IncrementCommentUp(_ context.Context, _ int, delta int) error {
+	s.commentDelta += delta
+	return nil
 }
 
 type fakeAuth struct{ user map[string]interface{} }
@@ -68,7 +97,7 @@ func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}
 }
 
 func TestListingBuildsParamsAndRows(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{topicUp: true}
 	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
 	service.now = func() time.Time { return time.Unix(1700000000, 0) }
 
@@ -96,7 +125,7 @@ func TestFavoriteRequiresLogin(t *testing.T) {
 }
 
 func TestCommentListing(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{commentUp: true}
 	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
 	service.now = func() time.Time { return time.Unix(1700000000, 0) }
 
@@ -110,7 +139,7 @@ func TestCommentListing(t *testing.T) {
 }
 
 func TestShowReturnsTopicAndComments(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{topicUp: true, commentUp: true}
 	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
 
 	data, err := service.Show(context.Background(), ShowRequest{TID: 9, QueryOrder: "1", Token: "abc"})
@@ -135,5 +164,43 @@ func TestShowMissingTopic(t *testing.T) {
 	_, err := service.Show(context.Background(), ShowRequest{TID: 404})
 	if err != ErrTopicNotFound {
 		t.Fatalf("expected ErrTopicNotFound, got %v", err)
+	}
+}
+
+func TestUpTopicRequiresLogin(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{}, "https://res.test")
+
+	retcode, errmsg, err := service.UpTopic(context.Background(), "", 9)
+	if err != nil {
+		t.Fatalf("up topic: %v", err)
+	}
+	if retcode != -9999 || errmsg != "请登录后操作" {
+		t.Fatalf("response=%d %q", retcode, errmsg)
+	}
+}
+
+func TestUpTopicToggles(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
+
+	retcode, errmsg, err := service.UpTopic(context.Background(), "abc", 9)
+	if err != nil {
+		t.Fatalf("up topic: %v", err)
+	}
+	if retcode != 0 || errmsg != "已赞" || !store.topicUp || store.topicDelta != 1 {
+		t.Fatalf("response=%d %q up=%v delta=%d", retcode, errmsg, store.topicUp, store.topicDelta)
+	}
+}
+
+func TestUpCommentCancelsExisting(t *testing.T) {
+	store := &fakeStore{commentUp: true}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
+
+	retcode, errmsg, err := service.UpComment(context.Background(), "abc", 1)
+	if err != nil {
+		t.Fatalf("up comment: %v", err)
+	}
+	if retcode != 0 || errmsg != "取消赞成功" || store.commentUp || store.commentDelta != -1 {
+		t.Fatalf("response=%d %q up=%v delta=%d", retcode, errmsg, store.commentUp, store.commentDelta)
 	}
 }
