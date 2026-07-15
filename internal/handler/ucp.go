@@ -147,6 +147,36 @@ func (h *UCPHandler) BankcardIndex(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *UCPHandler) BankcardCreate(c *gin.Context) {
+	h.bankcardPost(c, "create")
+}
+
+func (h *UCPHandler) BankcardModify(c *gin.Context) {
+	h.bankcardPost(c, "modify")
+}
+
+func (h *UCPHandler) bankcardPost(c *gin.Context, action string) {
+	cardID, _ := strconv.Atoi(inputValue(c, "cardid"))
+	isDef, _ := strconv.Atoi(inputValue(c, "isdef"))
+	cardType, _ := strconv.Atoi(inputValue(c, "type"))
+	retcode, errmsg, err := h.service.BankcardPost(c.Request.Context(), authToken(c), ucpService.BankcardPostRequest{
+		Action:   action,
+		CardID:   cardID,
+		Name:     inputValue(c, "name"),
+		BankName: inputValue(c, "bankname"),
+		CardNum:  inputValue(c, "cardnum"),
+		IsDef:    isDef,
+		Type:     cardType,
+	})
+	h.msgActionResponse(c, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) BankcardDelete(c *gin.Context) {
+	cardID, _ := strconv.Atoi(inputValue(c, "cardid"))
+	retcode, errmsg, err := h.service.BankcardDelete(c.Request.Context(), authToken(c), cardID)
+	h.msgActionResponse(c, retcode, errmsg, err)
+}
+
 func (h *UCPHandler) FeedbackListing(c *gin.Context) {
 	if c.Request.Method == http.MethodPost {
 		h.FeedbackCreateLegacy(c)

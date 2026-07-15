@@ -29,6 +29,26 @@ func (s ucpStore) Banks(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.ucp.Banks(ctx)
 }
 
+func (s ucpStore) BankcardByID(ctx context.Context, uid int, cardID int) (map[string]interface{}, error) {
+	return s.ucp.BankcardByID(ctx, uid, cardID)
+}
+
+func (s ucpStore) CreateBankcard(ctx context.Context, uid int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	return s.ucp.CreateBankcard(ctx, uid, name, bankname, cardnum, isdef, cardType)
+}
+
+func (s ucpStore) UpdateBankcard(ctx context.Context, uid int, cardID int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	return s.ucp.UpdateBankcard(ctx, uid, cardID, name, bankname, cardnum, isdef, cardType)
+}
+
+func (s ucpStore) DeleteBankcard(ctx context.Context, uid int, cardID int) (int, error) {
+	return s.ucp.DeleteBankcard(ctx, uid, cardID)
+}
+
+func (s ucpStore) SetDefaultBankcard(ctx context.Context, uid int, cardID int) error {
+	return s.ucp.SetDefaultBankcard(ctx, uid, cardID)
+}
+
 func (s ucpStore) Groups(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.user.Groups(ctx)
 }

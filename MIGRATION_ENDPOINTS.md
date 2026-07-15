@@ -87,6 +87,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/index` | ANY | `UCPHandler.Index` |
 | `/ucp/user`、`/ucp/user/index` | ANY | `UCPHandler.UserIndex` |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | ANY | `UCPHandler.BankcardIndex` |
+| `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete` | ANY | `UCPHandler.BankcardCreate/Modify/Delete` |
 | `/ucp/feedback` | ANY | `UCPHandler.FeedbackListing/FeedbackCreateLegacy` |
 | `/ucp/feedback/index` | GET | `UCPHandler.FeedbackIndex` |
 | `/ucp/feedback/listing` | GET | `UCPHandler.FeedbackNewListing` |
@@ -94,6 +95,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/feedback/create` | ANY | `UCPHandler.FeedbackCreate` |
 | `/ucp/msg`、`/ucp/msg/index` | GET | `UCPHandler.MsgListing` |
 | `/ucp/msg/show` | ANY | `UCPHandler.MsgDetail` |
+| `/ucp/msg/send` | ANY | `UCPHandler.MsgSend` |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | ANY | `UCPHandler.MsgSetRead/CleanRead/Delete` |
 | `/ucp/myaff` | ANY | `UCPHandler.MyAff` |
 | `/ucp/rolltitle` | ANY | `UCPHandler.RollTitle` |
@@ -338,7 +340,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | `UCPHandler.UserIndex` | 已重构，对比通过；登录只读当前用户资料，复用 PHP user row 字段 |
-| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表，写入 action 未接管 |
+| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表 |
+| `/ucp/bankcard/create` | `c.api.ucp.bankcard->create` | `UCPHandler.BankcardCreate` | 已重构；登录新增提款地址，保留 PHP 的类型到支付宝/微信映射、最多 5 条判断和旧错误文案 |
+| `/ucp/bankcard/modify` | `c.api.ucp.bankcard->modify` | `UCPHandler.BankcardModify` | 已重构；登录修改本人提款地址，缺失记录返回 `修改的记录不存在` |
+| `/ucp/bankcard/delete` | `c.api.ucp.bankcard->delete` | `UCPHandler.BankcardDelete` | 已重构；登录删除本人提款地址，返回 `操作成功` |
+| `/ucp/bankcard/:action?`（除已列 action） | `c.api.ucp.bankcard->$action` | 不接管 | PHP `ucp/bankcard.php` 仅定义 `index/create/modify/delete`，均已覆盖 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | `UCPHandler.TaskSharePic` | 已重构，对比通过；公共随机推广海报，只读无奖励写入 |
 | `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | `UCPHandler.TaskboxIndex` | 已重构，对比通过；公共只读任务宝箱状态和最近开启记录，领奖 action 未接管 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
@@ -426,7 +432,6 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 未重构；会员升级/金币 |
 | `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`） | `c.api.ucp.user->$action` | 未重构；资料修改、密码、邮箱/手机绑定等写入或验证码相关 |
 | `/ucp/task/:action?`（除 `/ucp/task/sharepic`） | `c.api.ucp.task->$action` | 未重构；任务奖励/签到等 |
-| `/ucp/bankcard/:action?`（除 `/ucp/bankcard`、`/ucp/bankcard/index`） | `c.api.ucp.bankcard->$action` | 未重构；新增、修改、删除提款地址涉及写库 |
 | `/ucp/withdraw/:action?` | `c.api.ucp.withdraw->$action` | 未重构；提现 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 未重构；`exchange` 为金币兑换写入高风险 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`） | `c.api.ucp.taskbox->$action` | 未重构；`/ucp/taskbox` 本身旧 PHP 无稳定响应未接管，`taskboxopen` 涉及奖励写入 |

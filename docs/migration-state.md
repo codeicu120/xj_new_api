@@ -1022,6 +1022,17 @@
 - 兼容规则：返回 `data.cardrows/maxallow/allowtype/banknames/bankRows`；`maxallow=3`，`allowtype=7`，`bankRows` 只保留 `bankid/bankname/coverpic` 并按 PHP 转换 `bankid` 为 int。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/bankcard` 未登录分支一致，登录测试 token 下 cardrows、bankRows、限制字段和首行内容一致。
 
+### `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete`
+
+- PHP: `c.api.ucp.bankcard->create/modify/delete`
+- Go: `internal/handler.UCPHandler.BankcardCreate/BankcardModify/BankcardDelete`
+- Service: `internal/service/ucp.Service`
+- Repository: `internal/repository/ucp.Repository` + `internal/repository/user.Repository`
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: `create/modify/delete` 写入 `user_bankcards`；设置默认地址时先清空当前用户 `isdef`，再将目标 `cardid` 置为默认。
+- 兼容规则：`type=0/1` 时强制 `bankname=支付宝`，`type=3` 时强制 `bankname=微信`；保留 PHP 的姓名、开户银行、账号长度校验文案；新增时沿用 PHP `count >= 5` 但错误文案为 `最多可以设置3个地址`。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过；覆盖未登录、创建校验、支付宝类型映射、默认地址、修改缺失记录和删除成功分支。写入成功 live 分支未直接打旧库，避免污染本地导入数据。
+
 ### `/init`
 
 - PHP: `c.api.index->init`

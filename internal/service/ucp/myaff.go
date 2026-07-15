@@ -50,6 +50,11 @@ type UserStore interface {
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error)
 	Banks(ctx context.Context) ([]map[string]interface{}, error)
+	BankcardByID(ctx context.Context, uid int, cardID int) (map[string]interface{}, error)
+	CreateBankcard(ctx context.Context, uid int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error)
+	UpdateBankcard(ctx context.Context, uid int, cardID int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error)
+	DeleteBankcard(ctx context.Context, uid int, cardID int) (int, error)
+	SetDefaultBankcard(ctx context.Context, uid int, cardID int) error
 	CountMessages(ctx context.Context, uid int, cid int) (int, error)
 	Messages(ctx context.Context, uid int, cid int, page int, pageSize int) ([]map[string]interface{}, error)
 	SetMsgRead(ctx context.Context, uid int, cid int) error
@@ -257,6 +262,91 @@ func (s *Service) BankcardIndex(ctx context.Context, token string) (map[string]i
 		"banknames": []string{"工商银行", "建设银行", "中国银行", "农业银行", "交通银行", "招商银行", "中信银行", "上海浦东发展银行", "兴业银行", "民生银行"},
 		"bankRows":  s.processBankRows(bankRows),
 	}, 0, "", nil
+}
+
+type BankcardPostRequest struct {
+	Action   string
+	CardID   int
+	Name     string
+	BankName string
+	CardNum  string
+	IsDef    int
+	Type     int
+}
+
+func (s *Service) BankcardPost(ctx context.Context, token string, req BankcardPostRequest) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.BankName = strings.TrimSpace(req.BankName)
+	req.CardNum = strings.TrimSpace(req.CardNum)
+	if req.Type == 0 || req.Type == 1 {
+		req.BankName = "支付宝"
+	} else if req.Type == 3 {
+		req.BankName = "微信"
+	}
+	if req.Action == "create" {
+		rows, err := s.store.Bankcards(ctx, uid)
+		if err != nil {
+			return -1, "操作失败", err
+		}
+		if len(rows) >= 5 {
+			return -1, "最多可以设置3个地址", nil
+		}
+	} else {
+		row, err := s.store.BankcardByID(ctx, uid, req.CardID)
+		if err != nil {
+			return -1, "操作失败", err
+		}
+		if len(row) == 0 {
+			return -1, "修改的记录不存在", nil
+		}
+	}
+	if req.Name == "" || len([]rune(req.Name)) > 20 {
+		return -1, "姓名长度不正确", nil
+	}
+	if req.BankName == "" || len([]rune(req.BankName)) > 40 {
+		return -1, "开户银行填写不正确", nil
+	}
+	if req.CardNum == "" || len([]rune(req.CardNum)) > 40 {
+		return -1, "收款账户或卡号填写不正确", nil
+	}
+	cardID := req.CardID
+	if req.Action == "create" {
+		cardID, err = s.store.CreateBankcard(ctx, uid, req.Name, req.BankName, req.CardNum, req.IsDef, req.Type)
+	} else {
+		_, err = s.store.UpdateBankcard(ctx, uid, req.CardID, req.Name, req.BankName, req.CardNum, req.IsDef, req.Type)
+	}
+	if err != nil {
+		return -1, "操作失败", err
+	}
+	if req.IsDef > 0 {
+		if err := s.store.SetDefaultBankcard(ctx, uid, cardID); err != nil {
+			return -1, "操作失败", err
+		}
+	}
+	return 0, "操作成功", nil
+}
+
+func (s *Service) BankcardDelete(ctx context.Context, token string, cardID int) (int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return -9999, "您还没有登录", nil
+	}
+	if _, err := s.store.DeleteBankcard(ctx, uid, cardID); err != nil {
+		return -1, "操作失败", err
+	}
+	return 0, "操作成功", nil
 }
 
 func (s *Service) authenticatedUser(ctx context.Context, token string) (map[string]interface{}, []map[string]interface{}, error) {

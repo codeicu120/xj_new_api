@@ -48,7 +48,8 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志，分页 URL 为 `/ucp/taskbox/taskboxlog?page=[?]`；开启宝箱奖励写入未接管。 |
 | `/onego/history` | `c.api.onego->history` | 本轮完成 | 登录只读本人一元购投注历史；投注写入 `/onego/bet` 未接管。 |
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | 本轮完成 | 登录只读当前用户资料；资料修改、密码和邮箱/手机验证码 action 未接管。 |
-| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | 本轮完成 | 登录只读提款地址和后台银行列表；新增、修改、删除提款地址 action 未接管。 |
+| `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | 本轮完成 | 登录只读提款地址和后台银行列表。 |
+| `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete` | `c.api.ucp.bankcard->create/modify/delete` | 本轮完成 | 登录新增、修改、删除本人提款地址；保留 PHP 旧文案、类型映射和默认地址逻辑。 |
 
 ## 暂缓
 

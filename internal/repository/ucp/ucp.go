@@ -123,6 +123,78 @@ func (r *Repository) Bankcards(ctx context.Context, uid int) ([]map[string]inter
 	return scanRows(rows)
 }
 
+func (r *Repository) BankcardByID(ctx context.Context, uid int, cardID int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || cardID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM user_bankcards WHERE cardid=? AND uid=?", cardID, uid)
+	if err != nil {
+		return nil, fmt.Errorf("query bankcard: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) CreateBankcard(ctx context.Context, uid int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	if r.db == nil || uid <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO user_bankcards(uid, name, bankname, cardnum, isdef, type) VALUES(?, ?, ?, ?, ?, ?)", uid, name, bankname, cardnum, isdef, cardType)
+	if err != nil {
+		return 0, fmt.Errorf("insert bankcard: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert bankcard id: %w", err)
+	}
+	return int(id), nil
+}
+
+func (r *Repository) UpdateBankcard(ctx context.Context, uid int, cardID int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	if r.db == nil || uid <= 0 || cardID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "UPDATE user_bankcards SET uid=?, name=?, bankname=?, cardnum=?, isdef=?, type=? WHERE cardid=? AND uid=?", uid, name, bankname, cardnum, isdef, cardType, cardID, uid)
+	if err != nil {
+		return 0, fmt.Errorf("update bankcard: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("update bankcard rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
+func (r *Repository) DeleteBankcard(ctx context.Context, uid int, cardID int) (int, error) {
+	if r.db == nil || uid <= 0 || cardID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "DELETE FROM user_bankcards WHERE cardid=? AND uid=?", cardID, uid)
+	if err != nil {
+		return 0, fmt.Errorf("delete bankcard: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("delete bankcard rows affected: %w", err)
+	}
+	return int(affected), nil
+}
+
+func (r *Repository) SetDefaultBankcard(ctx context.Context, uid int, cardID int) error {
+	if r.db == nil || uid <= 0 || cardID <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE user_bankcards SET isdef=0 WHERE uid=?", uid); err != nil {
+		return fmt.Errorf("clear default bankcard: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE user_bankcards SET isdef=1 WHERE uid=? AND cardid=?", uid, cardID); err != nil {
+		return fmt.Errorf("set default bankcard: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) Banks(ctx context.Context) ([]map[string]interface{}, error) {
 	if r.db == nil {
 		return []map[string]interface{}{}, nil

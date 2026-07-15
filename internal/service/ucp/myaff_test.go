@@ -28,6 +28,11 @@ type fakeUserStore struct {
 	taskboxLog         map[string]interface{}
 	taskboxLogs        []map[string]interface{}
 	bankcards          []map[string]interface{}
+	bankcardRow        map[string]interface{}
+	createdBankcard    map[string]interface{}
+	updatedBankcard    map[string]interface{}
+	deletedBankcard    map[string]interface{}
+	defaultBankcard    map[string]interface{}
 	banks              []map[string]interface{}
 	sentMessage        map[string]interface{}
 }
@@ -351,6 +356,54 @@ func (s fakeUserStore) Banks(context.Context) ([]map[string]interface{}, error) 
 	return s.banks, nil
 }
 
+func (s fakeUserStore) BankcardByID(context.Context, int, int) (map[string]interface{}, error) {
+	if s.bankcardRow != nil {
+		return s.bankcardRow, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) CreateBankcard(_ context.Context, uid int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	if s.createdBankcard != nil {
+		s.createdBankcard["uid"] = uid
+		s.createdBankcard["name"] = name
+		s.createdBankcard["bankname"] = bankname
+		s.createdBankcard["cardnum"] = cardnum
+		s.createdBankcard["isdef"] = isdef
+		s.createdBankcard["type"] = cardType
+	}
+	return 88, nil
+}
+
+func (s fakeUserStore) UpdateBankcard(_ context.Context, uid int, cardID int, name string, bankname string, cardnum string, isdef int, cardType int) (int, error) {
+	if s.updatedBankcard != nil {
+		s.updatedBankcard["uid"] = uid
+		s.updatedBankcard["cardid"] = cardID
+		s.updatedBankcard["name"] = name
+		s.updatedBankcard["bankname"] = bankname
+		s.updatedBankcard["cardnum"] = cardnum
+		s.updatedBankcard["isdef"] = isdef
+		s.updatedBankcard["type"] = cardType
+	}
+	return 1, nil
+}
+
+func (s fakeUserStore) DeleteBankcard(_ context.Context, uid int, cardID int) (int, error) {
+	if s.deletedBankcard != nil {
+		s.deletedBankcard["uid"] = uid
+		s.deletedBankcard["cardid"] = cardID
+	}
+	return 1, nil
+}
+
+func (s fakeUserStore) SetDefaultBankcard(_ context.Context, uid int, cardID int) error {
+	if s.defaultBankcard != nil {
+		s.defaultBankcard["uid"] = uid
+		s.defaultBankcard["cardid"] = cardID
+	}
+	return nil
+}
+
 func (s fakeUserStore) CountMessages(context.Context, int, int) (int, error) {
 	return 1, nil
 }
@@ -663,6 +716,102 @@ func TestBankcardIndexReturnsCardsAndBanks(t *testing.T) {
 	bankRows := data["bankRows"].([]map[string]interface{})
 	if bankRows[0]["bankid"] != 8 || bankRows[0]["bankname"] != "平安银行" {
 		t.Fatalf("bankRows = %#v", bankRows)
+	}
+}
+
+func TestBankcardPostRequiresLogin(t *testing.T) {
+	service := NewService(fakeUserStore{}, "https://res.example.test")
+
+	retcode, errmsg, err := service.BankcardPost(context.Background(), "", BankcardPostRequest{Action: "create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestBankcardCreateValidatesName(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.BankcardPost(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", BankcardPostRequest{
+		Action:  "create",
+		CardNum: "account",
+		Type:    1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "姓名长度不正确" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestBankcardCreateSuccessDefaultsAlipay(t *testing.T) {
+	created := map[string]interface{}{}
+	def := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:            map[string]interface{}{"uid": "5"},
+		createdBankcard: created,
+		defaultBankcard: def,
+	}, "https://res.example.test")
+
+	retcode, errmsg, err := service.BankcardPost(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", BankcardPostRequest{
+		Action:   "create",
+		Name:     " 张三 ",
+		BankName: "会被覆盖",
+		CardNum:  " account ",
+		IsDef:    1,
+		Type:     1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if created["uid"] != 5 || created["name"] != "张三" || created["bankname"] != "支付宝" || created["cardnum"] != "account" || created["isdef"] != 1 || created["type"] != 1 {
+		t.Fatalf("created = %#v", created)
+	}
+	if def["uid"] != 5 || def["cardid"] != 88 {
+		t.Fatalf("default = %#v", def)
+	}
+}
+
+func TestBankcardModifyMissing(t *testing.T) {
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+
+	retcode, errmsg, err := service.BankcardPost(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", BankcardPostRequest{
+		Action:  "modify",
+		CardID:  7,
+		Name:    "张三",
+		CardNum: "account",
+		Type:    3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "修改的记录不存在" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestBankcardDeleteSuccess(t *testing.T) {
+	deleted := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:            map[string]interface{}{"uid": "5"},
+		deletedBankcard: deleted,
+	}, "https://res.example.test")
+
+	retcode, errmsg, err := service.BankcardDelete(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if deleted["uid"] != 5 || deleted["cardid"] != 9 {
+		t.Fatalf("deleted = %#v", deleted)
 	}
 }
 
