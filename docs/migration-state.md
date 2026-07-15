@@ -430,6 +430,16 @@
 - 兼容规则：普通分类返回 `data.data` 游戏数组并拼接资源 URL；`category_id=5` 是常玩游戏，需要登录历史，当前无鉴权上下文时按旧 PHP 游客行为返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
 - 测试：聚焦 `go test ./internal/server ./internal/service/game` 通过；PHP-Go 对比 `/game/wali/gameList`、`/game/wali/gameList?category_id=2`、`/game/wali/gameList?category_id=5` 忽略动态 `xxx_api_auth` 后完全一致。
 
+### `/game/lottery/gameList`
+
+- PHP: `c.api.game.lottery->gameList`
+- Go: `internal/handler.GameHandler.LotteryGames`
+- Service: `internal/service/game.ListingService`
+- Repository: `internal/repository/game.GameRepository`
+- DB: 读取 `game`；固定 `platform_id=0`；普通分类支持 `category_id`；按 ``order`` DESC，limit 100。
+- 兼容规则：普通分类返回 `data.data` 游戏数组并拼接资源 URL；`category_id=5` 是常玩游戏，需要登录历史，当前无鉴权上下文时按旧 PHP 游客行为返回 `retcode=-9999`、`errmsg=您还没有登录`、空 `data` 对象。
+- 测试：聚焦 `go test ./internal/server` 通过；普通分类空库响应和 `category_id=5` 游客错误分支由路由测试覆盖。旧 PHP 本地请求在 `Lottery::__construct/initApi` 阶段依赖外部平台配置，`curl --max-time 5` 无响应，未完成 live 对比。
+
 ### `/game/wali/test`
 
 - PHP: `c.api.game.wali->ping`

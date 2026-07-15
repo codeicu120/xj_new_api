@@ -66,6 +66,22 @@ func (h *GameHandler) WaliGames(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *GameHandler) LotteryGames(c *gin.Context) {
+	categoryID, _ := strconv.Atoi(c.Query("category_id"))
+	c.Header("X-Served-By", "newbie")
+	if categoryID == 5 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: -9999, ErrMsg: "您还没有登录", Data: map[string]interface{}{}})
+		return
+	}
+
+	data, err := h.listingService.List(c.Request.Context(), 0, categoryID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏列表失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func (h *GameHandler) Broadcasts(c *gin.Context) {
 	data, err := h.broadcastService.List(c.Request.Context())
 	c.Header("X-Served-By", "newbie")

@@ -174,6 +174,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/game/wali/gameList", gameHandler.WaliGames)
 	router.Any("/game/wali/test", gameHandler.WaliTest)
 	router.Any("/game/wali/balance", gameHandler.WaliBalance)
+	router.Any("/game/lottery/gameList", gameHandler.LotteryGames)
 	router.Any("/hgame/index", hgameHandler.Index)
 	router.Any("/art", artHandler.Index)
 	router.Any("/art/index", artHandler.Index)

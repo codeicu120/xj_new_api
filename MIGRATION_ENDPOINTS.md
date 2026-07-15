@@ -42,6 +42,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | ANY | `GameHandler.WaliGames` |
 | `/game/wali/test` | ANY | `GameHandler.WaliTest` |
 | `/game/wali/balance` | ANY | `GameHandler.WaliBalance` |
+| `/game/lottery/gameList` | ANY | `GameHandler.LotteryGames` |
 | `/hgame/index` | ANY | `HGameHandler.Index` |
 | `/art`、`/art/index` | ANY | `ArtHandler.Index` |
 | `/art/announce` | ANY | `ArtHandler.Announce` |
@@ -208,6 +209,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
 | `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
+| `/game/lottery/gameList` | `c.api.game.lottery->gameList` | `GameHandler.LotteryGames` | 已重构；彩票普通分类只读列表，`category_id=5` 游客未登录分支已对齐 |
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 不接管 | PHP `c.api.hgame` 仅定义 `index`，未发现其他稳定 action；不伪造业务响应 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | `OneGoHandler` | 已重构，对比通过；一元购公共只读规则/房间/当前期数/上期记录，旧 PHP 动态 `xxx_api_auth` 忽略 |
@@ -477,7 +479,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/topup` | `c.api.game.wali->topup` | 未重构；上分、金币扣减、外部平台 |
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 未重构；下分、金币增加、外部平台 |
 | `/game/wali/enter` | `c.api.game.wali->enterGame` | 未重构；外部平台进入游戏 |
-| `/game/lottery/gameList`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 未重构；彩票游戏平台资产、余额或外部进入游戏 |
 | `/starLive/:action` | `c.api.starlive->$action` | 未重构；直播平台、部分回调/扣款 |
 | `/onego/:action?`（除 `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 未重构；一元购剩余 `bet` 投注写入涉及金币扣减 |
 | `/bought/:action?`（除 `/bought/listing`、`/bought/delete`） | `c.api.bought->$action` | 未重构；剩余 `buy` 涉及金豆扣费 |

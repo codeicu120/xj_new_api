@@ -1112,6 +1112,51 @@ func TestWaliGameListFrequentRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestLotteryGameListFrequentRequiresLogin(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/game/lottery/gameList?category_id=5", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -9999 {
+		t.Fatalf("expected retcode -9999, got %d", body.RetCode)
+	}
+	if body.ErrMsg != "您还没有登录" {
+		t.Fatalf("unexpected errmsg %q", body.ErrMsg)
+	}
+}
+
+func TestLotteryGameListOrdinaryCategory(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/game/lottery/gameList?category_id=1", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if servedBy := rec.Header().Get("X-Served-By"); servedBy != "newbie" {
+		t.Fatalf("expected X-Served-By newbie, got %q", servedBy)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != 0 {
+		t.Fatalf("expected retcode 0, got %d", body.RetCode)
+	}
+}
+
 func TestUCPMyAffRequiresLoginWithoutToken(t *testing.T) {
 	router := newTestRouter()
 
