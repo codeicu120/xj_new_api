@@ -104,6 +104,16 @@ func (r *Repository) TopicByID(ctx context.Context, tid int) (map[string]interfa
 	return rows[0], nil
 }
 
+func (r *Repository) IncrementTopicVisit(ctx context.Context, tid int) error {
+	if r.db == nil || tid <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE topics SET visit_count=visit_count+1 WHERE tid=?", tid); err != nil {
+		return fmt.Errorf("increment topic visit: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) CountComments(ctx context.Context, tid int) (int, error) {
 	if r.db == nil || tid <= 0 {
 		return 0, nil

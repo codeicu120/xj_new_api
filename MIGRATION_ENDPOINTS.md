@@ -77,6 +77,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/my/:authorid`、`/my/:authorid/:action` | ANY | `MiniVODHandler.Author` |
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` | ANY | `CommunityHandler.Listing` |
 | `/community/*-:params`（上述 action） | ANY | `CommunityHandler.Listing` |
+| `/community/show` | ANY | `CommunityHandler.Show` |
 | `/community/clisting`、`/community/clisting-:params` | ANY | `CommunityHandler.CommentListing` |
 | `/explore/index` | ANY | `ExploreHandler.Index` |
 | `/explore/notification`、`/explore/notification/index` | ANY | `ExploreHandler.EmptyOK` |
@@ -314,6 +315,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest` | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构，对比通过；主题列表、推荐/热门/最新、分类/type/分页和媒体字段 |
 | `/community/favorite` | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构，对比通过；未登录 `retcode=-9999`，登录按 `topic_favorites` 过滤 |
 | `/community/*-:params`（上述 action） | `c.api.topic->list` | `CommunityHandler.Listing` | 已重构；参数模板 `$category_id-$type-$orderby-$page` |
+| `/community/show` | `c.api.topic->show` | `CommunityHandler.Show` | 已重构；社区详情，读取主题、媒体和评论树，并保留旧 PHP `visit_count+1` 副作用 |
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | `CommunityHandler.CommentListing` | 已重构，对比通过；评论树列表，`tid` 不存在分支一致 |
 
 ### 搜索、专题、公告
@@ -502,7 +504,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/community/:action?` | `c.api.topic->$action` | 未重构；发帖/评论等写入 |
+| `/community/:action?`（除已列 list/recommend/hot/latest/favorite/show/clisting） | `c.api.topic->$action` | 未重构；剩余发帖、收藏切换、点赞、评论发布等写入 |
 | `/aiundress/:action?`（除 `/aiundress`、`/aiundress/listing`、`/aiundress/index`） | `c.api.aiundress->$action` | 未重构；上传、生成、资源查询等依赖外部 AI 服务、Redis 锁和金豆扣减 |
 
 ### 图片、附件和通配资源

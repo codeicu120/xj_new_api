@@ -36,6 +36,7 @@ type Store interface {
 	FavoriteTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error)
 	UpTopicIDs(ctx context.Context, uid int, tids []int) (map[int]int, error)
 	TopicByID(ctx context.Context, tid int) (map[string]interface{}, error)
+	IncrementTopicVisit(ctx context.Context, tid int) error
 	CountComments(ctx context.Context, tid int) (int, error)
 	ListComments(ctx context.Context, tid int, total int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
 	UpCommentIDs(ctx context.Context, uid int, ids []int) (map[int]int, error)
@@ -61,6 +62,12 @@ type CommentListingRequest struct {
 	QueryPage  string
 	QueryOrder string
 	TID        int
+	Token      string
+}
+
+type ShowRequest struct {
+	TID        int
+	QueryOrder string
 	Token      string
 }
 
@@ -176,6 +183,44 @@ func (s *Service) CommentListing(ctx context.Context, req CommentListingRequest)
 		Params:       commentParamsForJSON(params),
 		Rows:         rows,
 		PageInfo:     vodService.PageInfo(total, pageSize, atoi(params["page"]), pageURL),
+	}, nil
+}
+
+func (s *Service) Show(ctx context.Context, req ShowRequest) (map[string]interface{}, error) {
+	topic, err := s.store.TopicByID(ctx, req.TID)
+	if err != nil {
+		return nil, err
+	}
+	if len(topic) == 0 {
+		return nil, ErrTopicNotFound
+	}
+	if err := s.store.IncrementTopicVisit(ctx, atoi(topic["tid"])); err != nil {
+		return nil, err
+	}
+	user, err := s.userByToken(ctx, req.Token)
+	if err != nil {
+		return nil, err
+	}
+	processed, err := s.processTopics(ctx, []map[string]interface{}{topic}, atoi(user["uid"]))
+	if err != nil {
+		return nil, err
+	}
+	orderBy := "a.addtime DESC"
+	if atoi(req.QueryOrder) == 1 {
+		orderBy = "a.upnum DESC"
+	}
+	total, err := s.store.CountComments(ctx, req.TID)
+	if err != nil {
+		return nil, err
+	}
+	comments, err := s.store.ListComments(ctx, req.TID, total, 1, 100, orderBy)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"row":               processed[0],
+		"totalCommentCount": total,
+		"comments":          s.processComments(comments),
 	}, nil
 }
 

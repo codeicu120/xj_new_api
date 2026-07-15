@@ -9,8 +9,11 @@ import (
 )
 
 type fakeStore struct {
-	filter communityRepo.TopicFilter
-	order  string
+	filter       communityRepo.TopicFilter
+	order        string
+	missingTopic bool
+	visitCount   int
+	commentOrder string
 }
 
 func (s *fakeStore) CountTopics(_ context.Context, filter communityRepo.TopicFilter) (int, error) {
@@ -40,10 +43,18 @@ func (s *fakeStore) UpTopicIDs(context.Context, int, []int) (map[int]int, error)
 	return map[int]int{9: 1}, nil
 }
 func (s *fakeStore) TopicByID(context.Context, int) (map[string]interface{}, error) {
-	return map[string]interface{}{"tid": "9"}, nil
+	if s.missingTopic {
+		return map[string]interface{}{}, nil
+	}
+	return map[string]interface{}{"tid": "9", "content": `<p><img src="a.jpg"></p>`, "image_srvid": "0", "video_srvid": "0"}, nil
+}
+func (s *fakeStore) IncrementTopicVisit(context.Context, int) error {
+	s.visitCount++
+	return nil
 }
 func (s *fakeStore) CountComments(context.Context, int) (int, error) { return 1, nil }
-func (s *fakeStore) ListComments(context.Context, int, int, int, int, string) ([]map[string]interface{}, error) {
+func (s *fakeStore) ListComments(_ context.Context, _ int, _ int, _ int, _ int, orderBy string) ([]map[string]interface{}, error) {
+	s.commentOrder = orderBy
 	return []map[string]interface{}{{"id": "1", "tid": "9", "uid": "7", "addtime": "1699999940", "subrows": []map[string]interface{}{}}}, nil
 }
 func (s *fakeStore) UpCommentIDs(context.Context, int, []int) (map[int]int, error) {
@@ -95,5 +106,34 @@ func TestCommentListing(t *testing.T) {
 	}
 	if data.PageInfo["page_url"] != "/community/clisting-1-[?]" || data.Rows[0]["is_up"] != 1 {
 		t.Fatalf("data=%#v", data)
+	}
+}
+
+func TestShowReturnsTopicAndComments(t *testing.T) {
+	store := &fakeStore{}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.test")
+
+	data, err := service.Show(context.Background(), ShowRequest{TID: 9, QueryOrder: "1", Token: "abc"})
+	if err != nil {
+		t.Fatalf("show: %v", err)
+	}
+	if store.visitCount != 1 || store.commentOrder != "a.upnum DESC" {
+		t.Fatalf("visit=%d order=%q", store.visitCount, store.commentOrder)
+	}
+	row := data["row"].(map[string]interface{})
+	if row["is_favorite"] != 1 || row["is_up"] != 1 {
+		t.Fatalf("row=%#v", row)
+	}
+	if data["totalCommentCount"] != 1 || len(data["comments"].([]map[string]interface{})) != 1 {
+		t.Fatalf("data=%#v", data)
+	}
+}
+
+func TestShowMissingTopic(t *testing.T) {
+	service := NewService(fakeAuth{}, &fakeStore{missingTopic: true}, "https://res.test")
+
+	_, err := service.Show(context.Background(), ShowRequest{TID: 404})
+	if err != ErrTopicNotFound {
+		t.Fatalf("expected ErrTopicNotFound, got %v", err)
 	}
 }

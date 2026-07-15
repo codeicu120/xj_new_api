@@ -69,6 +69,7 @@
 | `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | 本轮完成 | 作者主页小视频列表；`/my/1` 关键字段 live 对比通过，用户不存在分支一致。 |
 | `/community/list`、`/community/recommend`、`/community/hot`、`/community/latest`、`/community/favorite` 及 `-params` | `c.api.topic->list` | 本轮完成 | 社区主题列表；`favorite` 未登录分支、列表主结构和媒体字段 live 对比通过。 |
+| `/community/show` | `c.api.topic->show` | 本轮完成 | 社区详情；返回主题、媒体和评论树，保留旧 PHP `visit_count+1` 副作用。 |
 | `/community/clisting`、`/community/clisting-:params` | `c.api.topic->clisting` | 本轮完成 | 社区评论列表；`tid` 不存在分支和空评论分页 live 对比通过。 |
 | `/game/games` | `c.api.game.index->games` | 本轮完成 | 读 `game`，支持 `platform_id/category_id`，保留 PHP 字段和值类型并拼接资源 URL。 |
 | `/game/broadcasts` | `c.api.game.index->broadcasts` | 本轮完成 | 读 `game_broadcast`，按 PHP 替换 `{user}` 和 `{amount}` 占位符。 |
@@ -126,6 +127,6 @@
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | 游戏资产、余额或外部平台调用，需要登录、事务、灰度和回滚策略。 |
 | `/minivod/reqlist`、`/minivod/reqplay`、`/minivod/reqdown`、`/minivod/reqcoin`、`/minivod/throwcoin`、`/minivod/parselong` | 小视频列表、排行榜、详情、播放记录、作者页、赞踩和长视频地址转换已完成；剩余多涉及播放权限、金币或媒体解析。 |
 | `/vod/up`、`/vod/down`、`/vod/reqplay`、`/vod/reqdown`、`/vod/buy` 及对应 `/v2/vod/*` 高风险动作 | 涉及播放/下载请求、点赞踩、购买和用户/游客记录，需单独迁移。 |
-| `/community/:action?` 剩余 action | 社区列表和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
+| `/community/:action?` 剩余 action | 社区列表、详情和评论列表已完成；发帖、收藏切换、点赞、评论发布等写入 action 仍待高风险迁移。 |
 | `/comment/post` | 评论发布涉及敏感词、树结构、金币奖励和通知。 |
 | `/aiundress/upload`、`/aiundress/undress` 等剩余 action | `/aiundress/listing` 已完成；剩余涉及图片上传、第三方 AI 服务、Redis 并发锁和金豆扣减。 |

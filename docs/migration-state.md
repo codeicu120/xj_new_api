@@ -999,6 +999,17 @@
 - 兼容规则：`tid` 不存在返回 `记录不存在或已被删除`；成功返回 `now/sample_params/params/rows/pageinfo`，评论行包含 `subrows`、相对时间和头像 URL。
 - 测试：`go test ./internal/service/community ./internal/server ./...` 通过；PHP-Go live 对比 `/community/clisting?tid=0` 错误分支和 `/community/clisting?tid=<列表首条 tid>` 空评论分页通过；修正默认 `params.orderby` 为数字 `0` 以匹配 PHP。
 
+### `/community/show`
+
+- PHP: `c.api.topic->show`
+- Go: `internal/handler.CommunityHandler.Show`
+- Service: `internal/service/community.Service`
+- Repository: `internal/repository/community.Repository`
+- Auth: 公共详情接口；登录时补充 `is_favorite/is_up`。
+- DB: 读取 `topics`、`topic_images`、`topic_videos`、`vod_servers`、`topic_comments` 根评论和子评论；保留旧 PHP `topics.visit_count=visit_count+1` 副作用。
+- 兼容规则：缺失 `tid` 或记录不存在返回 `retcode=-1`、`errmsg=记录不存在或已删除`；成功返回 `row/totalCommentCount/comments`，`orderby=1` 时评论按点赞数排序，否则按时间倒序。
+- 测试：`go test ./internal/service/community ./internal/repository/community ./internal/server` 和 `go test ./...` 通过；单测覆盖成功详情和缺失主题，路由测试覆盖 `/community/show?tid=0` 错误壳；PHP-Go live 对比 `/community/show?tid=0` 业务 `retcode/errmsg` 一致，忽略旧 PHP 动态 `data.xxx_api_auth`。
+
 ### `/getGlobalData`
 
 - PHP: `c.api.index->getGlobalData`

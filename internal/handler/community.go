@@ -64,6 +64,25 @@ func (h *CommunityHandler) CommentListing(c *gin.Context) {
 	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
+func (h *CommunityHandler) Show(c *gin.Context) {
+	tid, _ := strconv.Atoi(inputValue(c, "tid"))
+	data, err := h.service.Show(c.Request.Context(), communityService.ShowRequest{
+		TID:        tid,
+		QueryOrder: inputValue(c, "orderby"),
+		Token:      authToken(c),
+	})
+	c.Header("X-Served-By", "newbie")
+	if errors.Is(err, communityService.ErrTopicNotFound) {
+		c.JSON(http.StatusOK, legacyjson.Error("记录不存在或已删除"))
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取社区详情失败"))
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
 func communityAction(path string) string {
 	path = strings.TrimPrefix(path, "/community/")
 	if index := strings.Index(path, "-"); index >= 0 {
