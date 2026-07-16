@@ -21,6 +21,7 @@ type UserStore interface {
 	RecommendedUsers(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	RollTitles(ctx context.Context) ([]map[string]interface{}, error)
 	CountPayments(ctx context.Context, uid int) (int, error)
+	CountPaymentsByStatusSince(ctx context.Context, uid int, isPaid int, since int64) (int, error)
 	Payments(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	SafePayLogs(ctx context.Context, uid int, since int64, limit int) ([]map[string]interface{}, error)
 	PaymentsSince(ctx context.Context, uid int, since int64, limit int) ([]map[string]interface{}, error)
@@ -51,6 +52,7 @@ type UserStore interface {
 	MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	UpdateUserProfile(ctx context.Context, uid int, gender int, nickname *string) error
 	UserByEmail(ctx context.Context, email string) (map[string]interface{}, error)
 	UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error)
 	BotByID(ctx context.Context, uid int) (map[string]interface{}, error)

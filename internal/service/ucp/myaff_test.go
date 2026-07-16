@@ -25,6 +25,7 @@ type fakeUserStore struct {
 	feedbackSinceCount  int
 	createdFeedback     *domain.FeedbackCreateInput
 	paymentRow          map[string]interface{}
+	paymentStatusCounts map[string]int
 	attachRows          []map[string]interface{}
 	posters             []map[string]interface{}
 	nicknames           []map[string]interface{}
@@ -44,6 +45,7 @@ type fakeUserStore struct {
 	packages            []map[string]interface{}
 	packageRow          map[string]interface{}
 	payments            []map[string]interface{}
+	vodPlayCount        *int
 	withdraws           []map[string]interface{}
 	withdrawTotal       int
 	withdrawSinceCount  *int
@@ -55,6 +57,7 @@ type fakeUserStore struct {
 	maxVODSupport       map[string]interface{}
 	myVODSupportCoins   int
 	userByID            map[string]interface{}
+	updatedProfile      *map[string]interface{}
 	userByEmail         map[string]interface{}
 	userByMobi          map[string]interface{}
 	keylimitCounts      map[string]int
@@ -165,6 +168,18 @@ func (s fakeUserStore) CountPayments(context.Context, int) (int, error) {
 	return 1, nil
 }
 
+func (s fakeUserStore) CountPaymentsByStatusSince(_ context.Context, _ int, isPaid int, since int64) (int, error) {
+	if s.paymentStatusCounts != nil {
+		if count, ok := s.paymentStatusCounts[fmt.Sprintf("%d:%d", isPaid, since)]; ok {
+			return count, nil
+		}
+		if count, ok := s.paymentStatusCounts[fmt.Sprintf("%d:*", isPaid)]; ok {
+			return count, nil
+		}
+	}
+	return 0, nil
+}
+
 func (s fakeUserStore) Payments(context.Context, int, int, int) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{
 		{
@@ -250,6 +265,9 @@ func (s fakeUserStore) Goldbean(context.Context, int) (map[string]interface{}, e
 }
 
 func (s fakeUserStore) CountVODPlayLogsSince(context.Context, int, int64) (int, error) {
+	if s.vodPlayCount != nil {
+		return *s.vodPlayCount, nil
+	}
 	return 1, nil
 }
 
@@ -425,6 +443,17 @@ func (s fakeUserStore) UserByID(context.Context, int) (map[string]interface{}, e
 		return s.user, nil
 	}
 	return map[string]interface{}{"uid": "7", "username": "peer"}, nil
+}
+
+func (s fakeUserStore) UpdateUserProfile(_ context.Context, uid int, gender int, nickname *string) error {
+	if s.updatedProfile != nil {
+		row := map[string]interface{}{"uid": uid, "gender": gender}
+		if nickname != nil {
+			row["nickname"] = *nickname
+		}
+		*s.updatedProfile = row
+	}
+	return nil
 }
 
 func (s fakeUserStore) UserByEmail(context.Context, string) (map[string]interface{}, error) {
@@ -1082,7 +1111,7 @@ func TestUserContactEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "资料设置成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "资料设置成功" {
 		t.Fatalf("profile retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
@@ -1110,16 +1139,21 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("profile nickname whitelist retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	updatedProfile := map[string]interface{}{}
 	service = NewService(fakeUserStore{
-		user:      map[string]interface{}{"uid": "5", "nickname": "oldname"},
-		nicknames: []map[string]interface{}{{"name": "abcdef", "gender": "2"}},
+		user:           map[string]interface{}{"uid": "5", "nickname": "oldname"},
+		nicknames:      []map[string]interface{}{{"name": "abcdef", "gender": "2"}},
+		updatedProfile: &updatedProfile,
 	}, "https://res.example.test")
 	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 2, "abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "资料设置成功分支暂未迁移" {
-		t.Fatalf("profile whitelisted placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "资料设置成功" {
+		t.Fatalf("profile whitelisted success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if updatedProfile["uid"] != 5 || updatedProfile["gender"] != 2 || updatedProfile["nickname"] != "abcdef" {
+		t.Fatalf("updated profile=%#v", updatedProfile)
 	}
 
 	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
@@ -1964,7 +1998,7 @@ func TestPackageOrderEdges(t *testing.T) {
 		user:       map[string]interface{}{"uid": "5"},
 		packageRow: map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "3800"},
 	}, "https://res.example.test")
-	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3)
+	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1973,12 +2007,131 @@ func TestPackageOrderEdges(t *testing.T) {
 	}
 
 	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
-	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3)
+	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "套餐不存在或未启用" {
 		t.Fatalf("coin placeorder missing retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		packageRow: map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		payments: []map[string]interface{}{{
+			"disabled": "0",
+			"payways": []map[string]interface{}{{
+				"paycode":        "wappay3.1",
+				"trxamount_min":  "1000",
+				"trxamount_max":  "2000",
+				"allow_paytypes": map[int][]string{2: []string{"ALL"}},
+			}},
+		}},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3, "bad.pay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "支付方式错误或不被允许" {
+		t.Fatalf("coin placeorder paycode retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "支付下单成功分支暂未迁移" {
+		t.Fatalf("coin placeorder pending retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	setting := map[string]map[string]interface{}{
+		"setting": {"value": `a:8:{s:7:"ordercd";i:10;s:12:"unpaidorders";i:2;s:13:"successorders";i:0;s:7:"regdays";i:3;s:8:"viewvods";i:5;s:13:"orderdaylimit";i:2;s:18:"randomPaywayStatus";i:1;s:6:"exrate";i:10;}`},
+	}
+	service = NewService(fakeUserStore{
+		user:                map[string]interface{}{"uid": "5", "regtime": fmt.Sprint(now.Add(-10 * 24 * time.Hour).Unix())},
+		packageRow:          map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		settings:            setting,
+		paymentStatusCounts: map[string]int{fmt.Sprintf("0:%d", now.Unix()-600): 2},
+		payments: []map[string]interface{}{{
+			"payways": []map[string]interface{}{{"paycode": "wappay3.1", "allow_paytypes": map[int][]string{1: []string{"ALL"}}}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "你有未支付订单，10分钟内无法提交新订单" {
+		t.Fatalf("vip order cooldown retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5", "regtime": fmt.Sprint(now.Unix())},
+		packageRow: map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		settings:   setting,
+		payments: []map[string]interface{}{{
+			"payways": []map[string]interface{}{{"paycode": "wappay3.1", "allow_paytypes": map[int][]string{1: []string{"ALL"}}}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "系统限制注册3天后方可充值VIP" {
+		t.Fatalf("vip regdays retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	zeroViews := 0
+	service = NewService(fakeUserStore{
+		user:         map[string]interface{}{"uid": "5", "regtime": fmt.Sprint(now.Add(-10 * 24 * time.Hour).Unix())},
+		packageRow:   map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		settings:     setting,
+		vodPlayCount: &zeroViews,
+		payments: []map[string]interface{}{{
+			"payways": []map[string]interface{}{{"paycode": "wappay3.1", "allow_paytypes": map[int][]string{1: []string{"ALL"}}}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err = service.VIPPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "系统限制观影5部后方可充值VIP" {
+		t.Fatalf("vip viewvods retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:                map[string]interface{}{"uid": "5", "regtime": fmt.Sprint(now.Add(-10 * 24 * time.Hour).Unix())},
+		packageRow:          map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		settings:            setting,
+		paymentStatusCounts: map[string]int{fmt.Sprintf("0:%d", dayStartUnix(now)): 2},
+		payments: []map[string]interface{}{{
+			"payways": []map[string]interface{}{{"paycode": "wappay3.1", "allow_paytypes": map[int][]string{3: []string{"ALL"}}}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err = service.BeanPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您今天购买金豆订单数已达上限，请明天再来" {
+		t.Fatalf("bean day limit retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5", "regtime": fmt.Sprint(now.Add(-10 * 24 * time.Hour).Unix())},
+		packageRow: map[string]interface{}{"pkgid": "3", "showtype": "0", "rmbprice": "1200"},
+		settings:   setting,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err = service.BeanPkgPlaceOrderEdge(context.Background(), "token", 3, "all.alipay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "该支付方式当前没有可用通道" {
+		t.Fatalf("bean random no channel retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }
 

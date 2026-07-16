@@ -23,6 +23,10 @@ func (s ucpStore) UserByID(ctx context.Context, uid int) (map[string]interface{}
 	return s.user.UserByID(ctx, uid)
 }
 
+func (s ucpStore) UpdateUserProfile(ctx context.Context, uid int, gender int, nickname *string) error {
+	return s.user.UpdateUserProfile(ctx, uid, gender, nickname)
+}
+
 func (s ucpStore) UserByEmail(ctx context.Context, email string) (map[string]interface{}, error) {
 	return s.ucp.UserByEmail(ctx, email)
 }
@@ -109,6 +113,10 @@ func (s ucpStore) TaskboxLogs(ctx context.Context, uid int, page int, pageSize i
 
 func (s ucpStore) CountPayments(ctx context.Context, uid int) (int, error) {
 	return s.ucp.CountPayments(ctx, uid)
+}
+
+func (s ucpStore) CountPaymentsByStatusSince(ctx context.Context, uid int, isPaid int, since int64) (int, error) {
+	return s.ucp.CountPaymentsByStatusSince(ctx, uid, isPaid, since)
 }
 
 func (s ucpStore) UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error) {

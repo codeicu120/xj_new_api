@@ -475,7 +475,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | `UCPHandler.UserIndex` | 已重构，对比通过；登录只读当前用户资料，复用 PHP user row 字段 |
-| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | `UCPHandler.UserProfile/UserPasswd` | 部分已重构；未登录、昵称长度/字符集/白名单、原密码错误、密码长度和确认不一致分支已迁移，资料写入、密码更新和重新登录暂未接管 |
+| `/ucp/user/profile` | `c.api.ucp.user->profile` | `UCPHandler.UserProfile` | 已重构；未登录、昵称长度/字符集/白名单校验和资料写入成功分支已接管，写入 `users.gender/nickname` |
+| `/ucp/user/passwd` | `c.api.ucp.user->passwd` | `UCPHandler.UserPasswd` | 部分已重构；未登录、原密码错误、密码长度和确认不一致分支已迁移，密码更新和重新登录暂未接管 |
 | `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | `UCPHandler.UserCheckEmail/SendEmail/VerifyEmail/BindMobi` | 部分已重构；未登录、邮箱格式错误、邮箱频控/日限、邮箱已存在、`checkemail` 邮箱可用只读成功、邮件配置缺失、邮箱验证码缺失/失效、verify 邮箱已存在、手机已绑定、默认 `+86` 前缀和短信验证码校验分支已迁移，邮件发送、邮箱/手机绑定成功写入暂未接管 |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表 |
 | `/ucp/bankcard/create` | `c.api.ucp.bankcard->create` | `UCPHandler.BankcardCreate` | 已重构；登录新增提款地址，保留 PHP 的类型到支付宝/微信映射、最多 5 条判断和旧错误文案 |
@@ -499,11 +500,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.WithdrawCreate` | 部分已重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足、收款账号缺失、日提现次数限制、支付宝/银行卡提现范围、游戏余额不足和普通提现兑换前置失败分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币和计算为 0 前置分支已迁移，金币/余额互换事务写入暂未接管 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
-| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.VIPPkgPlaceOrder/VIPPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，`placeorder` 额外接管 `rmbprice=3800` 仅支持金币兑换分支；支付下单、金币兑换成功和会员资产写入暂未接管 |
+| `/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->$action` | `UCPHandler.VIPPkgPlaceOrder/VIPPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，`placeorder` 额外接管 `rmbprice=3800`、未支付订单冷却、新用户注册天数/观影数限制、当日订单数上限、随机支付无可用通道和支付方式错误/不被允许分支；支付下单、金币兑换成功和会员资产写入暂未接管 |
 | `/ucp/coinpkg`、`/ucp/coinpkg/index` | `c.api.ucp.coinpkg->index` | `UCPHandler.CoinPkgIndex` | 已重构，对比通过；登录只读金币套餐列表和 safepayurl，支付通道通过接口隔离 |
-| `/ucp/coinpkg/placeorder` | `c.api.ucp.coinpkg->placeorder` | `UCPHandler.CoinPkgPlaceOrder` | 部分已重构；未登录、套餐不存在/停用前置分支已迁移，金币支付下单成功分支暂未接管 |
+| `/ucp/coinpkg/placeorder` | `c.api.ucp.coinpkg->placeorder` | `UCPHandler.CoinPkgPlaceOrder` | 部分已重构；未登录、套餐不存在/停用和支付方式错误/不被允许前置分支已迁移，金币支付下单成功分支暂未接管 |
 | `/ucp/beanpkg`、`/ucp/beanpkg/index` | `c.api.ucp.beanpkg->index` | `UCPHandler.BeanPkgIndex` | 已重构，对比通过；登录只读金豆套餐列表和 safepayurl，支付通道通过接口隔离 |
-| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.beanpkg->$action` | `UCPHandler.BeanPkgPlaceOrder/BeanPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，金豆支付下单和金币兑换成功分支暂未接管 |
+| `/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.beanpkg->$action` | `UCPHandler.BeanPkgPlaceOrder/BeanPkgCoinOrder` | 部分已重构；未登录、套餐不存在/停用、金币兑换余额不足前置分支已迁移，`placeorder` 额外接管未支付订单冷却、当日订单数上限、随机支付无可用通道和支付方式错误/不被允许分支；金豆支付下单和金币兑换成功分支暂未接管 |
 | `/ucp/vodorder`、`/ucp/vodorder/index` | `c.api.ucp.vodorder->index` | `UCPHandler.VODOrderIndex` | 已重构；登录只读求片榜单，按当前期数返回榜单、top 助力人和本人助力数，不执行求片或助力写入 |
 | `/ucp/vodorder/myorders` | `c.api.ucp.vodorder->myorders` | `UCPHandler.VODOrderMyOrders` | 已重构，对比通过；登录只读我的求片记录、累计消耗和当前冻结金币 |
 | `/ucp/vodorder/mysupports` | `c.api.ucp.vodorder->mysupports` | `UCPHandler.VODOrderMySupports` | 已重构，对比通过；登录只读我的助力求片记录 |
@@ -564,14 +565,14 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支仍需事务化迁移 |
-| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败和 `checkemail` 只读成功分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
+| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile 已完整接管，passwd/email/mobile 前置失败和 `checkemail` 只读成功分支已迁移，密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
 | `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支、`qrcodeSave` 今日已保存分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、`task/qrcode` 的 keylimit 写入和二维码图片生成仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足、收款账号缺失、日提现次数限制、支付宝/银行卡提现范围、游戏余额不足和普通提现兑换关闭/兑换数量异常分支已迁移，最终余额、金币兑换写入、冻结金额事务和 Telegram 通知仍需迁移 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
 | `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`、`/ucp/taskbox/qrcode`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支已迁移，奖励写入仍需迁移 |
-| `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足和 `rmbprice=3800` 前置失败分支已迁移，支付下单、金币兑换成功和会员资产仍需迁移 |
-| `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录和套餐不存在/停用分支已迁移，支付下单和金币资产仍需迁移 |
-| `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用和金币兑换余额不足前置失败分支已迁移，支付下单、金豆和金币兑换成功仍需迁移 |
+| `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足、`rmbprice=3800`、未支付订单冷却、新用户限制、日限、随机通道无候选和支付方式错误前置失败分支已迁移，支付下单、金币兑换成功和会员资产仍需迁移 |
+| `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录、套餐不存在/停用和支付方式错误分支已迁移，支付下单和金币资产仍需迁移 |
+| `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足、未支付订单冷却、日限、随机通道无候选和 placeorder 支付方式错误前置失败分支已迁移，支付下单、金豆和金币兑换成功仍需迁移 |
 | `/ucp/vodorder/:action?`（除 `/ucp/vodorder`、`/ucp/vodorder/index`、`/ucp/vodorder/myorders`、`/ucp/vodorder/mysupports`、`/ucp/vodorder/historyorders`） | `c.api.ucp.vodorder->$action` | 部分未重构；`create/support` 参数、余额、记录和时间窗口失败分支已迁移，求片金币扣减或助力写入仍需迁移 |
 
 ### 活动、邀请、发现页

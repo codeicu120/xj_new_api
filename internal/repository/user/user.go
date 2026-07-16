@@ -86,6 +86,22 @@ func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interfac
 	return row, nil
 }
 
+func (r *Repository) UpdateUserProfile(ctx context.Context, uid int, gender int, nickname *string) error {
+	if r.db == nil || uid <= 0 {
+		return nil
+	}
+	if nickname != nil {
+		if _, err := r.db.ExecContext(ctx, "UPDATE users SET gender=?, nickname=? WHERE uid=?", gender, *nickname, uid); err != nil {
+			return fmt.Errorf("update user profile: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE users SET gender=? WHERE uid=?", gender, uid); err != nil {
+		return fmt.Errorf("update user profile gender: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error) {
 	if r.db == nil || strings.TrimSpace(mobi) == "" {
 		return map[string]interface{}{}, nil

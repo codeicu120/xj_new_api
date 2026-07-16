@@ -417,8 +417,15 @@ func (s *Service) UserProfileEdge(ctx context.Context, token string, gender int,
 		if !found {
 			return -1, "如需修改昵称，请联系客服修改", nil
 		}
+		if err := s.store.UpdateUserProfile(ctx, uid, gender, &nickname); err != nil {
+			return -1, "资料设置失败", err
+		}
+		return 0, "资料设置成功", nil
 	}
-	return -1, "资料设置成功分支暂未迁移", nil
+	if err := s.store.UpdateUserProfile(ctx, uid, gender, nil); err != nil {
+		return -1, "资料设置失败", err
+	}
+	return 0, "资料设置成功", nil
 }
 
 func (s *Service) UserPasswdEdge(ctx context.Context, token string, passwordOld string, password string, passwordConfirm string) (int, string, error) {

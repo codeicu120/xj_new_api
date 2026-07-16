@@ -1564,13 +1564,29 @@
 - 已迁移 UCP 前置分支：`/ucp/coinlog/exchange`、`/ucp/vodorder/create`、`/ucp/vodorder/support`、`/ucp/user/profile`、`/ucp/user/passwd`。
 - PHP: `src/c/api/ucp/coinlog.php`、`vodorder.php`、`user.php`。
 - Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`。
-- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；资料修改校验昵称长度、字符集和性别昵称白名单；密码修改校验原密码、长度和确认密码一致。成功写入、扣费、通知、资料更新、密码更新和重新登录暂未接管。
+- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；资料修改校验昵称长度、字符集和性别昵称白名单，并已接管 `users.gender/nickname` 写入成功分支；密码修改校验原密码、长度和确认密码一致。扣费、通知、密码更新和重新登录暂未接管。
 - 已迁移小视频投币未登录分支：`/minivod/throwcoin/:vodid`，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；投币事务和作者收益暂未接管。
 - 已迁移 StarLive raw JSON 安全失败分支：`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`。游客长 `memberId` 返回 `游客用户请先登录`，未知用户返回 `未知用户`，`tryAgain` 未知业务类型返回 `未知业务类型`；下注、结算、翻译扣款和外部幂等回调暂未接管。
 - 已迁移 Respond token 失败分支：`/respond/chan1`，`md5(mobi+"|"+secret)` 校验失败返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理暂未接管。
 - 已迁移 AI 脱衣未登录分支：`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`，返回 `retcode=-1 errmsg=请先登录`；图片上传、第三方 AI、Redis 并发锁、删除外部资源和金豆扣减暂未接管。
 - Subagent：`Confucius` 梳理 payment/respond/starlive/game 安全候选；`Halley` 梳理 media/AI/UCP/account 安全候选。主线按确定、低副作用分支落地，未采纳需要事务、支付、资产或外部 provider 的成功路径。
 - 测试：`go test ./internal/service/aiundress ./internal/service/ucp ./internal/service/minivod ./internal/service/starlive ./internal/server` 通过。
+
+### UCP 个人中心进度核对与 profile/placeorder 补充迁移
+
+- 新增文档：`docs/ucp-migration-progress.md`，按 PHP `/ucp/*` controller/action 核对后记录总计 70 个业务 action、49 个已完整迁移、21 个未完全迁移、0 个完全未注册到 Go。
+- 已迁移：`/ucp/user/profile` 成功分支，保留旧 PHP 的性别默认、昵称格式和昵称白名单校验，通过后更新当前用户 `users.gender/nickname` 并返回 `retcode=0 errmsg=资料设置成功`。
+- 已迁移：`/ucp/vippkg/placeorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder` 的支付方式错误或不被允许分支，在套餐有效且进入订单创建前，只读校验支付通道、`paycode`、paytype 和金额范围；成功创建订单仍返回暂未迁移。
+- Subagent：`Meitner` 核对剩余 UCP action，建议优先切套餐 placeorder 的支付方式校验；其余多数剩余路径涉及资产写入、外部发送、keylimit/Redis/session 或提现/求片事务。
+
+### UCP 套餐 placeorder 前置限制补充迁移
+
+- 已迁移：`/ucp/vippkg/placeorder` 的未支付订单冷却、新用户注册天数限制、新用户观影数限制、当日会员订单数上限、随机支付无可用通道分支。
+- 已迁移：`/ucp/beanpkg/placeorder` 的未支付订单冷却、当日金豆订单数上限、随机支付无可用通道分支。
+- PHP: `src/c/api/ucp/vippkg.php::placeorder`、`src/c/api/ucp/beanpkg.php::placeorder`、`src/c/api/ucp/coinpkg.php::placeorder`。
+- Go: `internal/service/ucp.Service.pkgPlaceOrderEdge`，新增只读 `CountPaymentsByStatusSince` repository 能力；`coinpkg/placeorder` 的支付通道读取修正为 PHP 一致的普通 `getPayments()` 口径，不使用 `getPaymentsForGame()`。
+- 兼容边界：只读 `settings`、`trade_payments`、`vod_playlogs` 和支付通道配置；随机通道成功选中后可能读写 Redis/日志，真实 `payment->save()` 创建订单仍暂缓。
+- Subagent：`Raman` 核对 placeorder 前置限制，确认 coinpkg 的 ordercd 代码在 PHP 中被注释，不迁移。
 
 ### 账号、小视频投币和游戏金额前置分支
 

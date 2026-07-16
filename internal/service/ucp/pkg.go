@@ -3,6 +3,7 @@ package ucp
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 func (s *Service) VIPPkgIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
@@ -25,19 +26,19 @@ func (s *Service) BeanPkgCoinOrderEdge(ctx context.Context, token string, pkgID 
 	return s.pkgCoinOrderEdge(ctx, token, "bean", pkgID)
 }
 
-func (s *Service) VIPPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "vip", pkgID)
+func (s *Service) VIPPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "vip", pkgID, paycode)
 }
 
-func (s *Service) CoinPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "coin", pkgID)
+func (s *Service) CoinPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "coin", pkgID, paycode)
 }
 
-func (s *Service) BeanPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "bean", pkgID)
+func (s *Service) BeanPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
+	return s.pkgPlaceOrderEdge(ctx, token, "bean", pkgID, paycode)
 }
 
-func (s *Service) pkgPlaceOrderEdge(ctx context.Context, token string, kind string, pkgID int) (int, string, error) {
+func (s *Service) pkgPlaceOrderEdge(ctx context.Context, token string, kind string, pkgID int, paycode string) (int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
 		return -9999, "您还没有登录", err
@@ -55,7 +56,86 @@ func (s *Service) pkgPlaceOrderEdge(ctx context.Context, token string, kind stri
 	if kind == "vip" && atoi(pkg["rmbprice"]) == 3800 {
 		return -1, "套餐仅支持金币兑换", nil
 	}
+	settingRow, err := s.store.SettingByUUID(ctx, "setting")
+	if err != nil {
+		return -1, "套餐下单失败", err
+	}
+	setting := parseTaskPHPSerializedMap(str(settingRow["value"]))
+	if kind == "vip" || kind == "bean" {
+		if retcode, errmsg, blocked, err := s.checkPackageOrderLimits(ctx, kind, user, setting); err != nil || blocked {
+			return retcode, errmsg, err
+		}
+	}
+	channels, err := s.store.PaymentChannels(ctx, false)
+	if err != nil {
+		return -1, "套餐下单失败", err
+	}
+	paycode = strings.TrimSpace(paycode)
+	if isRandomPaycode(paycode) && atoi(setting["randomPaywayStatus"]) != 0 && !randomPaymentCodeAvailable(channels, packagePayType(kind), paycode, atoi(pkg["rmbprice"])) {
+		return -1, "该支付方式当前没有可用通道", nil
+	}
+	if !paymentCodeAllowed(channels, packagePayType(kind), paycode, atoi(pkg["rmbprice"])) {
+		return -1, "支付方式错误或不被允许", nil
+	}
 	return -1, "支付下单成功分支暂未迁移", nil
+}
+
+func (s *Service) checkPackageOrderLimits(ctx context.Context, kind string, user map[string]interface{}, setting map[string]interface{}) (int, string, bool, error) {
+	uid := atoi(user["uid"])
+	now := s.now()
+	cdSeconds := atoi(setting["ordercd"]) * 60
+	if cdSeconds > 0 {
+		unpaid, err := s.store.CountPaymentsByStatusSince(ctx, uid, 0, now.Unix()-int64(cdSeconds))
+		if err != nil {
+			return -1, "套餐下单失败", true, err
+		}
+		if unpaid >= atoi(setting["unpaidorders"]) {
+			return -1, fmt.Sprintf("你有未支付订单，%d分钟内无法提交新订单", atoi(setting["ordercd"])), true, nil
+		}
+	}
+	if kind == "vip" {
+		newUserLimit := true
+		successOrders := atoi(setting["successorders"])
+		if successOrders > 0 {
+			succeeded, err := s.store.CountPaymentsByStatusSince(ctx, uid, 1, 0)
+			if err != nil {
+				return -1, "套餐下单失败", true, err
+			}
+			if successOrders <= succeeded {
+				newUserLimit = false
+			}
+		}
+		if newUserLimit {
+			regDays := atoi(setting["regdays"])
+			if regDays > 0 && atoi64(user["regtime"]) > now.Unix()-int64(regDays)*86400 {
+				return -1, fmt.Sprintf("系统限制注册%d天后方可充值VIP", regDays), true, nil
+			}
+			viewVODs := atoi(setting["viewvods"])
+			if viewVODs > 0 {
+				viewed, err := s.store.CountVODPlayLogsSince(ctx, uid, 0)
+				if err != nil {
+					return -1, "套餐下单失败", true, err
+				}
+				if viewed < viewVODs {
+					return -1, fmt.Sprintf("系统限制观影%d部后方可充值VIP", viewVODs), true, nil
+				}
+			}
+		}
+	}
+	orderDayLimit := atoi(setting["orderdaylimit"])
+	if orderDayLimit > 0 {
+		unpaid, err := s.store.CountPaymentsByStatusSince(ctx, uid, 0, dayStartUnix(now))
+		if err != nil {
+			return -1, "套餐下单失败", true, err
+		}
+		if unpaid >= orderDayLimit {
+			if kind == "vip" {
+				return -1, "您今天购买会员订单数已达上限，请明天再来", true, nil
+			}
+			return -1, "您今天购买金豆订单数已达上限，请明天再来", true, nil
+		}
+	}
+	return 0, "", false, nil
 }
 
 func (s *Service) pkgCoinOrderEdge(ctx context.Context, token string, kind string, pkgID int) (int, string, error) {
@@ -189,6 +269,76 @@ func filterPaymentChannels(channels []map[string]interface{}, payType int) []map
 		out = append(out, item)
 	}
 	return out
+}
+
+func packagePayType(kind string) int {
+	switch kind {
+	case "vip":
+		return 1
+	case "coin":
+		return 2
+	case "bean":
+		return 3
+	default:
+		return 0
+	}
+}
+
+func paymentCodeAllowed(channels []map[string]interface{}, payType int, paycode string, amount int) bool {
+	if payType == 0 || paycode == "" {
+		return false
+	}
+	for _, channel := range channels {
+		if atoi(channel["disabled"]) > 0 {
+			continue
+		}
+		payways, _ := channel["payways"].([]map[string]interface{})
+		for _, payway := range payways {
+			if str(payway["paycode"]) != paycode {
+				continue
+			}
+			if !paywayAllowsType(payway, payType) {
+				continue
+			}
+			minAmount := atoi(payway["trxamount_min"])
+			maxAmount := atoi(payway["trxamount_max"])
+			if minAmount > 0 && amount < minAmount {
+				continue
+			}
+			if maxAmount > 0 && amount > maxAmount {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func isRandomPaycode(paycode string) bool {
+	return paycode == "all.alipay" || paycode == "all.wechat"
+}
+
+func randomPaymentCodeAvailable(channels []map[string]interface{}, payType int, paycode string, amount int) bool {
+	for _, channel := range channels {
+		if atoi(channel["disabled"]) > 0 {
+			continue
+		}
+		payways, _ := channel["payways"].([]map[string]interface{})
+		for _, payway := range payways {
+			code := str(payway["paycode"])
+			if paycode == "all.alipay" && !strings.Contains(strings.ToLower(code), "alipay") {
+				continue
+			}
+			if paycode == "all.wechat" && !strings.Contains(strings.ToLower(code), "wechat") && !strings.Contains(strings.ToLower(code), "wx") {
+				continue
+			}
+			if !paymentCodeAllowed([]map[string]interface{}{{"payways": []map[string]interface{}{payway}}}, payType, code, amount) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func paywayAllowsType(payway map[string]interface{}, payType int) bool {

@@ -192,19 +192,19 @@ func (h *UCPHandler) VIPPkgCoinOrder(c *gin.Context) {
 
 func (h *UCPHandler) VIPPkgPlaceOrder(c *gin.Context) {
 	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
-	retcode, errmsg, err := h.service.VIPPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	retcode, errmsg, err := h.service.VIPPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID, inputValue(c, "paycode"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) CoinPkgPlaceOrder(c *gin.Context) {
 	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
-	retcode, errmsg, err := h.service.CoinPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	retcode, errmsg, err := h.service.CoinPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID, inputValue(c, "paycode"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) BeanPkgPlaceOrder(c *gin.Context) {
 	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
-	retcode, errmsg, err := h.service.BeanPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID)
+	retcode, errmsg, err := h.service.BeanPkgPlaceOrderEdge(c.Request.Context(), authToken(c), pkgID, inputValue(c, "paycode"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 

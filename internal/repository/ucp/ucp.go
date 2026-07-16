@@ -491,6 +491,31 @@ func (r *Repository) CountPayments(ctx context.Context, uid int) (int, error) {
 	return total, nil
 }
 
+func (r *Repository) CountPaymentsByStatusSince(ctx context.Context, uid int, isPaid int, since int64) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	query := "SELECT COUNT(*) FROM trade_payments WHERE 1=1"
+	args := []interface{}{}
+	if uid > 0 {
+		query += " AND uid=?"
+		args = append(args, uid)
+	}
+	if isPaid >= 0 {
+		query += " AND ispaid=?"
+		args = append(args, isPaid)
+	}
+	if since > 0 {
+		query += " AND createtime>=?"
+		args = append(args, since)
+	}
+	var total int
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count payments by status: %w", err)
+	}
+	return total, nil
+}
+
 func (r *Repository) CountPaymentsByUIDPayTypePayway(ctx context.Context, uid int, payType int, payway string) (int, error) {
 	if r.db == nil || uid <= 0 || payType <= 0 || strings.TrimSpace(payway) == "" {
 		return 0, nil
