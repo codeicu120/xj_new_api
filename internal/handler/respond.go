@@ -3,7 +3,9 @@ package handler
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,6 +25,25 @@ func (h *RespondHandler) Failed(text string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Served-By", "newbie")
 		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(text))
+	}
+}
+
+func (h *RespondHandler) Provider(action string, echoErr string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Served-By", "newbie")
+		req := respondService.CallbackRequest{
+			Action: action,
+			Form:   callbackForm(c),
+		}
+		if c.Request.Body != nil {
+			body, _ := io.ReadAll(c.Request.Body)
+			req.Raw = body
+		}
+		result := respondService.VerificationResult{Echo: echoErr}
+		if h.service != nil {
+			result = h.service.VerifyProvider(c.Request.Context(), req, echoErr)
+		}
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(result.Echo))
 	}
 }
 
@@ -46,4 +67,13 @@ func (h *RespondHandler) Chan1(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func callbackForm(c *gin.Context) url.Values {
+	_ = c.Request.ParseForm()
+	form := make(url.Values, len(c.Request.Form))
+	for key, values := range c.Request.Form {
+		form[key] = append([]string(nil), values...)
+	}
+	return form
 }

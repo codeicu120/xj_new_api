@@ -44,10 +44,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/test` | ANY | `GameHandler.WaliTest` |
 | `/game/wali/balance` | ANY | `GameHandler.WaliBalance` |
 | `/game/wali/topup`、`/game/wali/withdraw` | ANY | `GameHandler.TransferTopup/TransferWithdraw` |
-| `/game/wali/enter` | ANY | `GameHandler.HighRiskAction` |
+| `/game/wali/enter` | ANY | `GameHandler.WaliEnter` |
 | `/game/lottery/gameList` | ANY | `GameHandler.LotteryGames` |
 | `/game/lottery/topup`、`/game/lottery/withdraw` | ANY | `GameHandler.TransferTopup/TransferWithdraw` |
-| `/game/lottery/enter`、`/game/lottery/balance` | ANY | `GameHandler.HighRiskAction` |
+| `/game/lottery/enter`、`/game/lottery/balance` | ANY | `GameHandler.LotteryEnter/LotteryBalance` |
 | `/hgame/index` | ANY | `HGameHandler.Index` |
 | `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | ANY | `StarLiveHandler` |
 | `/art`、`/art/index` | ANY | `ArtHandler.Index` |
@@ -144,7 +144,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/task/qrcodeSave` | ANY | `UCPHandler.TaskQRCodeSave` |
 | `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink` | ANY | `UCPHandler.TaskboxIndex/TaskboxLog/TaskboxShare/TaskboxQRLink` |
 | `/ucp/taskbox/taskboxopen` | ANY | `UCPHandler.TaskboxOpen` |
-| `/ucp/taskbox/qrcode` | ANY | `UCPHandler.HighRiskAction` |
+| `/ucp/taskbox/qrcode` | ANY | `UCPHandler.TaskboxQRCode` |
 | `/ucp/affcenter` | ANY | `UCPHandler.AffCenter` |
 | `/ucp/upgrade` | ANY | `UCPHandler.Upgrade` |
 | `/ucp/payment`、`/ucp/payment/index`、`/ucp/payment/listing` | ANY | `UCPHandler.PaymentListing` |
@@ -218,9 +218,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/logout` | `c.api.user->logout` | `UserHandler.Logout` | 已重构，对比通过；删除 type=0 session，非法/无 token 仍返回已退出 |
 | `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | `UserHandler.Register` | 部分已重构；安全前置失败分支，覆盖未同意协议、已登录、注册关闭、IP 频控、v1/v2 手机注册手机号格式和查重、v2 邮箱格式/查重、v2 用户名格式/查重、v2 账号注册密码长度，不执行验证码、注册写库、邀请奖励或 session |
 | `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | `UserHandler.Login/LoginV2` | 部分已重构；安全前置失败分支，覆盖已登录、v1 密码登录关闭、v2 空账号、v2 手机/邮箱/用户名未注册和 v2 已存在账号空密码，不执行密码校验、验证码校验或 session 写入 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在和 step1 推进，不执行验证码或改密 |
-| `/delete` | `c.api.user2->delAccount` | `UserHandler.Delete` | 部分已重构；未登录 `retcode=-9999` 和游客账号无需注销分支已迁移，不写 Redis 注销申请、不删除 session |
-| `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式、步骤错误、相同手机号、手机号已存在和 step1 推进分支，不执行验证码或换绑事务 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | `UserHandler.Forgot/ForgotV2` | 部分已重构；安全前置失败分支，覆盖手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 手机/邮箱不存在、step1 推进、step2 手机/邮箱验证码失败和 step2 推进，不执行 step3 改密 |
+| `/delete` | `c.api.user2->delAccount` | `UserHandler.Delete` | 部分已重构；未登录 `retcode=-9999`、重复注销 `delAccountList` 判断、游客账号无需注销和手机/邮箱验证码失败分支已迁移，不写 Redis 注销申请、不删除 session |
+| `/changePhone` | `c.api.user2->changePhone` | `UserHandler.ChangePhone` | 部分已重构；未登录、手机号格式、步骤错误、相同手机号、手机号已存在、step1 推进和 step2 短信验证码失败分支，不执行换绑事务 |
 | `/sms`、`/sms/index`、`/email`、`/email/index` | `c.api.sms/email->index` | `handler.EmptyHTML` | 已重构，对比通过；默认空入口返回 `200 text/html` 空 body |
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | `VerificationHandler` | 已重构；手机号/邮箱/未登录错误分支 live 对比通过，成功发送通过 sender/captcha/limiter fake 覆盖，默认不直连真实短信/邮件平台 |
 | `/captcha/req` | `c.api.captcha->req` | `CaptchaHandler.Req` | 已重构，动态 secret 按 shape 对比通过 |
@@ -262,9 +262,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/payment/pay11` | `c.api.payment->pay11` | `PaymentHandler.Pay11` | 已重构；无 `qrlink` 返回支付成功页，有 `qrlink` 返回二维码 HTML 页 |
 | `/payment/pay7`、`/payment/pay8`、`/payment/pay9`、`/payment/pay10`、`/payment/pay10a`、`/payment/pay10b`、`/payment/pay12` | `c.api.payment->$action` | `PaymentHandler.SuccessHTML` | 已重构；PHP public action 均为读取 `templates/api/paysuccess.html` 并返回 HTML |
 | `/payment/gpay1`、`/payment/gpay2`、`/payment/newpay`、`/payment/newpayff`、`/payment/newpayxxx`、`/payment/newpayqk`、`/payment/newpayxyf`、`/payment/newpaykf`、`/payment/newpaypi`、`/payment/newpaygs`、`/payment/newpaylep`、`/payment/newpayys`、`/payment/newpayyswx`、`/payment/newpayhw`、`/payment/newpayhs`、`/payment/newpaypx`、`/payment/newpaypxwx`、`/payment/newpay99`、`/payment/newpayxy`、`/payment/newpayjd`、`/payment/newpaycr`、`/payment/newpaylu`、`/payment/newpayluwx`、`/payment/newpaymyr`、`/payment/newpaymyrz`、`/payment/newpaylh`、`/payment/newpaylai`、`/payment/newpayxh`、`/payment/newpayya`、`/payment/newpayyh`、`/payment/newpayhf`、`/payment/newpaydd`、`/payment/newpaykk`、`/payment/newpayrq` | `c.api.payment->$action` | `PaymentHandler.SuccessHTML` | 已重构；PHP public action 均为支付成功 HTML 页面；其中 `_newpayhw` 下单分支写 `out_trxid` 未接管，只接管 public 返回页 |
-| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay4a`、`/respond/wappay5` | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回 provider `echoErr()` 文本，成功验签和入账事务未接管 |
-| `/respond/hawpay`、`/respond/easypay`、`/respond/gpay1`、`/respond/gpay2`、`/respond/pay6`、`/respond/pay7`、`/respond/pay8`、`/respond/pay9`、`/respond/pay10`、`/respond/pay10a`、`/respond/pay10b`、`/respond/pay11`、`/respond/pay12` | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回 `failed`/`Err`/`FAILED` 等旧文本，成功验签和入账事务未接管 |
-| `/respond/newpay*`（除未注册 `chan1`） | `c.respond.*` | `RespondHandler.Failed` | 部分已重构；空请求/解析失败分支返回旧 provider 失败文本，成功验签和入账事务未接管 |
+| `/respond/shangfu`、`/respond/wappay1`、`/respond/wappay2`、`/respond/wappay3`、`/respond/wappay4`、`/respond/wappay4a`、`/respond/wappay5` | `c.respond.*` | `RespondHandler.Provider` | 部分已重构；provider registry/verifier 骨架已接管，空请求、缺配置、验签失败和验签成功但 accounting disabled 均返回 provider `echoErr()`；`shangfu` MD5 form fixture 已覆盖，锁单入账未接管 |
+| `/respond/hawpay`、`/respond/easypay`、`/respond/gpay1`、`/respond/gpay2`、`/respond/pay6`、`/respond/pay7`、`/respond/pay8`、`/respond/pay9`、`/respond/pay10`、`/respond/pay10a`、`/respond/pay10b`、`/respond/pay11`、`/respond/pay12` | `c.respond.*` | `RespondHandler.Provider` | 部分已重构；缺配置/解析失败仍返回 `failed`/`Err`/`FAILED` 等旧失败文本，`pay7` MD5 query+secret 验签 fixture 已覆盖但 accounting disabled 仍返回失败文本，其他 provider 验签和所有入账事务未接管 |
+| `/respond/newpay*`（除未注册 `chan1`） | `c.respond.*` | `RespondHandler.Provider` | 部分已重构；缺配置/解析失败返回旧 provider 失败文本，具体 provider 验签和入账事务未接管 |
 | `/respond/chan1` | `c.respond.chan1` | `RespondHandler.Chan1` | 部分已重构；token 校验失败、合法 token 后用户不存在、已送过会员、套餐不存在或停用只读失败分支已迁移，下单、充值入账、支付记录变更和赠送 VIP 成功分支暂未接管 |
 | `/bought/listing` | `c.api.bought->listing` | `BoughtHandler.Listing` | 已重构，对比通过；登录只读已购影片列表，复用 VOD 行处理和 PHP 分页 |
 | `/bought/delete` | `c.api.bought->delete` | `BoughtHandler.Delete` | 已重构，对比通过；登录删除已购影片记录，空 `vodids` 成功 |
@@ -291,9 +291,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/game/wali/gameList` | `c.api.game.wali->games` | `GameHandler.WaliGames` | 已重构，对比通过；`category_id=5` 游客未登录分支已对齐 |
 | `/game/wali/test` | `c.api.game.wali->ping` | `GameHandler.WaliTest` | 已重构，对比通过；读取平台配置后 AES-ECB 加密、签名并调用瓦力 ping |
 | `/game/wali/balance` | `c.api.game.wali->getBalance` | `GameHandler.WaliBalance` | 已重构，对比通过；登录后外部只读余额查询 |
-| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足和下分金额不正确分支已迁移，上下分金币事务、外部平台请求和进入游戏成功分支暂未接管 |
+| `/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter` | `c.api.game.wali->topup/withdraw/enterGame` | `GameHandler.TransferTopup/TransferWithdraw/WaliEnter` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足、下分金额不正确和进入游戏外部成功/失败分支已迁移，上下分金币事务和外部转账请求暂未接管 |
 | `/game/lottery/gameList` | `c.api.game.lottery->gameList` | `GameHandler.LotteryGames` | 已重构；彩票普通分类只读列表，`category_id=5` 游客未登录分支已对齐 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.TransferTopup/TransferWithdraw/HighRiskAction` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足和下分金额不正确分支已迁移，彩票平台资产、余额和进入游戏成功分支暂未接管 |
+| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | `GameHandler.TransferTopup/TransferWithdraw/LotteryEnter/LotteryBalance` | 部分已重构；未登录、上分低于 `gamecoinlimit`、上分余额不足、下分金额不正确、进入游戏外部成功/失败和余额只读查询分支已迁移，彩票平台上下分订单和金币写入暂未接管 |
 | `/hgame/index` | `c.api.hgame->index` | `HGameHandler.Index` | 已重构，对比通过；HGame 公共只读列表，`/hgame` 保持旧 PHP 404 未接管 |
 | `/hgame/:action`（除 `/hgame/index`） | `c.api.hgame->$action` | 不接管 | PHP `c.api.hgame` 仅定义 `index`，未发现其他稳定 action；不伪造业务响应 |
 | `/onego` | `c.api.onego->rules`（旧路由默认行为） | `OneGoHandler.Rules` | 已重构，对比通过；裸路径与旧服务一致返回一元购规则/未开放错误壳 |
@@ -394,9 +394,9 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，非扣费成功路径写 `minivod_viewlogs/minivod_guestviewlogs` 与 `vods` 计数；超限扣金币、扣费标记和任务奖励分支暂不写资产 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | `MiniVODHandler.ReqCoin` | 已重构；领取小视频播放任务金币，事务锁定任务日志，登录用户写 `users_quota/user_coinlogs(cointype=25)`，游客更新 `user_guests.goldcoin`；保留旧 PHP 未校验 log 归属行为 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 部分已重构；未登录、视频不存在、作者不存在、GET 初始化 `mincoin/maxcoin/goldcoin`、POST 非正数和范围校验分支已迁移，金币打赏事务暂未接管 |
-| `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已接管可控读取路径；从现有待展示 viewlog 读取小视频并包装作者/收藏状态，返回前标记已展示 `reqtime/showtype=1`；拉取推荐和广告插入副作用暂不执行 |
+| `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已重构；待展示 viewlog 不足 100 时拉取推荐池，返回随机 10 条并包装 `vodrow/user/isfavorite`，返回前按 `debug` 标记 `reqtime/showtype=1`，并按 PHP 规则随机插入 `minivod.ads` 广告行 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
-| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | `MiniVODHandler.ParseLongM3U8` | 部分已重构；复用长转短前置校验，记录不存在 `retcode=1` 和播放地址不存在 `retcode=2` 分支已迁移，媒体 CDN 拉取和 m3u8 裁剪成功分支暂未接管 |
+| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | `MiniVODHandler.ParseLongM3U8` | 已重构；复用长转短前置校验，成功时返回 `vnd.apple.mpegurl`，按 `vod_map_ls.start/end` 裁剪子 m3u8 并重写 KEY/TS 绝对 URL；媒体源拉取失败或无子 m3u8 时按 PHP 返回空 m3u8 body |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |
 | `/miniplaylog/remove` | `c.api.minivod->historyDelete` | `HistoryHandler.MiniPlayRemove` | 已重构；按 PHP 模型语义用输入 `vodid/vodids` 删除 `logid`，空参数 live 对比通过 |
 | `/my/:authorid`、`/my/:authorid/index`、`/my/:authorid/listing` | `c.api.my->index/listing` | `MiniVODHandler.Author` | 已重构，对比通过；作者主页小视频列表，返回 `now/userrow/vodrows/pageinfo/orders` |
@@ -475,8 +475,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/coinlog/bonuslog` | `c.api.ucp.coinlog->bonuslog` | `UCPHandler.CoinLogBonusLog` | 已重构，对比通过；登录只读收益金币日志分页和累计统计 |
 | `/ucp/coinlog/invitelog` | `c.api.ucp.coinlog->invitelog` | `UCPHandler.CoinLogInviteLog` | 已重构，对比通过；登录只读邀请金币日志分页 |
 | `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | `UCPHandler.UserIndex` | 已重构，对比通过；登录只读当前用户资料，复用 PHP user row 字段 |
-| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | `UCPHandler.UserProfile/UserPasswd` | 部分已重构；未登录分支和密码长度/确认不一致本地校验已迁移，资料写入、密码更新和重新登录暂未接管 |
-| `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | `UCPHandler.UserCheckEmail/SendEmail/VerifyEmail/BindMobi` | 部分已重构；未登录、邮箱格式错误、邮箱验证码缺失/失效和手机验证码错误分支已迁移，邮件发送、邮箱/手机绑定成功分支暂未接管 |
+| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | `UCPHandler.UserProfile/UserPasswd` | 部分已重构；未登录、昵称长度/字符集/白名单、原密码错误、密码长度和确认不一致分支已迁移，资料写入、密码更新和重新登录暂未接管 |
+| `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | `UCPHandler.UserCheckEmail/SendEmail/VerifyEmail/BindMobi` | 部分已重构；未登录、邮箱格式错误、邮箱频控/日限、邮箱已存在、`checkemail` 邮箱可用只读成功、邮件配置缺失、邮箱验证码缺失/失效、verify 邮箱已存在、手机已绑定、默认 `+86` 前缀和短信验证码校验分支已迁移，邮件发送、邮箱/手机绑定成功写入暂未接管 |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | `UCPHandler.BankcardIndex` | 已重构，对比通过；登录只读提款地址和后台银行列表 |
 | `/ucp/bankcard/create` | `c.api.ucp.bankcard->create` | `UCPHandler.BankcardCreate` | 已重构；登录新增提款地址，保留 PHP 的类型到支付宝/微信映射、最多 5 条判断和旧错误文案 |
 | `/ucp/bankcard/modify` | `c.api.ucp.bankcard->modify` | `UCPHandler.BankcardModify` | 已重构；登录修改本人提款地址，缺失记录返回 `修改的记录不存在` |
@@ -493,8 +493,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | `UCPHandler.TaskboxLog` | 已重构，对比通过；登录只读本人任务宝箱日志，分页和日志行处理一致 |
 | `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | `UCPHandler.TaskboxShare` | 已重构；公共只读任务宝箱分享文案，替换随机/登录邀请码和每日推广 URL，按 shape 对比通过 |
 | `/ucp/taskbox/qrlink` | `c.api.ucp.taskbox->qrlink` | `UCPHandler.TaskboxQRLink` | 已重构，对比通过；登录只读任务宝箱推广二维码链接，不生成图片、不发奖励 |
-| `/ucp/taskbox/taskboxopen` | `c.api.ucp.taskbox->taskboxopen` | `UCPHandler.TaskboxOpen` | 部分已重构；未登录、任务不存在/停用、宝箱赠送金币为 0 分支已迁移，领奖写入暂未接管 |
-| `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.HighRiskAction` | 部分已重构；未登录分支已迁移，二维码图片生成暂未接管 |
+| `/ucp/taskbox/taskboxopen` | `c.api.ucp.taskbox->taskboxopen` | `UCPHandler.TaskboxOpen` | 部分已重构；未登录、任务不存在/停用、宝箱赠送金币为 0、每日/每周宝箱时间窗、已领取和推广人数不足分支已迁移，领奖写入暂未接管 |
+| `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.TaskboxQRCode` | 已重构；登录后读取 `taskbox.qrcode.link` 和每日推广 URL，替换邀请码后生成 `image/png` 二维码，不写 keylimit/coinlog |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.Upgrade` | 部分已重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支暂未接管 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.WithdrawCreate` | 部分已重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足、收款账号缺失、日提现次数限制、支付宝/银行卡提现范围、游戏余额不足和普通提现兑换前置失败分支已迁移，提现申请事务、冻结金额和通知暂未接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 部分已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币和计算为 0 前置分支已迁移，金币/余额互换事务写入暂未接管 |
@@ -538,10 +538,8 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
-| `/minivod/reqlist` 的拉取推荐/广告副作用 | `c.api.minivod->reqlist` | 部分未重构；现有待展示 viewlog 读取、rows 包装和 `mUpdate(reqtime/showtype=1)` 标记已迁移；`pullViewLogs` 和随机广告插入仍需单独迁移 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` 的扣费/任务奖励分支 | `c.api.minivod->$action` | 部分未重构；免费/限免、已观看/下载和权限额度内非扣费成功路径的 viewlog 与 `vods` 计数已迁移；剩余超限扣金币、扣费标记、播放任务、推荐奖励和喜好分析仍需事务化迁移 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | 部分未重构；未登录、视频/作者只读校验、GET 初始化和 POST 参数校验已迁移，金币打赏事务仍需迁移 |
-| `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 部分未重构；记录不存在和播放地址不存在前置失败已迁移，媒体 CDN 拉取和 m3u8 裁剪成功分支仍需迁移 |
 
 ### 用户账号
 
@@ -549,16 +547,16 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/register`、`/v2/register` | `c.api.user->register`、`c.apiv2.user->register` | 部分未重构；未同意协议、已登录、注册关闭、IP 频控、手机号/邮箱/用户名格式和查重等失败分支已迁移，验证码、成功注册、邀请奖励和写库仍未迁移 |
 | `/login`、`/v2/login` | `c.api.user->login`、`c.apiv2.user->login` | 部分未重构；已登录、v1 密码登录关闭、v2 空账号、v2 账号不存在和 v2 空密码失败分支已迁移，成功登录、短信/邮箱验证码、session 写入仍未迁移 |
-| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 查用户和 step1 推进已迁移，step2 验证码和 step3 改密仍未迁移 |
-| `/delete` | `c.api.user2->delAccount` | 部分未重构；未登录和游客账号无需注销分支已迁移，重复注销 Redis 判断、验证码、Redis 注销申请和退出登录仍未迁移 |
-| `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误、手机号存在校验和 step1 推进已迁移，step2 验证码和事务换绑仍未迁移 |
+| `/forgot`、`/v2/forgot` | `c.api.user->forgot`、`c.apiv2.user->forgot` | 部分未重构；手机号格式、v2 邮箱格式、空手机号邮箱、无效 step、step1 查用户、step1 推进、step2 验证码失败和 step2 推进已迁移，step3 改密仍未迁移 |
+| `/delete` | `c.api.user2->delAccount` | 部分未重构；未登录、重复注销 Redis 判断、游客账号无需注销和验证码失败分支已迁移，Redis 注销申请和退出登录仍未迁移 |
+| `/changePhone` | `c.api.user2->changePhone` | 部分未重构；未登录、手机号格式、步骤错误、手机号存在校验、step1 推进和 step2 短信验证码失败已迁移，事务换绑仍未迁移 |
 
 ### 支付和回调
 
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/payment/:action`（除已列 payment action） | `c.api.payment->$action` | 部分未重构；`reqpay/pay12req` 失败分支、known payway 支付方式不允许、unknown payway 选择支付方式返回、常见 public 成功回调文案和支付页面已迁移，钱包支付扣费、第三方网关请求、订单状态写入和成功跳转仍需 provider 配置与网关接口 |
-| `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 阻断未重构；已注册常见 provider 的失败分支，成功分支需要 provider 密钥/RSA 配置注入、验签适配、`trade_payments SELECT ... FOR UPDATE` 锁单、幂等入账和 `payment->doAction()` 事务 |
+| `/respond/:action` 成功验签/入账分支 | `c.respond.*` | 阻断未重构；provider registry/verifier 骨架已落，当前只允许缺配置、验签失败、验签成功但 accounting disabled 返回 provider `echoErr()`，绝不返回 OK/SUCCESS；后续仍需要 provider 密钥/RSA 配置补齐、`trade_payments SELECT ... FOR UPDATE` 锁单、幂等入账和 `payment->doAction()` 事务 |
 | `/respond/chan1` | `c.respond.chan1` | 部分未重构；token 校验失败、用户不存在、已送过会员、套餐不存在或停用分支已迁移，合法 token 后下单、充值入账、支付记录变更和赠送 VIP 仍需事务化迁移 |
 
 ### 个人中心
@@ -566,11 +564,11 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | 接口 | PHP handler | 备注 |
 | --- | --- | --- |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | 部分未重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级和金币不足前置分支已迁移，金币扣减和会员写入成功分支仍需事务化迁移 |
-| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
-| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支、`qrcodeSave` 今日已保存分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、二维码图片生成或 keylimit 写入仍需迁移 |
+| `/ucp/user/:action?`（除 `/ucp/user`、`/ucp/user/index`、`/ucp/user/profile`、`/ucp/user/passwd`、`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`） | `c.api.ucp.user->$action` | 部分未重构；profile/passwd/email/mobile 前置失败和 `checkemail` 只读成功分支已迁移，资料写入、密码更新、邮件发送成功和邮箱/手机绑定成功仍涉及写入或验证码平台 |
+| `/ucp/task/:action?`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`、`/ucp/task/invite`） | `c.api.ucp.task->$action` | 部分未重构；`sign/invitecodeInput/adviewClick` 部分只读失败分支、`qrcodeSave` 今日已保存分支和 `share/qrcode/qrcodeSave` 未登录分支已迁移，登录任务奖励、`task/qrcode` 的 keylimit 写入和二维码图片生成仍需迁移 |
 | `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | 部分未重构；未登录、金额缺失/异常、最小提现金额、提现限制、邀请人数不足、收款账号缺失、日提现次数限制、支付宝/银行卡提现范围、游戏余额不足和普通提现兑换关闭/兑换数量异常分支已迁移，最终余额、金币兑换写入、冻结金额事务和 Telegram 通知仍需迁移 |
 | `/ucp/coinlog/:action?`（除 `/ucp/coinlog`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`） | `c.api.ucp.coinlog->$action` | 部分未重构；`exchange` 兑换关闭、未登录和参数/计算失败分支已迁移，金币兑换写入仍需迁移 |
-| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支和 `qrcode` 未登录分支已迁移，奖励写入或图片生成仍需迁移 |
+| `/ucp/taskbox/:action?`（除 `/ucp/taskbox/index`、`/ucp/taskbox/taskboxlog`、`/ucp/taskbox/share`、`/ucp/taskbox/qrlink`、`/ucp/taskbox/qrcode`） | `c.api.ucp.taskbox->$action` | 部分未重构；`taskboxopen` 任务只读失败分支已迁移，奖励写入仍需迁移 |
 | `/ucp/vippkg/:action?`（除 `/ucp/vippkg`、`/ucp/vippkg/index`） | `c.api.ucp.vippkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用、金币兑换余额不足和 `rmbprice=3800` 前置失败分支已迁移，支付下单、金币兑换成功和会员资产仍需迁移 |
 | `/ucp/coinpkg/:action?`（除 `/ucp/coinpkg`、`/ucp/coinpkg/index`） | `c.api.ucp.coinpkg->$action` | 部分未重构；`placeorder` 未登录和套餐不存在/停用分支已迁移，支付下单和金币资产仍需迁移 |
 | `/ucp/beanpkg/:action?`（除 `/ucp/beanpkg`、`/ucp/beanpkg/index`） | `c.api.ucp.beanpkg->$action` | 部分未重构；`placeorder/coinorder` 的未登录、套餐不存在/停用和金币兑换余额不足前置失败分支已迁移，支付下单、金豆和金币兑换成功仍需迁移 |
@@ -589,8 +587,10 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | --- | --- | --- |
 | `/game/wali/topup` | `c.api.game.wali->topup` | 部分未重构；未登录、低于最低转入金币和余额不足分支已迁移，上分金币扣减、外部平台请求和失败归还金币仍需事务化迁移 |
 | `/game/wali/withdraw` | `c.api.game.wali->withdraw` | 部分未重构；未登录和金额输入不正确分支已迁移，下分外部平台请求、金币增加和订单写入仍需迁移 |
-| `/game/wali/enter` | `c.api.game.wali->enterGame` | 部分未重构；未登录分支已迁移，外部平台进入游戏成功分支仍需迁移 |
-| `/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance` | `c.api.game.lottery->$action` | 部分未重构；topup/withdraw 的未登录、最低转入金币、余额不足和金额输入不正确分支已迁移，彩票游戏平台资产、余额或外部进入游戏成功分支仍需迁移 |
+| `/game/wali/enter` | `c.api.game.wali->enterGame` | 已重构；登录后通过 interface client 调用瓦力 `enterGame`，成功返回 `gameUrl` 并刷新 `game_history` 常玩记录，配置缺失或平台失败安全返回 `进入游戏失败` |
+| `/game/lottery/topup`、`/game/lottery/withdraw` | `c.api.game.lottery->$action` | 部分未重构；topup/withdraw 的未登录、最低转入金币、余额不足和金额输入不正确分支已迁移，彩票平台上下分订单和金币写入仍需迁移 |
+| `/game/lottery/balance` | `c.api.game.lottery->balance` | 已重构；登录后通过 interface client 调用彩票平台 `/api/player/balance`，返回 `status/balance/transferable/currency`，配置缺失或平台失败安全返回 `查询余额失败` |
+| `/game/lottery/enter` | `c.api.game.lottery->enter` | 已重构；登录后通过 interface client 调用彩票平台 `/api/player/enterGame`，成功返回 `gameUrl` 并刷新 `game_history` 常玩记录，配置缺失或平台失败安全返回 `进入游戏失败` |
 | `/starLive/:action`（除 `/starLive/index`、`/starLive/queryCoinBalance`、`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`） | `c.api.starlive->$action` | 部分未重构；资产 action 的游客/未知用户/未知业务类型前置失败分支已迁移，重复订单查询、下注扣款、中奖加钱和钻石兑换事务仍需迁移 |
 | `/onego/:action?`（除 `/onego`、`/onego/index`、`/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last`、`/onego/hash`、`/onego/history`、`/onego/bet`、`/onego/lucky`、`/onego/bet_ranks`、`/onego/marquee`） | `c.api.onego->$action` | 部分未重构；`bet` 只读前置失败分支已迁移，投注金币扣减、号码生成和订单写入成功分支仍需事务化迁移 |
 

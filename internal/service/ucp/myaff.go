@@ -51,6 +51,8 @@ type UserStore interface {
 	MsgConversations(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
+	UserByEmail(ctx context.Context, email string) (map[string]interface{}, error)
+	UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error)
 	BotByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	Bankcards(ctx context.Context, uid int) ([]map[string]interface{}, error)
 	Banks(ctx context.Context) ([]map[string]interface{}, error)
@@ -78,6 +80,8 @@ type UserStore interface {
 	SettingExRate(ctx context.Context) (int, error)
 	SettingByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
 	CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
+	KeylimitCountSince(ctx context.Context, key string, since int64) (int, error)
+	KeylimitDataSince(ctx context.Context, key string, since int64) (string, error)
 	PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error)
 	PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error)
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
@@ -100,12 +104,14 @@ type UserStore interface {
 	TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error)
 	CountTaskboxLogs(ctx context.Context, uid int) (int, error)
 	TaskboxLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
+	Nicknames(ctx context.Context) ([]map[string]interface{}, error)
 }
 
 type Service struct {
 	store           UserStore
 	resourceBaseURL string
 	now             func() time.Time
+	qrRenderer      QRCodeRenderer
 }
 
 func NewService(store UserStore, resourceBaseURL string) *Service {
@@ -113,7 +119,15 @@ func NewService(store UserStore, resourceBaseURL string) *Service {
 		store:           store,
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		now:             time.Now,
+		qrRenderer:      goQRCodeRenderer{},
 	}
+}
+
+func (s *Service) WithQRCodeRenderer(renderer QRCodeRenderer) *Service {
+	if renderer != nil {
+		s.qrRenderer = renderer
+	}
+	return s
 }
 
 func (s *Service) MyAff(ctx context.Context, token string, page int) (domain.UCPMyAffData, int, string, error) {

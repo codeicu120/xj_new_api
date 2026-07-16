@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,12 @@ type WaliSettingStore interface {
 
 type WaliQuotaStore interface {
 	Quota(ctx context.Context, uid int) (map[string]interface{}, error)
+}
+
+type WaliHistoryStore interface {
+	GameHistoryByUniqueKey(ctx context.Context, uid int, platformID int, gameID int) (map[string]interface{}, error)
+	DeleteGameHistory(ctx context.Context, id int) error
+	SaveGameHistory(ctx context.Context, uid int, platformID int, gameID int) (int, error)
 }
 
 type WaliAuthStore interface {
@@ -81,6 +88,11 @@ type waliConfig struct {
 	AgentID string `json:"agentId"`
 }
 
+type waliParam struct {
+	key   string
+	value string
+}
+
 func NewWaliService(store WaliPlatformStore, authStore WaliAuthStore, client WaliHTTPClient) *WaliService {
 	if client == nil {
 		client = NewWaliHTTP(5 * time.Second)
@@ -115,6 +127,43 @@ func (s *WaliService) Balance(ctx context.Context, token string) (domain.GameWal
 		"balance":      data["balance"],
 		"transferable": data["transferable"],
 	}}, 0, "", nil
+}
+
+func (s *WaliService) Enter(ctx context.Context, token string, gameValue string) (string, int, string, error) {
+	user, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return "", -1, "获取用户失败", err
+	}
+	uid := atoi(fmt.Sprint(user["uid"]))
+	if uid == 0 {
+		return "", -9999, "您还没有登录", nil
+	}
+
+	gameID := atoi(gameValue)
+	data, err := s.sendRequestPairs(ctx, "enterGame", []waliParam{
+		{key: "uid", value: fmt.Sprint(uid)},
+		{key: "game", value: fmt.Sprint(gameID)},
+	})
+	if err != nil {
+		return "", -1, "进入游戏失败", nil
+	}
+
+	if historyStore, ok := s.store.(WaliHistoryStore); ok && historyStore != nil {
+		history, err := historyStore.GameHistoryByUniqueKey(ctx, uid, 1, gameID)
+		if err != nil {
+			return "", -1, "进入游戏失败", err
+		}
+		if id := atoi(fmt.Sprint(history["id"])); id > 0 {
+			if err := historyStore.DeleteGameHistory(ctx, id); err != nil {
+				return "", -1, "进入游戏失败", err
+			}
+		}
+		if _, err := historyStore.SaveGameHistory(ctx, uid, 1, gameID); err != nil {
+			return "", -1, "进入游戏失败", err
+		}
+	}
+
+	return fmt.Sprint(data["gameUrl"]), 0, "", nil
 }
 
 func (s *WaliService) ActionEdge(ctx context.Context, token string, pendingMessage string) (int, string, error) {
@@ -211,11 +260,24 @@ func (s *WaliService) authenticatedUser(ctx context.Context, token string) (map[
 }
 
 func (s *WaliService) sendRequest(ctx context.Context, action string, data map[string]string) (map[string]interface{}, error) {
+	params := make([]waliParam, 0, len(data))
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		params = append(params, waliParam{key: key, value: data[key]})
+	}
+	return s.sendRequestPairs(ctx, action, params)
+}
+
+func (s *WaliService) sendRequestPairs(ctx context.Context, action string, params []waliParam) (map[string]interface{}, error) {
 	cfg, err := s.config(ctx)
 	if err != nil {
 		return nil, err
 	}
-	param, err := encryptWaliParams(data, cfg.AESKey)
+	param, err := encryptWaliParamPairs(params, cfg.AESKey)
 	if err != nil {
 		return nil, err
 	}
@@ -268,11 +330,27 @@ func (s *WaliService) config(ctx context.Context) (waliConfig, error) {
 }
 
 func encryptWaliParams(data map[string]string, key string) (string, error) {
-	values := url.Values{}
-	for k, v := range data {
-		values.Set(k, v)
+	params := make([]waliParam, 0, len(data))
+	keys := make([]string, 0, len(data))
+	for dataKey := range data {
+		keys = append(keys, dataKey)
 	}
-	plain := values.Encode()
+	sort.Strings(keys)
+	for _, dataKey := range keys {
+		params = append(params, waliParam{key: dataKey, value: data[dataKey]})
+	}
+	return encryptWaliParamPairs(params, key)
+}
+
+func encryptWaliParamPairs(params []waliParam, key string) (string, error) {
+	parts := make([]string, 0, len(params))
+	for _, param := range params {
+		parts = append(parts, url.QueryEscape(param.key)+"="+url.QueryEscape(param.value))
+	}
+	plain, err := url.QueryUnescape(strings.Join(parts, "&"))
+	if err != nil {
+		return "", err
+	}
 	block, err := aes.NewCipher([]byte(key))
 	if err != nil {
 		return "", err

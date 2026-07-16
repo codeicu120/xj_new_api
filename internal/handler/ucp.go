@@ -126,32 +126,33 @@ func (h *UCPHandler) Upgrade(c *gin.Context) {
 }
 
 func (h *UCPHandler) UserCheckEmail(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), "邮箱可用成功分支暂未迁移")
+	retcode, errmsg, err := h.service.UserCheckEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserSendEmail(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), "邮箱验证码发送成功分支暂未迁移")
+	retcode, errmsg, err := h.service.UserSendEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserVerifyEmail(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserVerifyEmailEdge(c.Request.Context(), authToken(c))
+	retcode, errmsg, err := h.service.UserVerifyEmailEdge(c.Request.Context(), authToken(c), inputValue(c, "email"), inputValue(c, "emailcode"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserBindMobi(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserBindMobiEdge(c.Request.Context(), authToken(c))
+	retcode, errmsg, err := h.service.UserBindMobiEdge(c.Request.Context(), authToken(c), inputValue(c, "mobiprefix"), inputValue(c, "mobi"), inputValue(c, "smscode"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserProfile(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserProfileEdge(c.Request.Context(), authToken(c))
+	gender, _ := strconv.Atoi(inputValue(c, "gender"))
+	retcode, errmsg, err := h.service.UserProfileEdge(c.Request.Context(), authToken(c), gender, inputValue(c, "nickname"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserPasswd(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserPasswdEdge(c.Request.Context(), authToken(c), inputValue(c, "password"), inputValue(c, "password_confirm"))
+	retcode, errmsg, err := h.service.UserPasswdEdge(c.Request.Context(), authToken(c), inputValue(c, "password_old"), inputValue(c, "password"), inputValue(c, "password_confirm"))
 	h.respondEdge(c, retcode, errmsg, err)
 }
 
@@ -254,6 +255,20 @@ func (h *UCPHandler) TaskboxQRLink(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *UCPHandler) TaskboxQRCode(c *gin.Context) {
+	body, retcode, errmsg, err := h.service.TaskboxQRCode(c.Request.Context(), authToken(c), inputValue(c, "pid"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.Data(http.StatusOK, "image/png", body)
 }
 
 func (h *UCPHandler) TaskboxShare(c *gin.Context) {

@@ -1,13 +1,20 @@
 package ucp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 const (
@@ -19,6 +26,31 @@ const (
 	coinTypeAdViewClick     = 7
 	coinTypeMiniVODDownTask = 22
 )
+
+type QRCodeRenderer interface {
+	PNG(content string) ([]byte, error)
+}
+
+type goQRCodeRenderer struct{}
+
+func (goQRCodeRenderer) PNG(content string) ([]byte, error) {
+	qr, err := qrcode.Encode(content, qrcode.Low, 390)
+	if err != nil {
+		return nil, err
+	}
+	src, err := png.Decode(bytes.NewReader(qr))
+	if err != nil {
+		return nil, err
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, 400, 400))
+	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+	draw.Draw(dst, image.Rect(5, 5, 395, 395), src, src.Bounds().Min, draw.Src)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, dst); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
 func (s *Service) TaskIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
 	user, groups, err := s.authenticatedUser(ctx, token)
@@ -158,6 +190,19 @@ func (s *Service) TaskInvite(ctx context.Context, token string) (int, string, er
 
 func (s *Service) TaskboxQRLink(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
 	return s.taskQRLink(ctx, token, pid, "taskbox.qrcode.link")
+}
+
+func (s *Service) TaskboxQRCode(ctx context.Context, token string, pid string) ([]byte, int, string, error) {
+	data, retcode, errmsg, err := s.TaskboxQRLink(ctx, token, pid)
+	if err != nil || retcode != 0 {
+		return nil, retcode, errmsg, err
+	}
+	link := str(data["qrlink"])
+	body, err := s.qrRenderer.PNG(link)
+	if err != nil {
+		return nil, -1, "生成任务宝箱二维码失败", err
+	}
+	return body, 0, "", nil
 }
 
 func (s *Service) TaskboxShare(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {

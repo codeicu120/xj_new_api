@@ -16,15 +16,21 @@ type GameHandler struct {
 	listingService   *gameService.ListingService
 	broadcastService *gameService.BroadcastService
 	waliService      *gameService.WaliService
+	lotteryService   *gameService.LotteryService
 }
 
-func NewGameHandler(platformService *gameService.PlatformService, categoryService *gameService.CategoryService, listingService *gameService.ListingService, broadcastService *gameService.BroadcastService, waliService *gameService.WaliService) *GameHandler {
+func NewGameHandler(platformService *gameService.PlatformService, categoryService *gameService.CategoryService, listingService *gameService.ListingService, broadcastService *gameService.BroadcastService, waliService *gameService.WaliService, lotteryService ...*gameService.LotteryService) *GameHandler {
+	var lottery *gameService.LotteryService
+	if len(lotteryService) > 0 {
+		lottery = lotteryService[0]
+	}
 	return &GameHandler{
 		platformService:  platformService,
 		categoryService:  categoryService,
 		listingService:   listingService,
 		broadcastService: broadcastService,
 		waliService:      waliService,
+		lotteryService:   lottery,
 	}
 }
 
@@ -114,6 +120,48 @@ func (h *GameHandler) WaliBalance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func (h *GameHandler) WaliEnter(c *gin.Context) {
+	gameURL, retcode, errmsg, err := h.waliService.Enter(c.Request.Context(), authToken(c), inputValue(c, "game"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(gameURL))
+}
+
+func (h *GameHandler) LotteryEnter(c *gin.Context) {
+	gameURL, retcode, errmsg, err := h.lotteryService.Enter(c.Request.Context(), authToken(c), inputValue(c, "lotid"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(gameURL))
+}
+
+func (h *GameHandler) LotteryBalance(c *gin.Context) {
+	data, retcode, errmsg, err := h.lotteryService.Balance(c.Request.Context(), authToken(c))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(map[string]interface{}{"data": data}))
 }
 
 func (h *GameHandler) HighRiskAction(message string) gin.HandlerFunc {

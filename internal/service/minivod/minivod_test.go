@@ -3,6 +3,7 @@ package minivod
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,8 @@ type fakeStore struct {
 	updown     map[string]interface{}
 	viewlog    map[string]interface{}
 	viewlogs   []map[string]interface{}
+	pullCount  int
+	adrows     []map[string]interface{}
 	marked     map[string]interface{}
 	saved      int
 	deleted    bool
@@ -30,6 +33,7 @@ type fakeStore struct {
 	quota      map[string]interface{}
 	settings   map[string]string
 	recorded   *miniMediaRecord
+	l2sMap     map[string]interface{}
 }
 
 type miniMediaRecord struct {
@@ -130,8 +134,18 @@ func (s *fakeStore) UsersByIDs(context.Context, []int) ([]map[string]interface{}
 	return []map[string]interface{}{{"uid": "7", "username": "u", "nickname": "n", "avatar": "avatar.jpg", "gender": "1"}}, nil
 }
 
-func (s *fakeStore) VODsByIDs(context.Context, []int, bool) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{{"vodid": "9", "authorid": "7", "title": "mini", "showtype": "1"}}, nil
+func (s *fakeStore) VODsByIDs(_ context.Context, ids []int, _ bool) ([]map[string]interface{}, error) {
+	rowsByID := map[int]map[string]interface{}{
+		9:  {"vodid": "9", "authorid": "7", "title": "mini", "showtype": "1"},
+		10: {"vodid": "10", "authorid": "7", "title": "mini2", "showtype": "1"},
+	}
+	rows := []map[string]interface{}{}
+	for _, id := range ids {
+		if row, ok := rowsByID[id]; ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
 }
 
 func (s *fakeStore) PendingViewLogs(context.Context, int, string, int) ([]map[string]interface{}, error) {
@@ -141,9 +155,21 @@ func (s *fakeStore) PendingViewLogs(context.Context, int, string, int) ([]map[st
 	return []map[string]interface{}{}, nil
 }
 
+func (s *fakeStore) PullViewLogs(context.Context, int, string) (int, error) {
+	s.pullCount++
+	return 0, nil
+}
+
 func (s *fakeStore) MarkViewLogsShown(_ context.Context, uid int, sid string, logIDs []int, now int64) error {
 	s.marked = map[string]interface{}{"uid": uid, "sid": sid, "logids": logIDs, "now": now}
 	return nil
+}
+
+func (s *fakeStore) MiniVODAdCallRows(context.Context) ([]map[string]interface{}, error) {
+	if s.adrows != nil {
+		return s.adrows, nil
+	}
+	return []map[string]interface{}{}, nil
 }
 
 func (s *fakeStore) UpDownByUser(context.Context, int, int) (map[string]interface{}, error) {
@@ -198,6 +224,13 @@ func (s *fakeStore) ReqTaskCoin(_ context.Context, uid int, sid string, logid in
 	return s.reqCoinRet, s.reqCoinMsg, nil
 }
 
+func (s *fakeStore) LongToShortMapByLongID(context.Context, int) (map[string]interface{}, error) {
+	if s.l2sMap != nil {
+		return s.l2sMap, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
 type fakeProcessor struct{}
 
 func (fakeProcessor) ProcessRowsFullPrice(_ context.Context, rows []map[string]interface{}, _ bool) ([]map[string]interface{}, error) {
@@ -212,6 +245,12 @@ func (fakeProcessor) ProcessMiniRowsFullPrice(_ context.Context, rows []map[stri
 		row["processed"] = "1"
 	}
 	return rows, nil
+}
+
+type fakeM3U8Fetcher map[string]string
+
+func (f fakeM3U8Fetcher) Fetch(_ context.Context, url string) (string, error) {
+	return f[url], nil
 }
 
 func TestListingFiltersAndPageURL(t *testing.T) {
@@ -268,9 +307,69 @@ func TestReqListReturnsRowsFromPendingLogs(t *testing.T) {
 	if rows[0]["user"] == nil {
 		t.Fatalf("expected user wrapper, got %#v", rows[0])
 	}
+	if store.pullCount != 1 {
+		t.Fatalf("expected low pending count to trigger pullViewLogs once, got %d", store.pullCount)
+	}
 	logIDs, ok := store.marked["logids"].([]int)
 	if !ok || len(logIDs) != 1 || logIDs[0] != 1 || store.marked["uid"] != 7 || store.marked["now"] != int64(1770000000) {
 		t.Fatalf("marked=%#v", store.marked)
+	}
+}
+
+func TestReqListSkipsPullWhenPendingBufferFull(t *testing.T) {
+	viewlogs := make([]map[string]interface{}, 0, 100)
+	for i := 1; i <= 100; i++ {
+		viewlogs = append(viewlogs, map[string]interface{}{"logid": strconv.Itoa(i), "vodid": "9"})
+	}
+	store := &fakeStore{viewlogs: viewlogs}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}}
+	service.randomIntn = func(int) int { return 0 }
+
+	if _, err := service.ReqList(context.Background(), "token", false, 0); err != nil {
+		t.Fatalf("reqlist: %v", err)
+	}
+	if store.pullCount != 0 {
+		t.Fatalf("expected full pending buffer to skip pullViewLogs, got %d", store.pullCount)
+	}
+	logIDs, ok := store.marked["logids"].([]int)
+	if !ok || len(logIDs) != 10 {
+		t.Fatalf("expected exactly 10 marked log ids, got %#v", store.marked)
+	}
+}
+
+func TestReqListInsertsEligibleAdRowAfterFirstItem(t *testing.T) {
+	store := &fakeStore{
+		viewlogs: []map[string]interface{}{
+			{"logid": "1", "vodid": "9"},
+			{"logid": "2", "vodid": "10"},
+		},
+		adrows: []map[string]interface{}{
+			{"title0": "A", "url0": "https://ad.test/a", "title1": "B", "url1": "https://ad.test/b", "title2": "C", "url2": "https://ad.test/c", "pic": "ad.png"},
+			{"title0": "Hidden", "url0": "https://ad.test/h", "regbegin": "1"},
+		},
+	}
+	service := NewService(store, fakeProcessor{}, "https://res.test")
+	service.auth = fakeAuth{user: map[string]interface{}{"uid": "0", "sid": "guest"}}
+	service.randomIntn = func(int) int { return 0 }
+
+	data, err := service.ReqList(context.Background(), "token", false, 1)
+	if err != nil {
+		t.Fatalf("reqlist: %v", err)
+	}
+	rows, ok := data["rows"].([]map[string]interface{})
+	if !ok || len(rows) != 3 {
+		t.Fatalf("rows=%#v", data["rows"])
+	}
+	if _, ok := rows[0]["vodrow"]; !ok {
+		t.Fatalf("expected first row to remain a vod row, got %#v", rows[0])
+	}
+	adrow, ok := rows[1]["adrow"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected ad row at index 1, got %#v", rows)
+	}
+	if adrow["A"] != "https://ad.test/a" || adrow["pic"] != "https://res.test/ad.png" {
+		t.Fatalf("adrow=%#v", adrow)
 	}
 }
 
@@ -548,6 +647,120 @@ func TestReqLongAddsServerHostForRelativeURL(t *testing.T) {
 	}
 	if body != "https://cdn.test/a/index.m3u8" {
 		t.Fatalf("body=%q", body)
+	}
+}
+
+func TestParseLongM3U8UsesDefaultRange(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "a/index.m3u8", "play_srvid": "3"}}
+	fetcher := fakeM3U8Fetcher{
+		"https://cdn.test/a/index.m3u8": "#EXTM3U\nchild/index.m3u8\n",
+		"https://cdn.test/child/index.m3u8": strings.Join([]string{
+			"#EXTM3U",
+			"#EXT-X-VERSION:3",
+			"#EXTINF:20,",
+			"seg0.ts",
+			"#EXTINF:20,",
+			"seg1.ts",
+			"#EXTINF:20,",
+			"seg2.ts",
+			"#EXTINF:20,",
+			"seg3.ts",
+			"#EXT-X-ENDLIST",
+		}, "\n"),
+	}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithM3U8Fetcher(fetcher)
+
+	body, retcode, errmsg, err := service.ParseLongM3U8(context.Background(), "", 9)
+	if err != nil || retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q err=%v body=%q", retcode, errmsg, err, body)
+	}
+	if strings.Contains(body, "seg3.ts") {
+		t.Fatalf("expected default 0..60 to exclude fourth segment, body=%q", body)
+	}
+	for _, want := range []string{"#EXTM3U", "#EXT-X-VERSION:3", "https://cdn.test/seg0.ts", "https://cdn.test/seg1.ts", "https://cdn.test/seg2.ts", "#EXT-X-ENDLIST"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, body=%q", want, body)
+		}
+	}
+}
+
+func TestParseLongM3U8UsesMappedRange(t *testing.T) {
+	store := &fakeStore{
+		vod:    map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "https://cdn.test/a/index.m3u8", "play_srvid": "3"},
+		l2sMap: map[string]interface{}{"start": "11", "end": "50"},
+	}
+	fetcher := fakeM3U8Fetcher{
+		"https://cdn.test/a/index.m3u8": "/child/index.m3u8\n",
+		"https://cdn.test/child/index.m3u8": strings.Join([]string{
+			"#EXTM3U",
+			"#EXTINF:10,",
+			"seg0.ts",
+			"#EXTINF:10,",
+			"seg1.ts",
+			"#EXTINF:10,",
+			"seg2.ts",
+			"#EXTINF:10,",
+			"seg3.ts",
+			"#EXTINF:10,",
+			"seg4.ts",
+			"#EXTINF:10,",
+			"seg5.ts",
+		}, "\n"),
+	}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithM3U8Fetcher(fetcher)
+
+	body, retcode, errmsg, err := service.ParseLongM3U8(context.Background(), "", 9)
+	if err != nil || retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q err=%v body=%q", retcode, errmsg, err, body)
+	}
+	if strings.Contains(body, "seg0.ts") || strings.Contains(body, "seg5.ts") {
+		t.Fatalf("unexpected segment outside mapped range, body=%q", body)
+	}
+	for _, want := range []string{"https://cdn.test/seg1.ts", "https://cdn.test/seg2.ts", "https://cdn.test/seg3.ts", "https://cdn.test/seg4.ts"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, body=%q", want, body)
+		}
+	}
+}
+
+func TestParseLongM3U8RewritesKeyAndTSURLs(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "https://cdn.test/a/index.m3u8", "play_srvid": "3"}}
+	fetcher := fakeM3U8Fetcher{
+		"https://cdn.test/a/index.m3u8": "child/index.m3u8\n",
+		"https://cdn.test/child/index.m3u8": strings.Join([]string{
+			"#EXTM3U",
+			`#EXT-X-KEY:METHOD=AES-128,URI="keys/key.key",IV=0x1`,
+			"#EXTINF:8,",
+			"video/seg0.ts",
+			"#EXTINF:8,",
+			"https://media.test/seg1.ts",
+		}, "\n"),
+	}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithM3U8Fetcher(fetcher)
+
+	body, retcode, errmsg, err := service.ParseLongM3U8(context.Background(), "", 9)
+	if err != nil || retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q err=%v body=%q", retcode, errmsg, err, body)
+	}
+	for _, want := range []string{`URI="https://cdn.test/keys/key.key"`, "https://cdn.test/video/seg0.ts", "https://media.test/seg1.ts"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected body to contain %q, body=%q", want, body)
+		}
+	}
+}
+
+func TestParseLongM3U8ReturnsEmptyBodyWhenSourceHasNoChild(t *testing.T) {
+	store := &fakeStore{vod: map[string]interface{}{"vodid": "9", "showtype": "0", "play_url": "https://cdn.test/a/index.m3u8", "play_srvid": "3"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithM3U8Fetcher(fakeM3U8Fetcher{
+		"https://cdn.test/a/index.m3u8": "#EXTM3U\n#EXT-X-VERSION:3\n",
+	})
+
+	body, retcode, errmsg, err := service.ParseLongM3U8(context.Background(), "", 9)
+	if err != nil || retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q err=%v body=%q", retcode, errmsg, err, body)
+	}
+	if body != "" {
+		t.Fatalf("expected empty m3u8 body, got %q", body)
 	}
 }
 

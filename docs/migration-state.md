@@ -401,11 +401,11 @@
 - Service: `internal/service/minivod.Service`
 - Repository: `internal/repository/minivod.Repository`
 - Auth: 不强制登录；有有效 token 时按 uid 读取 `minivod_viewlogs_{uid%100}`，否则按 sid 读取 `minivod_guestviewlogs_{sid首字符}`，无 sid 时返回空 rows。
-- DB: 读取现有 `showtype=0` 的待展示小视频 viewlog，按 `logid DESC` 取 10 条，再读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理；返回前按当前 uid/sid 批量更新本次 logid 的 `reqtime` 和 `showtype=1`。
-- 兼容规则：返回 `data.rows`，每行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0；默认请求对齐 PHP `debug=0`，会标记已展示；`debug=1` 会跳过标记，便于重复调试同一批记录。
-- 风险边界：本批不执行 `pullViewLogs` 拉取推荐，也不随机插入 `minivod.ads` 广告行；这些推荐/广告副作用仍留在未重构清单。
-- Subagent：`Hypatia` 只读核对 PHP `reqlist` 标记时机和 debug 边界，确认只迁移 `mUpdate(reqtime/showtype=1)` 是可控增量。
-- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；service fake 覆盖现有 viewlog 组装 rows、已展示标记和 `debug=1` 跳过标记，server 测试覆盖空 rows 响应壳。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
+- DB: 先读取 `showtype=0` 的待展示小视频 viewlog 100 条；不足 100 时按 PHP `pullViewLogs` 规则补推荐池，再随机打乱并截取 10 条，读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理；返回前按当前 uid/sid 批量更新本次 logid 的 `reqtime` 和 `showtype=1`。
+- 兼容规则：返回 `data.rows`，每条小视频行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0；默认请求对齐 PHP `debug=0`，会标记已展示；`debug=1` 跳过标记。读取 `minivod.ads` 后按 `showAd` 规则过滤并随机插入广告行，且不插在第一条。
+- 风险边界：本批不接金币/资产；`pullViewLogs` 只补 viewlog 推荐池，真实库字段/索引漂移需要联调时再压测。
+- Subagent：`Hypatia` 只读核对 PHP `reqlist` 标记时机和 debug 边界；`Cicero` 补齐 `pullViewLogs` 和随机广告插入副作用。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/handler` 通过；service fake 覆盖现有 viewlog 组装 rows、补推荐池、广告插入、已展示标记和 `debug=1` 跳过标记。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
 
 ### `/minivod/reqlong/:vodid`
 
@@ -539,6 +539,15 @@
 - 兼容规则：登录后用当前用户 `uid` 调用瓦力 `getBalance`；复用 `game_platform.id=1` 的 AES-128-ECB 加密与 `md5(p + unixTime + signKey)` 签名；成功只返回 PHP 保留的 `status/balance/transferable` 三个字段，不暴露外部响应的 `code/msg`。
 - 测试 token: `3235306637393062613731656332623964333835356634323464623232353965`，对应 `uid=5`。
 - 测试：聚焦 `go test ./internal/service/game ./internal/server` 通过；PHP-Go 对比未登录 `/game/wali/balance` 和登录 header token 分支均完全一致。
+
+### `/game/lottery/enter`
+
+- PHP: `c.api.game.lottery->enter`
+- Go: `internal/handler.GameHandler.LotteryEnter`
+- Service/Client: `internal/service/game.LotteryService`、`LotteryEnterClient`
+- Repository: `internal/repository/game.PlatformRepository.PlatformBySlug` 读取 `game_platform.slug=lottery`，并复用现有 `game_history` 查询、删除、保存接口。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后 `lotid` 缺失默认 0，调用彩票平台 `/api/player/enterGame`，成功返回顶层 `data=gameUrl` 并刷新 `game_history` 常玩记录；配置缺失、平台禁用、HTTP/JSON/平台错误均安全返回 `retcode=-1 errmsg=进入游戏失败`。本切口不迁移 lottery topup/withdraw/balance，不做金币、订单或资产写入。
+- 测试：聚焦 `go test ./internal/repository/game ./internal/service/game ./internal/handler ./internal/server` 通过；外部平台成功/失败由 interface fake 覆盖，未做 live 外呼对比。
 
 ### `/ucp/myaff`
 
@@ -1076,6 +1085,17 @@
 - 兼容规则：与 `/ucp/task/qrlink` 相同的 pid 校验、每日 inviteUrls 分组和 `{inviteCode}` 替换；不生成 PNG，也不写 keylimit 或发奖励。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过；PHP-Go live 对比 `/ucp/taskbox/qrlink` 未登录分支 retcode/errmsg 一致，旧 PHP 额外返回动态游客 token，新 Go 按既有策略返回空 `data`。
 
+### `/ucp/taskbox/qrcode`
+
+- PHP: `c.api.ucp.taskbox->qrcode`
+- Go: `internal/handler.UCPHandler.TaskboxQRCode`
+- Service: `internal/service/ucp.Service.TaskboxQRCode`
+- Repository: `internal/repository/index.SettingsRepository` 通过 `ucpStore` 只读注入。
+- Auth: 兼容 `x-cookie-auth` header 和 `xxx_api_auth` cookie；未登录返回 `retcode=-9999`、`errmsg=您还没有登录`。
+- DB: 复用 `/ucp/taskbox/qrlink` 只读逻辑，读取 `maintain_calldata.uuid=(pid.)taskbox.qrcode.link` 和 `settings.uuid=baseset`；渠道配置缺失时回退默认 `taskbox.qrcode.link`。
+- 兼容规则：与 `/ucp/taskbox/qrlink` 相同的 pid 校验、每日 inviteUrls 分组和 `{inviteCode}` 替换；生成 `image/png` 二维码。旧 PHP `taskbox->qrcode` 的 keylimit 写入已注释，Go 不写 keylimit/coinlog。
+- 测试：`go test ./internal/service/ucp ./internal/handler ./internal/server` 通过；service fake renderer 校验最终 qrlink 后再返回 PNG。
+
 ### `/ucp/taskbox/share`
 
 - PHP: `c.api.ucp.taskbox->share`
@@ -1383,10 +1403,10 @@
 
 ### 支付回调失败分支
 
-- 已迁移：`/respond/shangfu`、`/respond/wappay1..5`、`/respond/wappay4a`、`/respond/hawpay`、`/respond/easypay`、`/respond/gpay1/gpay2`、`/respond/pay6..12`、`/respond/newpay*` 常见 provider 的空请求/解析失败分支；`chan1` 未接管。
+- 已迁移：`/respond/shangfu`、`/respond/wappay1..5`、`/respond/wappay4a`、`/respond/hawpay`、`/respond/easypay`、`/respond/gpay1/gpay2`、`/respond/pay6..12`、`/respond/newpay*` 常见 provider 的空请求/解析失败分支；`shangfu` 与 `pay7` 已补最小验签 fixture，但 accounting disabled 下仍返回 provider 失败文本；`chan1` 未接管。
 - PHP: `c.respond.*`
 - Go: `internal/handler.RespondHandler.Failed`
-- Auth/DB/External: 无；本批只返回 provider `echoErr()` 文本，不读取订单、不验签、不入账、不调用 `payment->doAction()`。
+- Auth/DB/External: 无；本批只返回 provider `echoErr()` 文本，不读取订单、不入账、不调用 `payment->doAction()`；`shangfu/pay7` 验签只用于确认 fail-closed 行为。
 - 兼容规则：普通 provider 返回 `failed`，`pay12` 返回 `Err`，`newpayhf/newpaykf/newpaykk/newpaylep` 返回 `FAILED`；这些都是旧 PHP 在 provider 解析失败时的响应文本。成功验签和入账分支仍留在未重构区。
 - 测试：`go test ./internal/server` 覆盖 `shangfu/pay12/newpaykf` 三类失败文本。
 
@@ -1395,9 +1415,9 @@
 - 已迁移：`/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot` 的安全前置失败分支。
 - PHP: `c.api.user->register/login/forgot`、`c.api.user2->delAccount/changePhone`、`c.apiv2.user->register/login/forgot`
 - Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`
-- Auth/DB/External: 只读取当前 token 对应用户以判断已登录/未登录，不发送短信/邮件，不读写 keylimit，不创建 session，不写用户表、Redis 或奖励资产。
-- 兼容规则：注册未同意协议返回 `请同意用户协议`；已登录账号入口返回 `用户已登录`；v2 空登录账号返回 `用户名未注册`；旧版 forgot 空手机号返回 `手机号码填写不正确`；v2 forgot 空手机号/邮箱返回 `请填写手机号码或者邮箱`；注销未登录返回 `retcode=-9999 errmsg=您还没有登录`；换绑未登录返回 `retcode=-9999 errmsg=请登录后操作`。
-- 未接管：注册成功、短信/邮箱验证码校验、IP 频控、登录成功 session、forgot step1/2 查用户、forgot step3 改密、注销 Redis 写入、换绑 step2 事务写库和所有奖励/渠道/活动副作用。
+- Auth/DB/External: 只读取当前 token 对应用户以判断已登录/未登录；`/delete` 通过 `AuthEdgeDeletionStore` 接口隔离 Redis `delAccountList` 只读判断；不发送短信/邮件，不创建 session，不写用户表、Redis 或奖励资产。
+- 兼容规则：注册未同意协议返回 `请同意用户协议`；已登录账号入口返回 `用户已登录`；v2 空登录账号返回 `用户名未注册`；旧版 forgot 空手机号返回 `手机号码填写不正确`；v2 forgot 空手机号/邮箱返回 `请填写手机号码或者邮箱`；forgot step2 手机验证码失败返回 `手机验证码不正确`，v2 邮箱验证码失败返回 `邮箱验证码不正确`，验证通过只推进 `step2->step3`；注销未登录返回 `retcode=-9999 errmsg=您还没有登录`；注销 Redis 列表命中返回 `retcode=-1 errmsg=该账号已申请注销，请勿重复操作`；换绑未登录返回 `retcode=-9999 errmsg=请登录后操作`。
+- 未接管：注册成功、注册/登录验证码成功分支、登录成功 session、forgot step3 改密、Redis 注销申请写入、注销退出登录、换绑 step2 事务写库和所有奖励/渠道/活动副作用。
 - 测试：`go test ./internal/service/user ./internal/handler ./internal/server` 通过；server 测试覆盖 7 个账号入口的错误码和文案。
 
 ### `/ucp/task/invite`
@@ -1500,11 +1520,11 @@
 - 已迁移账号安全失败分支：`/register`、`/login`、`/forgot`、`/delete`、`/changePhone`、`/v2/register`、`/v2/login`、`/v2/forgot`。
 - PHP: `c.api.user->register/login/forgot`、`c.apiv2.user->register/login/forgot`、`c.api.user2->delAccount/changePhone`。
 - Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`。
-- 兼容边界：只接管未同意用户协议、已登录前置、未登录、手机号格式错误、v2 空账号、无效 step 等确定失败分支；成功注册/登录/找回密码/注销/换绑仍涉及验证码、session、Redis、风控和写库，继续留在未重构清单。
-- 已迁移 UCP 特殊/高风险入口：`/ucp/task/invite` 完整按 PHP 空方法迁移；`/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder`、`/ucp/vodorder/create`、`/ucp/vodorder/support` 的未登录分支。
+- 兼容边界：只接管未同意用户协议、已登录前置、未登录、手机号格式错误、v2 空账号、无效 step、forgot step1/step2 推进和验证码失败等确定分支；成功注册/登录、forgot step3 改密、注销/换绑成功仍涉及验证码成功消费、session、Redis、风控和写库，继续留在未重构清单。
+- 已迁移 UCP 特殊/高风险入口：`/ucp/task/invite` 完整按 PHP 空方法迁移；`/ucp/taskbox/qrcode` 已接管登录后只读生成 PNG 分支；`/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder`、`/ucp/vodorder/create`、`/ucp/vodorder/support` 的未登录分支。
 - PHP: `src/c/api/ucp/task.php`、`taskbox.php`、`index.php`、`withdraw.php`、`coinlog.php`、`vippkg.php`、`coinpkg.php`、`beanpkg.php`、`vodorder.php`。
 - Go: `internal/handler.UCPHandler.TaskInvite/HighRiskAction`、`internal/service/ucp.Service.TaskInvite/HighRiskActionEdge`。
-- 兼容规则：高风险接口未登录统一返回 `retcode=-9999`、`errmsg=您还没有登录`；登录成功分支返回内部暂未迁移错误，避免误执行资产、支付、奖励、二维码图片生成、提现通知或求片写入。
+- 兼容规则：高风险接口未登录统一返回 `retcode=-9999`、`errmsg=您还没有登录`；`/ucp/taskbox/qrcode` 因 PHP keylimit 写入已注释，只生成 `image/png`；其余登录成功分支返回内部暂未迁移错误，避免误执行资产、支付、奖励、`/ucp/task/qrcode` keylimit 写入、提现通知或求片写入。
 - 测试：`go test ./internal/service/ucp ./internal/service/user ./internal/handler ./internal/server` 覆盖账号失败分支、`TaskInvite` 空方法行为和 UCP 高风险未登录分支。
 
 ### 支付、游戏、邀请前置分支批量迁移
@@ -1513,10 +1533,10 @@
 - PHP: `src/c/api/payment.php`。
 - Go: `internal/handler.PaymentHandler`、`internal/service/payment.Service`。
 - 兼容规则：8 个 public action 固定返回 `retcode=0 errmsg=支付成功回调`；`reqpay` 只接管缺失/已支付/过期/非本人等前置失败；`pay12req` 错误分支返回 HTML payerror 页。钱包支付、第三方网关请求、订单状态写入和成功跳转仍未迁移。
-- 已迁移 game 未登录分支：`/game/wali/topup`、`/game/wali/withdraw`、`/game/wali/enter`、`/game/lottery/topup`、`/game/lottery/withdraw`、`/game/lottery/enter`、`/game/lottery/balance`。
+- 已迁移 game 前置分支：`/game/wali/topup`、`/game/wali/withdraw`、`/game/lottery/topup`、`/game/lottery/withdraw` 未登录分支；`/game/wali/enter`、`/game/lottery/enter` 已继续接管登录后进入游戏外部成功/失败分支；`/game/lottery/balance` 已接管登录后外部只读余额查询成功/失败分支。
 - PHP: `src/c/api/game/wali.php`、`src/c/api/game/lottery.php`。
-- Go: `internal/handler.GameHandler.HighRiskAction`、`internal/service/game.WaliService.ActionEdge`。
-- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录成功路径不执行金币事务、订单写入或外部平台请求。
+- Go: `internal/handler.GameHandler.HighRiskAction/WaliEnter`、`internal/service/game.WaliService.ActionEdge/Enter`。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；`/game/wali/enter` 登录后默认 `game=0`，`/game/lottery/enter` 登录后默认 `lotid=0`，通过 interface client 调用外部 `enterGame`，成功返回顶层 `data=gameUrl` 并刷新 `game_history` 常玩记录；`/game/lottery/balance` 调用外部 `balance`，按 PHP 将 `totalMoney/freeMoney` 从分格式化为两位小数字符串并返回 `data.data.status/balance/transferable/currency`；配置缺失、平台禁用、HTTP/JSON/平台错误均安全返回 `retcode=-1`，进入游戏为 `进入游戏失败`，余额为 `查询余额失败`。topup/withdraw 登录成功路径不执行金币事务、订单写入或外部转账请求。
 - 已迁移 invite 前置分支：`/invite/bind` 未登录和缺邀请码。
 - PHP: `src/c/api/invite.php::bind`。
 - Go: `internal/handler.InviteHandler.Bind`、`internal/service/invite.Service.BindEdge`。
@@ -1528,7 +1548,7 @@
 - 已迁移：`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`。
 - PHP: `src/c/api/ucp/user.php::checkemail/sendemail/verifyemail/bindmobi`。
 - Go: `internal/handler.UCPHandler.UserCheckEmail/UserSendEmail/UserVerifyEmail/UserBindMobi`、`internal/service/ucp.Service` contact edge methods。
-- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后邮箱格式错误返回 `请输入正确的邮箱地址`；邮箱验证码缺失/失效返回 `验证码不存在或已失效`；手机验证码缺失/错误返回 `手机验证码不正确`。邮件发送、keylimit 成功校验、邮箱/手机绑定写入暂未接管。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后邮箱格式错误返回 `请输入正确的邮箱地址`；`checkemail/sendemail` 频控返回 `发送太频率请稍后重试`，当日上限返回 `系统维护稍后重试`；邮箱已存在返回 `邮箱已经被使用了` 或 verify 分支的 `邮箱已经被使用`；`checkemail` 邮箱可用只读成功返回 `retcode=0 errmsg=邮箱可用`；`sendemail` 邮件配置缺失返回 `邮箱功能暂未开启，请稍后重试`；邮箱验证码缺失/失效返回 `验证码不存在或已失效`；手机验证码缺失/错误返回 `手机验证码不正确`。邮件发送、keylimit 写入、邮箱/手机绑定写入暂未接管。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
 
 ### OneGo 投注前置分支
@@ -1544,7 +1564,7 @@
 - 已迁移 UCP 前置分支：`/ucp/coinlog/exchange`、`/ucp/vodorder/create`、`/ucp/vodorder/support`、`/ucp/user/profile`、`/ucp/user/passwd`。
 - PHP: `src/c/api/ucp/coinlog.php`、`vodorder.php`、`user.php`。
 - Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`。
-- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；密码修改校验长度和确认密码一致。成功写入、扣费、通知、旧密码校验和资料更新暂未接管。
+- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；资料修改校验昵称长度、字符集和性别昵称白名单；密码修改校验原密码、长度和确认密码一致。成功写入、扣费、通知、资料更新、密码更新和重新登录暂未接管。
 - 已迁移小视频投币未登录分支：`/minivod/throwcoin/:vodid`，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；投币事务和作者收益暂未接管。
 - 已迁移 StarLive raw JSON 安全失败分支：`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`。游客长 `memberId` 返回 `游客用户请先登录`，未知用户返回 `未知用户`，`tryAgain` 未知业务类型返回 `未知业务类型`；下注、结算、翻译扣款和外部幂等回调暂未接管。
 - 已迁移 Respond token 失败分支：`/respond/chan1`，`md5(mobi+"|"+secret)` 校验失败返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理暂未接管。
@@ -1574,7 +1594,7 @@
 - PHP: `src/c/apiv2/user.php::register/login`、`src/m/user/user.php::checkEmail/checkPassword/checkLogin`。
 - Go: `internal/handler.UserHandler`、`internal/service/user.AuthEdgeService`。
 - 兼容规则：只迁移 v2 注册中位于验证码/写库前的输入校验；v1 `/register` 的后续参数校验暂不提前迁移，因为旧 PHP 在其前面还有注册关闭和 IP 频控动态检查。登录成功、验证码、session、Redis 注销状态清理仍未接管。
-- 已迁移 UCP 任务只读失败分支：`/ucp/task/sign` 游客缺失/今日已签到；`/ucp/task/invitecodeInput` 今日已保存/邀请码错误；`/ucp/task/adviewClick` 今日已送过；`/ucp/taskbox/taskboxopen` 任务不存在/停用和宝箱金币为 0。
+- 已迁移 UCP 任务只读失败分支：`/ucp/task/sign` 游客缺失/今日已签到；`/ucp/task/invitecodeInput` 今日已保存/邀请码错误；`/ucp/task/adviewClick` 今日已送过；`/ucp/taskbox/taskboxopen` 任务不存在/停用、宝箱金币为 0、每日/每周神秘宝箱时间窗、已领取和推广人数不足。
 - PHP: `src/c/api/ucp/task.php::sign/invitecodeInput/adviewClick`、`src/c/api/ucp/taskbox.php::taskboxopen`。
 - Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`、`internal/repository/ucp.Repository.TaskboxByID`。
 - 兼容规则：这些分支均在奖励写入、金币/VIP 变更、图片生成或事务成功路径之前；时间窗口、已领过、推广人数不足等处于事务/锁之后的分支暂不迁移。
@@ -1630,7 +1650,7 @@
 
 ### Minivod 媒体前置错误与 AI 删除空记录
 
-- 已迁移：`/minivod/parselong/:vodid/index.m3u8` 在媒体 CDN 请求前的两个错误分支：记录不存在或已删除返回 `retcode=1`，播放地址不存在返回 `retcode=2`；真正拉取 m3u8 与裁剪输出仍未接管。
+- 已迁移：`/minivod/parselong/:vodid/index.m3u8` 在媒体 CDN 请求前的两个错误分支：记录不存在或已删除返回 `retcode=1`，播放地址不存在返回 `retcode=2`；后续批次已继续接管真正拉取 m3u8 与裁剪输出成功分支。
 - 已迁移：`/aiundress/delete` 登录后记录不存在分支，按 PHP 直接返回 `retcode=0 errmsg=""`，不触碰文件删除和状态更新。
 - PHP: `src/c/api/minivod.php::parseM3u8/getLong2Mini`、`src/c/api/aiundress.php::delete`。
 - Go: `internal/handler.MiniVODHandler.ParseLongM3U8`、`internal/service/minivod.Service.ReqLong`、`internal/handler.AIUndressHandler.Delete`、`internal/service/aiundress.Service.DeleteEdge`、`internal/repository/aiundress.Repository.ByID`。
@@ -1654,8 +1674,11 @@
 - 已迁移：v1 `/login` 普通密码登录关闭分支，读取 `settings.uuid=setting` 中 `pswdLoginStatus!=1` 后返回 `系统已关闭密码登录`；v2 PHP 没有该开关，不迁移到 v2。
 - 已迁移：`/delete` 的游客账号无需注销分支，登录后只读 `users.mobi/email`，两者均以 `~` 开头时返回 `游客账号无需注销`。
 - PHP: `src/c/api/user.php::register/login`、`src/c/apiv2/user.php::register`、`src/c/api/user2.php::delAccount`、`src/m/keylimit.php::get_slave`。
-- Go: `internal/service/user.AuthEdgeService`、`internal/repository/user.Repository.SettingByUUID/KeylimitCountSince/UserByID`、`internal/handler.UserHandler`。
-- 未迁移：`/delete` 的 Redis hash `delAccountList` 重复注销判断、验证码校验、Redis 注销申请写入和退出登录仍需 Redis/client 设计。
+- Go: `internal/service/user.AuthEdgeService`、`internal/repository/user.Repository.SettingByUUID/KeylimitCountSince/UserByID/AccountDeletionExists`、`internal/repository/user.Repository.WithDeletionList`、`internal/handler.UserHandler`。
+- 已迁移：`/delete` 的 Redis hash `delAccountList` 重复注销判断通过 `AuthEdgeDeletionStore.AccountDeletionExists` 隔离，命中时先于用户详情/游客判断返回 `该账号已申请注销，请勿重复操作`。
+- 已迁移：`/delete` 的手机/邮箱验证码失败分支通过 keylimit 只读校验隔离；手机验证码错误返回 `手机验证码不正确`，邮箱验证码错误返回 `邮箱验证码不正确`。
+- 已迁移：`/changePhone` 的 step2 短信验证码失败分支；通过 `sms.<mobi>.<code>` keylimit 只读校验，失败返回 `手机验证码不正确`。
+- 未迁移：`/delete` 的 Redis 注销申请写入和退出登录、`/changePhone` 的加锁查询和事务换绑仍需 Redis/client/DB transaction 设计。
 - Subagent：`Mencius` 核对账号剩余配置、keylimit 和注销分支；主线采纳 settings/keylimit/UserByID 只读分支，暂缓 Redis。
 - 测试：`go test ./internal/service/user ./internal/server` 通过。
 
@@ -1726,3 +1749,24 @@
 
 - `/vod/reqplay/:vodid`、`/vod/reqdown/:vodid` 非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余资产副作用经 `Lorentz`/`Anscombe` 只读核对，涉及用户/游客扣金币、扣费日志、任务奖励、推广奖励、Redis 频控、keylimits 和多处非统一事务；当前不作为普通路由补齐。
 - `/respond/:action` 成功验签/入账经 `Heisenberg` 只读核对，涉及数十个 provider 的 MD5/RSA/raw JSON 验签、缺失密钥配置注入、`trade_payments FOR UPDATE` 锁单、账户入账和 `payment->doAction()` 二段事务；没有安全配置和统一事务接口前不能硬迁成功分支。
+- Respond provider verifier 骨架草稿：`internal/service/respond` 已新增 registry、verifier interface、`shangfu` MD5 form verifier fixture 和 `pay7` query+secret verifier fixture；`internal/handler.RespondHandler.Provider` 只回 provider 文本。当前缺配置、验签失败、验签成功但 accounting disabled 均返回 provider `echoErr()`，绝不返回 OK/SUCCESS，不查询或更新 `trade_payments`，不调用任何入账逻辑。
+
+### 小视频长片 m3u8 裁剪成功分支
+
+- 已迁移：`/minivod/parselong/:vodid/index.m3u8` 成功分支；先复用 `/minivod/reqlong/:vodid` 的记录、播放地址和播放服务器/CDN 签名校验，再读取 `vod_map_ls` 第一条 `start/end`，默认裁剪 `0..60` 秒。
+- PHP: `src/c/api/minivod.php::parseM3u8/getM3U8Content/processM3U8Content`。
+- Go: `internal/handler.MiniVODHandler.ParseLongM3U8`、`internal/service/minivod.Service.ParseLongM3U8`、`internal/repository/minivod.Repository.LongToShortMapByLongID`。
+- 兼容规则：成功返回 HTTP 200 与 `Content-Type: vnd.apple.mpegurl`，body 为纯 m3u8；保留 `#EXTM3U/#EXT-X*`，按 `#EXTINF` 整段裁剪，KEY URI 和 TS 相对地址按子 m3u8 域名补成绝对 URL，并追加 `#EXT-X-ENDLIST`。源 m3u8 拉取失败、无子 m3u8 或子 m3u8 拉取失败时按 PHP 返回空 body，不转 JSON 错误。
+- Subagent：`Galileo` 实现成功分支；`James` 做只读兼容 CR，指出媒体源失败需返回空 m3u8 body，主线已补回归用例。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/handler` 通过。
+
+### Respond 验签骨架与资产 Ledger 草案
+
+- 已迁移：`/respond/:action` provider registry/verifier 骨架；当前接管缺配置、验签失败、验签成功但 accounting disabled 的失败响应路径，并保留各 provider 原 `echoErr()` 文本；`shangfu` 与 `pay7` 已有最小验签 fixture。
+- Go: `internal/handler.RespondHandler.Provider`、`internal/service/respond.Registry/Verifier/MD5FormVerifier`、`internal/config.RespondProviderConfig`。
+- 兼容规则：在未实现锁单入账前，即使验签成功也必须返回 provider 失败文本，绝不返回 `OK/SUCCESS/success`，避免三方停止重试但本地未入账。
+- 已新增：统一资产 ledger 最小接口草案，定义 `CoinLedger/BeanLedger/AccountLedger/IdempotencyStore` 和 `asset.Change`，仅作为后续资产成功路径的事务边界，不接任何现有路由或真实 DB。
+- Go: `internal/domain/asset`、`internal/service/asset`；草稿文档为 `docs/asset-ledger-carver-draft.md`。
+- 阻断：`trade_payments` 锁单、账户入账、`payment->doAction()`、提现冻结、金币/金豆/VIP 成功写入仍必须等真实 ledger repository、幂等表和 outbox 策略落地后再迁。
+- Subagent：`Dewey` 落 respond verifier 骨架；`Euclid` 做 provider 方案 CR；`Copernicus` 落 asset ledger 最小接口；`Carver` 做资产事务基线。
+- 测试：`go test ./internal/service/respond ./internal/handler ./internal/server`、`go test ./internal/domain/asset ./internal/service/asset` 通过。

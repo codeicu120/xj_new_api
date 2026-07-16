@@ -61,7 +61,7 @@ func (h *UserHandler) ForgotV2(c *gin.Context) {
 }
 
 func (h *UserHandler) Delete(c *gin.Context) {
-	retcode, errmsg, err := h.authEdgeService.Delete(c.Request.Context(), authToken(c))
+	retcode, errmsg, err := h.authEdgeService.Delete(c.Request.Context(), authEdgeRequest(c))
 	respondUserEdge(c, retcode, errmsg, err)
 }
 
@@ -82,6 +82,8 @@ func authEdgeRequest(c *gin.Context) userService.AuthEdgeRequest {
 		Email:      inputValue(c, "email"),
 		Username:   inputValue(c, "username"),
 		Password:   inputValue(c, "password"),
+		SMSCode:    inputValue(c, "smscode"),
+		EmailCode:  inputValue(c, "emailcode"),
 		MobiPrefix: inputValue(c, "mobiprefix"),
 		RegType:    regType,
 		LoginType:  loginType,

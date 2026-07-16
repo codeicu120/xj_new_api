@@ -3,6 +3,7 @@ package minivod
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -136,6 +137,20 @@ func (r *Repository) VODByID(ctx context.Context, vodID int) (map[string]interfa
 	return rows[0], nil
 }
 
+func (r *Repository) LongToShortMapByLongID(ctx context.Context, vodID int) (map[string]interface{}, error) {
+	if r.db == nil || vodID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT start,end FROM vod_map_ls WHERE lvodid=? LIMIT 1", vodID)
+	if err != nil {
+		return nil, fmt.Errorf("query long to short map: %w", err)
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
 func (r *Repository) UserByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil
@@ -255,6 +270,19 @@ func (r *Repository) PendingViewLogs(ctx context.Context, uid int, sid string, l
 	return r.queryRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
 }
 
+func (r *Repository) PullViewLogs(ctx context.Context, uid int, sid string) (int, error) {
+	if r.db == nil {
+		return 0, nil
+	}
+	if uid > 0 {
+		return r.pullUserViewLogs(ctx, uid)
+	}
+	if strings.TrimSpace(sid) == "" {
+		return 0, nil
+	}
+	return r.pullGuestViewLogs(ctx, sid)
+}
+
 func (r *Repository) MarkViewLogsShown(ctx context.Context, uid int, sid string, logIDs []int, now int64) error {
 	if r.db == nil || len(logIDs) == 0 {
 		return nil
@@ -289,6 +317,24 @@ func (r *Repository) MarkViewLogsShown(ctx context.Context, uid int, sid string,
 		return fmt.Errorf("mark minivod viewlogs shown: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) MiniVODAdCallRows(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT type,content FROM maintain_calldata WHERE uuid=? AND showtype=0 LIMIT 1", "minivod.ads")
+	if err != nil {
+		return nil, fmt.Errorf("query minivod ads calldata: %w", err)
+	}
+	if len(rows) == 0 || str(rows[0]["type"]) != "rows" || strings.TrimSpace(str(rows[0]["content"])) == "" {
+		return []map[string]interface{}{}, nil
+	}
+	var callRows []map[string]interface{}
+	if err := json.Unmarshal([]byte(str(rows[0]["content"])), &callRows); err != nil {
+		return nil, fmt.Errorf("decode minivod ads calldata: %w", err)
+	}
+	return callRows, nil
 }
 
 func (r *Repository) UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error) {
@@ -593,6 +639,191 @@ func updateReqTime(ctx context.Context, tx *sql.Tx, table string, logid int, now
 	return nil
 }
 
+func (r *Repository) pullUserViewLogs(ctx context.Context, uid int) (int, error) {
+	row, err := r.ensureSublog(ctx, "minivod_sublogs", "uid", uid)
+	if err != nil {
+		return 0, err
+	}
+	return r.pullViewLogsForActor(ctx, miniUserViewLogTable(uid), "uid", uid, row)
+}
+
+func (r *Repository) pullGuestViewLogs(ctx context.Context, sid string) (int, error) {
+	row, err := r.ensureSublog(ctx, "minivod_guestsublogs", "sid", sid)
+	if err != nil {
+		return 0, err
+	}
+	return r.pullViewLogsForActor(ctx, miniGuestViewLogTable(sid), "sid", sid, row)
+}
+
+func (r *Repository) ensureSublog(ctx context.Context, table string, actorColumn string, actor interface{}) (map[string]interface{}, error) {
+	rows, err := r.queryRows(ctx, "SELECT * FROM "+table+" WHERE "+actorColumn+"=? LIMIT 1", actor)
+	if err != nil {
+		return nil, fmt.Errorf("query minivod sublog: %w", err)
+	}
+	if len(rows) > 0 {
+		return rows[0], nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+") VALUES(?)", actor)
+	if err != nil {
+		return nil, fmt.Errorf("create minivod sublog: %w", err)
+	}
+	logID, _ := result.LastInsertId()
+	return map[string]interface{}{"logid": fmt.Sprint(logID), actorColumn: fmt.Sprint(actor)}, nil
+}
+
+func (r *Repository) pullViewLogsForActor(ctx context.Context, viewTable string, actorColumn string, actor interface{}, sublog map[string]interface{}) (int, error) {
+	oldRows, err := r.queryRows(ctx, "SELECT logid,vodid,playtime,downtime FROM "+viewTable+" WHERE "+actorColumn+"=? ORDER BY logid DESC LIMIT 2000", actor)
+	if err != nil {
+		return 0, fmt.Errorf("query existing minivod viewlogs: %w", err)
+	}
+	oldIDs := []int{}
+	oldSet := map[int]struct{}{}
+	minLogID := 0
+	for _, row := range oldRows {
+		vodID := atoi(row["vodid"])
+		if vodID > 0 {
+			oldIDs = append(oldIDs, vodID)
+			oldSet[vodID] = struct{}{}
+		}
+		logID := atoi(row["logid"])
+		if logID > 0 && (minLogID == 0 || logID < minLogID) {
+			minLogID = logID
+		}
+	}
+	if len(oldRows) >= 2000 && minLogID > 0 {
+		daytime := dayStartUnix(time.Now)
+		_, err := r.db.ExecContext(ctx, "DELETE FROM "+viewTable+" WHERE "+actorColumn+"=? AND logid<? AND playtime<? AND downtime<?", actor, minLogID, daytime, daytime)
+		if err != nil {
+			return 0, fmt.Errorf("prune minivod viewlogs: %w", err)
+		}
+	}
+
+	newIDs := []int{}
+	newSet := map[int]struct{}{}
+	addNew := func(ids []int) {
+		for _, id := range ids {
+			if id <= 0 {
+				continue
+			}
+			if _, ok := oldSet[id]; ok {
+				continue
+			}
+			if _, ok := newSet[id]; ok {
+				continue
+			}
+			newSet[id] = struct{}{}
+			newIDs = append(newIDs, id)
+		}
+	}
+
+	tagIDs := append(csvIDs(str(sublog["tagid_news"])), hotIDs(str(sublog["tagid_hots"]))...)
+	tagVODIDs, err := r.vodIDsByTags(ctx, tagIDs)
+	if err != nil {
+		return 0, err
+	}
+	addNew(tagVODIDs)
+
+	authorIDs := append(csvIDs(str(sublog["authorid_news"])), hotIDs(str(sublog["authorid_hots"]))...)
+	authorVODIDs, err := r.vodIDsByAuthors(ctx, authorIDs)
+	if err != nil {
+		return 0, err
+	}
+	addNew(authorVODIDs)
+
+	if len(newIDs) < 500 {
+		latestIDs, err := r.latestMiniVODIDsAfter(ctx, maxInt(oldIDs))
+		if err != nil {
+			return 0, err
+		}
+		addNew(latestIDs)
+	}
+	if len(newIDs) < 500 {
+		fallbackIDs, err := r.miniVODIDsExcept(ctx, oldIDs)
+		if err != nil {
+			return 0, err
+		}
+		addNew(fallbackIDs)
+	}
+	return r.insertViewLogs(ctx, viewTable, actorColumn, actor, newIDs)
+}
+
+func (r *Repository) vodIDsByTags(ctx context.Context, tagIDs []int) ([]int, error) {
+	if len(tagIDs) == 0 {
+		return []int{}, nil
+	}
+	tagRows, err := r.queryRows(ctx, "SELECT vodid FROM vod_tagmaps WHERE tagid IN("+intListSQL(tagIDs)+") ORDER BY vodid DESC LIMIT 500")
+	if err != nil {
+		return nil, fmt.Errorf("query minivod tag maps: %w", err)
+	}
+	candidateIDs := rowIDs(tagRows, "vodid")
+	if len(candidateIDs) == 0 {
+		return []int{}, nil
+	}
+	vodRows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE vodid IN("+intListSQL(candidateIDs)+") AND showtype=1 AND isvip=0")
+	if err != nil {
+		return nil, fmt.Errorf("query minivod tag vods: %w", err)
+	}
+	return rowIDs(vodRows, "vodid"), nil
+}
+
+func (r *Repository) vodIDsByAuthors(ctx context.Context, authorIDs []int) ([]int, error) {
+	if len(authorIDs) == 0 {
+		return []int{}, nil
+	}
+	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE authorid IN("+intListSQL(authorIDs)+") AND showtype=1 AND isvip=0 ORDER BY vodid DESC LIMIT 500")
+	if err != nil {
+		return nil, fmt.Errorf("query minivod author vods: %w", err)
+	}
+	return rowIDs(rows, "vodid"), nil
+}
+
+func (r *Repository) latestMiniVODIDsAfter(ctx context.Context, maxVODID int) ([]int, error) {
+	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE vodid>? AND showtype=1 AND isvip=0 ORDER BY vodid ASC LIMIT 500", maxVODID)
+	if err != nil {
+		return nil, fmt.Errorf("query latest minivods: %w", err)
+	}
+	return rowIDs(rows, "vodid"), nil
+}
+
+func (r *Repository) miniVODIDsExcept(ctx context.Context, oldIDs []int) ([]int, error) {
+	where := "showtype=1 AND isvip=0"
+	if len(oldIDs) > 0 {
+		where += " AND vodid NOT IN(" + intListSQL(oldIDs) + ")"
+	}
+	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE "+where+" LIMIT 500")
+	if err != nil {
+		return nil, fmt.Errorf("query fallback minivods: %w", err)
+	}
+	return rowIDs(rows, "vodid"), nil
+}
+
+func (r *Repository) insertViewLogs(ctx context.Context, table string, actorColumn string, actor interface{}, vodIDs []int) (int, error) {
+	if len(vodIDs) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, 0, len(vodIDs))
+	args := make([]interface{}, 0, len(vodIDs)*2)
+	for _, vodID := range vodIDs {
+		if vodID <= 0 {
+			continue
+		}
+		placeholders = append(placeholders, "(?,?)")
+		args = append(args, actor, vodID)
+	}
+	if len(placeholders) == 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+",vodid) VALUES "+strings.Join(placeholders, ","), args...)
+	if err != nil {
+		return 0, fmt.Errorf("insert minivod viewlogs: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("insert minivod viewlogs affected: %w", err)
+	}
+	return int(affected), nil
+}
+
 func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -773,10 +1004,69 @@ func miniGuestViewLogTable(sid string) string {
 	return "minivod_guestviewlogs_" + suffix
 }
 
+func rowIDs(rows []map[string]interface{}, key string) []int {
+	ids := []int{}
+	seen := map[int]struct{}{}
+	for _, row := range rows {
+		id := atoi(row[key])
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func csvIDs(value string) []int {
+	rows := []map[string]interface{}{}
+	for _, part := range strings.Split(value, ",") {
+		rows = append(rows, map[string]interface{}{"id": strings.TrimSpace(part)})
+	}
+	return rowIDs(rows, "id")
+}
+
+func hotIDs(value string) []int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return []int{}
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal([]byte(value), &rows); err != nil {
+		return []int{}
+	}
+	return rowIDs(rows, "id")
+}
+
+func maxInt(values []int) int {
+	max := 0
+	for _, value := range values {
+		if value > max {
+			max = value
+		}
+	}
+	return max
+}
+
+func dayStartUnix(now func() time.Time) int64 {
+	t := now()
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).Unix()
+}
+
 func atoi(value interface{}) int {
 	var n int
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
+}
+
+func str(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }
 
 func intListSQL(ids []int) string {

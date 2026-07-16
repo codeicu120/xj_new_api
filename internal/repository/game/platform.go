@@ -97,6 +97,27 @@ func (r *PlatformRepository) PlatformByID(ctx context.Context, id int) (map[stri
 	return items[0], nil
 }
 
+func (r *PlatformRepository) PlatformBySlug(ctx context.Context, slug string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(slug) == "" {
+		return map[string]interface{}{}, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx, "SELECT id,name,slug,status,json AS config_json FROM game_platform WHERE slug=?", slug)
+	if err != nil {
+		return nil, fmt.Errorf("query game platform by slug: %w", err)
+	}
+	defer rows.Close()
+
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
 func (r *PlatformRepository) Setting(ctx context.Context, key string) (string, error) {
 	if r.db == nil || strings.TrimSpace(key) == "" {
 		return "", nil
@@ -128,6 +149,50 @@ func (r *PlatformRepository) Quota(ctx context.Context, uid int) (map[string]int
 		return map[string]interface{}{}, nil
 	}
 	return items[0], nil
+}
+
+func (r *PlatformRepository) GameHistoryByUniqueKey(ctx context.Context, uid int, platformID int, gameID int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 || platformID <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT * FROM game_history WHERE uid=? AND platform_id=? AND game_id=?", uid, platformID, gameID)
+	if err != nil {
+		return nil, fmt.Errorf("query game history: %w", err)
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
+}
+
+func (r *PlatformRepository) DeleteGameHistory(ctx context.Context, id int) error {
+	if r.db == nil || id <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "DELETE FROM game_history WHERE id IN(?)", id); err != nil {
+		return fmt.Errorf("delete game history: %w", err)
+	}
+	return nil
+}
+
+func (r *PlatformRepository) SaveGameHistory(ctx context.Context, uid int, platformID int, gameID int) (int, error) {
+	if r.db == nil || uid <= 0 || platformID <= 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO game_history(uid,platform_id,game_id) VALUES(?,?,?)", uid, platformID, gameID)
+	if err != nil {
+		return 0, fmt.Errorf("insert game history: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("read game history id: %w", err)
+	}
+	return int(id), nil
 }
 
 func (r *GameRepository) ListActive(ctx context.Context, platformID int, categoryID int) ([]map[string]interface{}, error) {

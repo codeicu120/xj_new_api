@@ -23,6 +23,10 @@ func (s ucpStore) UserByID(ctx context.Context, uid int) (map[string]interface{}
 	return s.user.UserByID(ctx, uid)
 }
 
+func (s ucpStore) UserByEmail(ctx context.Context, email string) (map[string]interface{}, error) {
+	return s.ucp.UserByEmail(ctx, email)
+}
+
 func (s ucpStore) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	return s.user.BotByID(ctx, uid)
 }
@@ -73,6 +77,10 @@ func (s ucpStore) RollTitles(ctx context.Context) ([]map[string]interface{}, err
 
 func (s ucpStore) Posters(ctx context.Context) ([]map[string]interface{}, error) {
 	return s.ucp.Posters(ctx)
+}
+
+func (s ucpStore) Nicknames(ctx context.Context) ([]map[string]interface{}, error) {
+	return s.ucp.Nicknames(ctx)
 }
 
 func (s ucpStore) Taskboxes(ctx context.Context) ([]map[string]interface{}, error) {
@@ -309,6 +317,14 @@ func (s ucpStore) SettingByUUID(ctx context.Context, uuid string) (map[string]in
 
 func (s ucpStore) CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error) {
 	return s.index.CalldataByUUID(ctx, uuid)
+}
+
+func (s ucpStore) KeylimitCountSince(ctx context.Context, key string, since int64) (int, error) {
+	return s.ucp.KeylimitCountSince(ctx, key, since)
+}
+
+func (s ucpStore) KeylimitDataSince(ctx context.Context, key string, since int64) (string, error) {
+	return s.ucp.KeylimitDataSince(ctx, key, since)
 }
 
 func (s ucpStore) PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error) {

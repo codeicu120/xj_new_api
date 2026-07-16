@@ -6,16 +6,27 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Repository struct {
-	db *sql.DB
+	db           *sql.DB
+	deletionList RedisHashStore
+}
+
+type RedisHashStore interface {
+	HExists(ctx context.Context, key string, field string) (bool, error)
 }
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) WithDeletionList(store RedisHashStore) *Repository {
+	r.deletionList = store
+	return r
 }
 
 func (r *Repository) UserBySession(ctx context.Context, sid string) (map[string]interface{}, error) {
@@ -143,6 +154,17 @@ func (r *Repository) KeylimitCountSince(ctx context.Context, key string, since i
 		return 0, nil
 	}
 	return int(total.Int64), nil
+}
+
+func (r *Repository) AccountDeletionExists(ctx context.Context, uid int) (bool, error) {
+	if r.deletionList == nil || uid <= 0 {
+		return false, nil
+	}
+	exists, err := r.deletionList.HExists(ctx, "delAccountList", strconv.Itoa(uid))
+	if err != nil {
+		return false, fmt.Errorf("query account deletion list: %w", err)
+	}
+	return exists, nil
 }
 
 func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {

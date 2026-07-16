@@ -14,6 +14,7 @@ type fakeAuthEdgeStore struct {
 	byUser    map[string]interface{}
 	settings  map[string]map[string]interface{}
 	keyCounts map[string]int
+	delExists map[int]bool
 }
 
 func (s fakeAuthEdgeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -48,6 +49,13 @@ func (s fakeAuthEdgeStore) KeylimitCountSince(_ context.Context, key string, _ i
 		return s.keyCounts[key], nil
 	}
 	return 0, nil
+}
+
+func (s fakeAuthEdgeStore) AccountDeletionExists(_ context.Context, uid int) (bool, error) {
+	if s.delExists != nil {
+		return s.delExists[uid], nil
+	}
+	return false, nil
 }
 
 func TestRegisterEdgeBranches(t *testing.T) {
@@ -248,10 +256,97 @@ func TestForgotEdgeBranches(t *testing.T) {
 	}
 }
 
+func TestForgotStep2VerificationCodeBranches(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{byMobi: map[string]interface{}{"uid": "9"}})
+
+	retcode, errmsg, err := service.Forgot(context.Background(), AuthEdgeRequest{
+		Mobi:    "13800138000",
+		Step:    "step2",
+		SMSCode: "bad",
+	}, false)
+	if err != nil {
+		t.Fatalf("v1 forgot step2 sms code: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机验证码不正确" {
+		t.Fatalf("unexpected v1 sms code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{
+		byMobi:    map[string]interface{}{"uid": "9"},
+		keyCounts: map[string]int{"sms.86.13800138000.ok": 1},
+	})
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Mobi:    "13800138000",
+		Step:    "step2",
+		SMSCode: "ok",
+	}, false)
+	if err != nil {
+		t.Fatalf("v1 forgot valid step2 sms code: %v", err)
+	}
+	if retcode != 0 || errmsg != "step2->step3" {
+		t.Fatalf("unexpected v1 valid sms code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byMobi: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Mobi:    "13900139000",
+		Step:    "step2",
+		SMSCode: "bad",
+	}, true)
+	if err != nil {
+		t.Fatalf("v2 forgot mobile step2 sms code: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机验证码不正确" {
+		t.Fatalf("unexpected v2 mobile sms code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{byEmail: map[string]interface{}{"uid": "9"}})
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Email:     "ok@example.com",
+		Step:      "step2",
+		EmailCode: "bad",
+	}, true)
+	if err != nil {
+		t.Fatalf("v2 forgot email step2 email code: %v", err)
+	}
+	if retcode != -1 || errmsg != "邮箱验证码不正确" {
+		t.Fatalf("unexpected v2 email code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{
+		byEmail:   map[string]interface{}{"uid": "9"},
+		keyCounts: map[string]int{"email.ok@example.com.smsfallback": 1},
+	})
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Email:   "ok@example.com",
+		Step:    "step2",
+		SMSCode: "smsfallback",
+	}, true)
+	if err != nil {
+		t.Fatalf("v2 forgot email step2 sms fallback: %v", err)
+	}
+	if retcode != 0 || errmsg != "step2->step3" {
+		t.Fatalf("unexpected v2 email fallback response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{})
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Mobi:    "13800138000",
+		Step:    "step2",
+		SMSCode: "ok",
+	}, false)
+	if err != nil {
+		t.Fatalf("v1 forgot missing mobile step2: %v", err)
+	}
+	if retcode != -1 || errmsg != "输入的手机号码不存在" {
+		t.Fatalf("unexpected v1 missing mobile response %d %q", retcode, errmsg)
+	}
+}
+
 func TestDeleteAndChangePhoneRequireLogin(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{})
 
-	retcode, errmsg, err := service.Delete(context.Background(), "")
+	retcode, errmsg, err := service.Delete(context.Background(), AuthEdgeRequest{})
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -274,12 +369,73 @@ func TestDeleteGuestAccountBranch(t *testing.T) {
 		byID: map[string]interface{}{"uid": "7", "mobi": "~86.abc", "email": "~abc"},
 	})
 
-	retcode, errmsg, err := service.Delete(context.Background(), "250f790ba71ec2b9d3855f424db2259e")
+	retcode, errmsg, err := service.Delete(context.Background(), AuthEdgeRequest{Token: "250f790ba71ec2b9d3855f424db2259e"})
 	if err != nil {
 		t.Fatalf("delete guest: %v", err)
 	}
 	if retcode != -1 || errmsg != "游客账号无需注销" {
 		t.Fatalf("unexpected guest delete response %d %q", retcode, errmsg)
+	}
+}
+
+func TestDeleteDuplicateAccountDeletionBranch(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{
+		user:      map[string]interface{}{"uid": "7"},
+		byID:      map[string]interface{}{"uid": "7", "mobi": "~86.abc", "email": "~abc"},
+		delExists: map[int]bool{7: true},
+	})
+
+	retcode, errmsg, err := service.Delete(context.Background(), AuthEdgeRequest{Token: "250f790ba71ec2b9d3855f424db2259e"})
+	if err != nil {
+		t.Fatalf("delete duplicate: %v", err)
+	}
+	if retcode != -1 || errmsg != "该账号已申请注销，请勿重复操作" {
+		t.Fatalf("unexpected duplicate delete response %d %q", retcode, errmsg)
+	}
+}
+
+func TestDeleteVerificationCodeBranches(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{
+		user: map[string]interface{}{"uid": "7"},
+		byID: map[string]interface{}{"uid": "7", "mobi": "86.13800138000", "email": "~abc"},
+	})
+
+	retcode, errmsg, err := service.Delete(context.Background(), AuthEdgeRequest{
+		Token:   "250f790ba71ec2b9d3855f424db2259e",
+		SMSCode: "bad",
+	})
+	if err != nil {
+		t.Fatalf("delete sms code: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机验证码不正确" {
+		t.Fatalf("unexpected sms code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{
+		user:      map[string]interface{}{"uid": "7"},
+		byID:      map[string]interface{}{"uid": "7", "mobi": "~mobi", "email": "person@example.com"},
+		keyCounts: map[string]int{"email.person@example.com.ok": 1},
+	})
+	retcode, errmsg, err = service.Delete(context.Background(), AuthEdgeRequest{
+		Token:     "250f790ba71ec2b9d3855f424db2259e",
+		EmailCode: "bad",
+	})
+	if err != nil {
+		t.Fatalf("delete email code: %v", err)
+	}
+	if retcode != -1 || errmsg != "邮箱验证码不正确" {
+		t.Fatalf("unexpected email code response %d %q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.Delete(context.Background(), AuthEdgeRequest{
+		Token:     "250f790ba71ec2b9d3855f424db2259e",
+		EmailCode: "ok",
+	})
+	if err != nil {
+		t.Fatalf("delete valid email code: %v", err)
+	}
+	if retcode != -1 || errmsg != "账号注销成功分支暂未迁移" {
+		t.Fatalf("unexpected valid email code response %d %q", retcode, errmsg)
 	}
 }
 
@@ -309,5 +465,39 @@ func TestChangePhoneStep1ReadOnlyBranches(t *testing.T) {
 	}
 	if retcode != 0 || errmsg != "step1->step2" {
 		t.Fatalf("unexpected step1 response %d %q", retcode, errmsg)
+	}
+}
+
+func TestChangePhoneStep2VerificationCodeBranch(t *testing.T) {
+	service := NewAuthEdgeService(fakeAuthEdgeStore{user: map[string]interface{}{"uid": "7", "mobi": "86.13800138000"}})
+
+	retcode, errmsg, err := service.ChangePhone(context.Background(), AuthEdgeRequest{
+		Token:   "250f790ba71ec2b9d3855f424db2259e",
+		Mobi:    "13900139000",
+		Step:    "step2",
+		SMSCode: "bad",
+	})
+	if err != nil {
+		t.Fatalf("step2 sms code: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机验证码不正确" {
+		t.Fatalf("unexpected step2 sms code response %d %q", retcode, errmsg)
+	}
+
+	service = NewAuthEdgeService(fakeAuthEdgeStore{
+		user:      map[string]interface{}{"uid": "7", "mobi": "86.13800138000"},
+		keyCounts: map[string]int{"sms.86.13900139000.ok": 1},
+	})
+	retcode, errmsg, err = service.ChangePhone(context.Background(), AuthEdgeRequest{
+		Token:   "250f790ba71ec2b9d3855f424db2259e",
+		Mobi:    "13900139000",
+		Step:    "step2",
+		SMSCode: "ok",
+	})
+	if err != nil {
+		t.Fatalf("step2 valid sms code: %v", err)
+	}
+	if retcode != -1 || errmsg != "手机号更换成功分支暂未迁移" {
+		t.Fatalf("unexpected step2 valid sms code response %d %q", retcode, errmsg)
 	}
 }

@@ -27,6 +27,10 @@ type AuthEdgePolicyStore interface {
 	KeylimitCountSince(ctx context.Context, key string, since int64) (int, error)
 }
 
+type AuthEdgeDeletionStore interface {
+	AccountDeletionExists(ctx context.Context, uid int) (bool, error)
+}
+
 type AuthEdgeService struct {
 	store AuthEdgeStore
 	now   func() time.Time
@@ -42,6 +46,8 @@ type AuthEdgeRequest struct {
 	Email      string
 	Username   string
 	Password   string
+	SMSCode    string
+	EmailCode  string
 	MobiPrefix string
 	RegType    int
 	LoginType  int
@@ -169,7 +175,7 @@ func (s *AuthEdgeService) Forgot(ctx context.Context, req AuthEdgeRequest, v2 bo
 	if strings.TrimSpace(req.Step) == "" {
 		return -1, "无效的操作", nil
 	}
-	if req.Step == "step1" {
+	if req.Step == "step1" || req.Step == "step2" {
 		row, err := s.lookupForgotUser(ctx, req, v2)
 		if err != nil {
 			return -1, "密码重置失败", err
@@ -180,25 +186,61 @@ func (s *AuthEdgeService) Forgot(ctx context.Context, req AuthEdgeRequest, v2 bo
 			}
 			return -1, "输入的手机号码不存在", nil
 		}
-		return 0, "step1->step2", nil
+		if req.Step == "step1" {
+			return 0, "step1->step2", nil
+		}
+		key, errmsg := forgotVerificationKey(req, v2)
+		ok, err := s.verificationCodeValid(ctx, key, 600)
+		if err != nil {
+			return -1, "密码重置失败", err
+		}
+		if !ok {
+			return -1, errmsg, nil
+		}
+		return 0, "step2->step3", nil
 	}
 	return -1, "密码重置成功分支暂未迁移", nil
 }
 
-func (s *AuthEdgeService) Delete(ctx context.Context, token string) (int, string, error) {
-	user, err := s.userByToken(ctx, token)
+func (s *AuthEdgeService) Delete(ctx context.Context, req AuthEdgeRequest) (int, string, error) {
+	user, err := s.userByToken(ctx, req.Token)
 	if err != nil {
 		return -9999, "您还没有登录", err
 	}
 	if atoi(user["uid"]) == 0 {
 		return -9999, "您还没有登录", nil
 	}
-	row, err := s.lookupUserByID(ctx, atoi(user["uid"]))
+	uid := atoi(user["uid"])
+	exists, err := s.accountDeletionExists(ctx, uid)
+	if err != nil {
+		return -1, "账号注销失败", err
+	}
+	if exists {
+		return -1, "该账号已申请注销，请勿重复操作", nil
+	}
+	row, err := s.lookupUserByID(ctx, uid)
 	if err != nil {
 		return -1, "账号注销失败", err
 	}
 	if isGuestAccount(row) {
 		return -1, "游客账号无需注销", nil
+	}
+	if !strings.HasPrefix(str(row["mobi"]), "~") {
+		ok, err := s.verificationCodeValid(ctx, "sms."+str(row["mobi"])+"."+strings.TrimSpace(req.SMSCode), 600)
+		if err != nil {
+			return -1, "账号注销失败", err
+		}
+		if !ok {
+			return -1, "手机验证码不正确", nil
+		}
+	} else {
+		ok, err := s.verificationCodeValid(ctx, "email."+str(row["email"])+"."+strings.TrimSpace(req.EmailCode), 600)
+		if err != nil {
+			return -1, "账号注销失败", err
+		}
+		if !ok {
+			return -1, "邮箱验证码不正确", nil
+		}
 	}
 	return -1, "账号注销成功分支暂未迁移", nil
 }
@@ -231,6 +273,13 @@ func (s *AuthEdgeService) ChangePhone(ctx context.Context, req AuthEdgeRequest) 
 	if req.Step == "step1" {
 		return 0, "step1->step2", nil
 	}
+	ok, err := s.verificationCodeValid(ctx, "sms."+mobi+"."+strings.TrimSpace(req.SMSCode), 600)
+	if err != nil {
+		return -1, "手机号更换失败", err
+	}
+	if !ok {
+		return -1, "手机验证码不正确", nil
+	}
 	return -1, "手机号更换成功分支暂未迁移", nil
 }
 
@@ -255,6 +304,14 @@ func (s *AuthEdgeService) lookupUserByID(ctx context.Context, uid int) (map[stri
 		row = map[string]interface{}{}
 	}
 	return row, err
+}
+
+func (s *AuthEdgeService) accountDeletionExists(ctx context.Context, uid int) (bool, error) {
+	store, ok := s.store.(AuthEdgeDeletionStore)
+	if !ok || store == nil || uid <= 0 {
+		return false, nil
+	}
+	return store.AccountDeletionExists(ctx, uid)
 }
 
 func (s *AuthEdgeService) registrationClosed(ctx context.Context) (bool, error) {
@@ -316,6 +373,14 @@ func (s *AuthEdgeService) keylimitCount(ctx context.Context, key string, seconds
 	}
 	since := s.now().Unix() - seconds
 	return policy.KeylimitCountSince(ctx, key, since)
+}
+
+func (s *AuthEdgeService) verificationCodeValid(ctx context.Context, key string, seconds int64) (bool, error) {
+	count, err := s.keylimitCount(ctx, key, seconds)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func parsePHPSerializedMap(value string) map[string]interface{} {
@@ -410,6 +475,17 @@ func (s *AuthEdgeService) lookupForgotUser(ctx context.Context, req AuthEdgeRequ
 		return s.lookupEmail(ctx, strings.TrimSpace(req.Email))
 	}
 	return s.lookupMobi(ctx, normalizedMobi(req.MobiPrefix, req.Mobi))
+}
+
+func forgotVerificationKey(req AuthEdgeRequest, v2 bool) (string, string) {
+	if v2 && strings.TrimSpace(req.Email) != "" && strings.TrimSpace(req.Mobi) == "" {
+		code := strings.TrimSpace(req.EmailCode)
+		if code == "" {
+			code = strings.TrimSpace(req.SMSCode)
+		}
+		return "email." + strings.TrimSpace(req.Email) + "." + code, "邮箱验证码不正确"
+	}
+	return "sms." + normalizedMobi(req.MobiPrefix, req.Mobi) + "." + strings.TrimSpace(req.SMSCode), "手机验证码不正确"
 }
 
 func (s *AuthEdgeService) lookupMobi(ctx context.Context, mobi string) (map[string]interface{}, error) {

@@ -18,11 +18,46 @@ type Chan1Store interface {
 }
 
 type Service struct {
-	store Chan1Store
+	store    Chan1Store
+	registry *Registry
 }
 
-func NewService(store Chan1Store) *Service {
-	return &Service{store: store}
+type Option func(*Service)
+
+func NewService(store Chan1Store, opts ...Option) *Service {
+	service := &Service{store: store, registry: NewRegistry()}
+	for _, opt := range opts {
+		opt(service)
+	}
+	return service
+}
+
+func WithRegistry(registry *Registry) Option {
+	return func(s *Service) {
+		if registry != nil {
+			s.registry = registry
+		}
+	}
+}
+
+func (s *Service) VerifyProvider(ctx context.Context, req CallbackRequest, fallbackEchoErr string) VerificationResult {
+	provider, ok := s.registry.Provider(req.Action)
+	if !ok || provider.Verifier == nil {
+		return VerificationResult{Echo: fallbackEchoErr, Reason: ErrMissingConfig}
+	}
+	if provider.EchoErr == "" {
+		provider.EchoErr = fallbackEchoErr
+	}
+	if provider.EchoErr == "" {
+		provider.EchoErr = "failed"
+	}
+	if _, err := provider.Verifier.Verify(ctx, req); err != nil {
+		return VerificationResult{Echo: provider.EchoErr, Reason: err}
+	}
+	if !provider.AccountingEnabled {
+		return VerificationResult{Echo: provider.EchoErr, Reason: ErrAccountingDisabled}
+	}
+	return VerificationResult{Echo: provider.EchoErr, Reason: ErrAccountingDisabled}
 }
 
 func (s *Service) Chan1(ctx context.Context, mobi string) (int, string, error) {

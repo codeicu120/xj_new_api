@@ -10,52 +10,75 @@ import (
 )
 
 type fakeUserStore struct {
-	user               map[string]interface{}
-	guest              map[string]interface{}
-	account            map[string]interface{}
-	quota              map[string]interface{}
-	missingGuest       bool
-	coinLogTypes       []int
-	coinLogOrderBy     string
-	countCoinLogSince  *int
-	countCoinLogTypes  []int
-	countCoinLogResult int
-	coinBonusStats     map[string]interface{}
-	feedbackRow        map[string]interface{}
-	feedbackSinceCount int
-	createdFeedback    *domain.FeedbackCreateInput
-	paymentRow         map[string]interface{}
-	attachRows         []map[string]interface{}
-	posters            []map[string]interface{}
-	taskboxes          []map[string]interface{}
-	taskboxRow         map[string]interface{}
-	taskboxLog         map[string]interface{}
-	taskboxLogs        []map[string]interface{}
-	bankcards          []map[string]interface{}
-	bankcardRow        map[string]interface{}
-	createdBankcard    map[string]interface{}
-	updatedBankcard    map[string]interface{}
-	deletedBankcard    map[string]interface{}
-	defaultBankcard    map[string]interface{}
-	banks              []map[string]interface{}
-	settings           map[string]map[string]interface{}
-	calldata           map[string]map[string]interface{}
-	packages           []map[string]interface{}
-	packageRow         map[string]interface{}
-	payments           []map[string]interface{}
-	withdraws          []map[string]interface{}
-	withdrawTotal      int
-	withdrawSinceCount *int
-	exrate             *int
-	vodOrders          []map[string]interface{}
-	vodOrderRow        map[string]interface{}
-	vodSupports        []map[string]interface{}
-	latestVODIssue     map[string]interface{}
-	maxVODSupport      map[string]interface{}
-	myVODSupportCoins  int
-	userByID           map[string]interface{}
-	botByID            map[string]interface{}
-	sentMessage        map[string]interface{}
+	user                map[string]interface{}
+	guest               map[string]interface{}
+	account             map[string]interface{}
+	quota               map[string]interface{}
+	missingGuest        bool
+	coinLogTypes        []int
+	coinLogOrderBy      string
+	countCoinLogSince   *int
+	countCoinLogTypes   []int
+	countCoinLogResult  int
+	coinBonusStats      map[string]interface{}
+	feedbackRow         map[string]interface{}
+	feedbackSinceCount  int
+	createdFeedback     *domain.FeedbackCreateInput
+	paymentRow          map[string]interface{}
+	attachRows          []map[string]interface{}
+	posters             []map[string]interface{}
+	nicknames           []map[string]interface{}
+	taskboxes           []map[string]interface{}
+	taskboxRow          map[string]interface{}
+	taskboxLog          map[string]interface{}
+	taskboxLogs         []map[string]interface{}
+	bankcards           []map[string]interface{}
+	bankcardRow         map[string]interface{}
+	createdBankcard     map[string]interface{}
+	updatedBankcard     map[string]interface{}
+	deletedBankcard     map[string]interface{}
+	defaultBankcard     map[string]interface{}
+	banks               []map[string]interface{}
+	settings            map[string]map[string]interface{}
+	calldata            map[string]map[string]interface{}
+	packages            []map[string]interface{}
+	packageRow          map[string]interface{}
+	payments            []map[string]interface{}
+	withdraws           []map[string]interface{}
+	withdrawTotal       int
+	withdrawSinceCount  *int
+	exrate              *int
+	vodOrders           []map[string]interface{}
+	vodOrderRow         map[string]interface{}
+	vodSupports         []map[string]interface{}
+	latestVODIssue      map[string]interface{}
+	maxVODSupport       map[string]interface{}
+	myVODSupportCoins   int
+	userByID            map[string]interface{}
+	userByEmail         map[string]interface{}
+	userByMobi          map[string]interface{}
+	keylimitCounts      map[string]int
+	keylimitTotalCounts map[string]int
+	keylimitData        map[string]string
+	botByID             map[string]interface{}
+	sentMessage         map[string]interface{}
+}
+
+type fakeQRCodeRenderer struct {
+	content string
+	body    []byte
+	err     error
+}
+
+func (r *fakeQRCodeRenderer) PNG(content string) ([]byte, error) {
+	r.content = content
+	if r.err != nil {
+		return nil, r.err
+	}
+	if r.body != nil {
+		return r.body, nil
+	}
+	return []byte("png-body"), nil
 }
 
 func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -102,6 +125,10 @@ func (s fakeUserStore) RollTitles(context.Context) ([]map[string]interface{}, er
 
 func (s fakeUserStore) Posters(context.Context) ([]map[string]interface{}, error) {
 	return s.posters, nil
+}
+
+func (s fakeUserStore) Nicknames(context.Context) ([]map[string]interface{}, error) {
+	return s.nicknames, nil
 }
 
 func (s fakeUserStore) Taskboxes(context.Context) ([]map[string]interface{}, error) {
@@ -400,6 +427,20 @@ func (s fakeUserStore) UserByID(context.Context, int) (map[string]interface{}, e
 	return map[string]interface{}{"uid": "7", "username": "peer"}, nil
 }
 
+func (s fakeUserStore) UserByEmail(context.Context, string) (map[string]interface{}, error) {
+	if s.userByEmail != nil {
+		return s.userByEmail, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) UserByMobi(context.Context, string) (map[string]interface{}, error) {
+	if s.userByMobi != nil {
+		return s.userByMobi, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
 func (s fakeUserStore) BotByID(context.Context, int) (map[string]interface{}, error) {
 	if s.botByID != nil {
 		return s.botByID, nil
@@ -648,6 +689,23 @@ func (s fakeUserStore) CalldataByUUID(_ context.Context, uuid string) (map[strin
 	return map[string]interface{}{}, nil
 }
 
+func (s fakeUserStore) KeylimitCountSince(_ context.Context, key string, since int64) (int, error) {
+	if since == 0 && s.keylimitTotalCounts != nil {
+		return s.keylimitTotalCounts[key], nil
+	}
+	if s.keylimitCounts != nil {
+		return s.keylimitCounts[key], nil
+	}
+	return 0, nil
+}
+
+func (s fakeUserStore) KeylimitDataSince(_ context.Context, key string, _ int64) (string, error) {
+	if s.keylimitData != nil {
+		return s.keylimitData[key], nil
+	}
+	return "", nil
+}
+
 func (s fakeUserStore) PackageRows(context.Context, string) ([]map[string]interface{}, error) {
 	return s.packages, nil
 }
@@ -878,10 +936,125 @@ func TestTaskboxOpenEdgePrechecks(t *testing.T) {
 	}
 }
 
+func TestTaskboxOpenEdgeMysteryTaskFailures(t *testing.T) {
+	cases := []struct {
+		name    string
+		taskRow map[string]interface{}
+		logRow  map[string]interface{}
+		now     time.Time
+		errmsg  string
+	}{
+		{
+			name:    "daily not started",
+			taskRow: map[string]interface{}{"taskid": "1022", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			now:     time.Date(2026, 7, 15, 21, 59, 59, 0, time.UTC),
+			errmsg:  "每日神秘宝箱领取时间未开始",
+		},
+		{
+			name:    "daily ended",
+			taskRow: map[string]interface{}{"taskid": "1022", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			now:     time.Date(2026, 7, 15, 22, 5, 0, 0, time.UTC),
+			errmsg:  "每日神秘宝箱领取时间已结束",
+		},
+		{
+			name:    "daily claimed",
+			taskRow: map[string]interface{}{"taskid": "1022", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			logRow:  map[string]interface{}{"logid": "1"},
+			now:     time.Date(2026, 7, 15, 22, 1, 0, 0, time.UTC),
+			errmsg:  "每日神秘宝箱已领过了",
+		},
+		{
+			name:    "weekly not saturday",
+			taskRow: map[string]interface{}{"taskid": "1622", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			now:     time.Date(2026, 7, 15, 22, 1, 0, 0, time.UTC),
+			errmsg:  "每周神秘宝箱周六晚开始",
+		},
+		{
+			name:    "weekly not started",
+			taskRow: map[string]interface{}{"taskid": "1622", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			now:     time.Date(2026, 7, 18, 21, 59, 59, 0, time.UTC),
+			errmsg:  "每周神秘宝箱领取时间未开始",
+		},
+		{
+			name:    "weekly ended",
+			taskRow: map[string]interface{}{"taskid": "1622", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			now:     time.Date(2026, 7, 18, 22, 5, 0, 0, time.UTC),
+			errmsg:  "每周神秘宝箱领取时间已结束",
+		},
+		{
+			name:    "weekly claimed",
+			taskRow: map[string]interface{}{"taskid": "1622", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+			logRow:  map[string]interface{}{"logid": "1"},
+			now:     time.Date(2026, 7, 18, 22, 1, 0, 0, time.UTC),
+			errmsg:  "每周神秘宝箱已领过了",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewService(fakeUserStore{
+				user:       map[string]interface{}{"uid": "5"},
+				taskboxRow: tt.taskRow,
+				taskboxLog: tt.logRow,
+			}, "https://res.example.test")
+			service.now = func() time.Time { return tt.now }
+
+			retcode, errmsg, err := service.TaskboxOpenEdge(context.Background(), "token", atoi(tt.taskRow["taskid"]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if retcode != -1 || errmsg != tt.errmsg {
+				t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+			}
+		})
+	}
+}
+
+func TestTaskboxOpenEdgePromotionTaskFailures(t *testing.T) {
+	service := NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		taskboxRow: map[string]interface{}{"taskid": "3", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+		taskboxLog: map[string]interface{}{"logid": "1"},
+		userByID:   map[string]interface{}{"uid": "5", "recommend_total": "3"},
+	}, "https://res.example.test")
+	retcode, errmsg, err := service.TaskboxOpenEdge(context.Background(), "token", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "推广任务宝箱已领过了" {
+		t.Fatalf("claimed retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		taskboxRow: map[string]interface{}{"taskid": "3", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+		userByID:   map[string]interface{}{"uid": "5", "recommend_total": "2"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskboxOpenEdge(context.Background(), "token", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "推广人数未达标，继续加油哦" {
+		t.Fatalf("insufficient retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:       map[string]interface{}{"uid": "5"},
+		taskboxRow: map[string]interface{}{"taskid": "3", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
+		userByID:   map[string]interface{}{"uid": "5", "recommend_total": "3"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.TaskboxOpenEdge(context.Background(), "token", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "任务宝箱开启成功分支暂未迁移" {
+		t.Fatalf("success placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
 func TestUserContactEdges(t *testing.T) {
 	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
 
-	retcode, errmsg, err := service.UserEmailEdge(context.Background(), "token", "bad", "")
+	retcode, errmsg, err := service.UserCheckEmailEdge(context.Background(), "token", "bad")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -889,7 +1062,7 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.UserVerifyEmailEdge(context.Background(), "token")
+	retcode, errmsg, err = service.UserVerifyEmailEdge(context.Background(), "token", "me@example.com", "123456")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -897,7 +1070,7 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.UserBindMobiEdge(context.Background(), "token")
+	retcode, errmsg, err = service.UserBindMobiEdge(context.Background(), "token", "", "13800138000", "123456")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +1078,7 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token")
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -913,7 +1086,44 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("profile retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "123", "123")
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 1, "bad!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "昵称2-8个汉字，英文6-16个字符" {
+		t.Fatalf("profile nickname length retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 1, "abcdef!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "昵称只允许中英文、数字及下划线组成" {
+		t.Fatalf("profile nickname charset retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 2, "abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "如需修改昵称，请联系客服修改" {
+		t.Fatalf("profile nickname whitelist retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:      map[string]interface{}{"uid": "5", "nickname": "oldname"},
+		nicknames: []map[string]interface{}{{"name": "abcdef", "gender": "2"}},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UserProfileEdge(context.Background(), "token", 2, "abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "资料设置成功分支暂未迁移" {
+		t.Fatalf("profile whitelisted placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}}, "https://res.example.test")
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "", "123", "123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -921,12 +1131,174 @@ func TestUserContactEdges(t *testing.T) {
 		t.Fatalf("passwd length retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "123456", "654321")
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "", "123456", "654321")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "两次输入密码不一致" {
 		t.Fatalf("passwd confirm retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user: map[string]interface{}{
+			"uid":      "5",
+			"password": phpPassword("oldpasssalt1234"),
+			"salt":     "salt1234",
+		},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "wrong", "123", "123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "原密码不正确" {
+		t.Fatalf("passwd old password retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	retcode, errmsg, err = service.UserPasswdEdge(context.Background(), "token", "oldpass", "123", "123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "密码6-16位" {
+		t.Fatalf("passwd valid old password retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUserBindMobiEdgePrechecks(t *testing.T) {
+	ctx := context.Background()
+
+	service := NewService(fakeUserStore{user: map[string]interface{}{"uid": "5", "mobi": "86.13800138000"}}, "https://res.example.test")
+	retcode, errmsg, err := service.UserBindMobiEdge(ctx, "token", "", "13800138000", "123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "您已绑定手机" {
+		t.Fatalf("bound retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:           map[string]interface{}{"uid": "5", "mobi": "~old"},
+		keylimitCounts: map[string]int{"sms.86.13800138000.123456": 1},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UserBindMobiEdge(ctx, "token", "", "13800138000", "123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "手机验证绑定成功分支暂未迁移" {
+		t.Fatalf("default prefix retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	service = NewService(fakeUserStore{
+		user:           map[string]interface{}{"uid": "5", "mobi": "~old"},
+		keylimitCounts: map[string]int{"sms.1.5550001.999999": 1},
+		userByMobi:     map[string]interface{}{"uid": "9", "mobi": "1.5550001"},
+	}, "https://res.example.test")
+	retcode, errmsg, err = service.UserBindMobiEdge(ctx, "token", " 1 ", " 5550001 ", " 999999 ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "手机验证绑定成功分支暂未迁移" {
+		t.Fatalf("existing mobi placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUserEmailEdges(t *testing.T) {
+	ctx := context.Background()
+	today := time.Now().Format("20060102")
+
+	cases := []struct {
+		name   string
+		store  fakeUserStore
+		call   func(*Service) (int, string, error)
+		errmsg string
+	}{
+		{
+			name:  "checkemail rate limited",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}, keylimitCounts: map[string]int{"checkemail.me@example.com." + today: 1}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserCheckEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "发送太频率请稍后重试",
+		},
+		{
+			name:  "checkemail daily limited",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}, keylimitTotalCounts: map[string]int{"checkemail.me@example.com." + today: 50}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserCheckEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "系统维护稍后重试",
+		},
+		{
+			name:  "checkemail existing email",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}, userByEmail: map[string]interface{}{"uid": "9"}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserCheckEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "邮箱已经被使用了",
+		},
+		{
+			name:  "checkemail available",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserCheckEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "邮箱可用",
+		},
+		{
+			name: "sendemail missing mail config",
+			store: fakeUserStore{
+				user:     map[string]interface{}{"uid": "5"},
+				settings: map[string]map[string]interface{}{"setting": {"value": `a:1:{s:8:"mailconf";s:0:"";}`}},
+			},
+			call: func(s *Service) (int, string, error) {
+				return s.UserSendEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "邮箱功能暂未开启，请稍后重试",
+		},
+		{
+			name:  "sendemail rate limited",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}, keylimitCounts: map[string]int{"bindemail.me@example.com." + today: 1}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserSendEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "发送太频率请稍后重试",
+		},
+		{
+			name:  "sendemail existing email",
+			store: fakeUserStore{user: map[string]interface{}{"uid": "5"}, userByEmail: map[string]interface{}{"uid": "9"}},
+			call: func(s *Service) (int, string, error) {
+				return s.UserSendEmailEdge(ctx, "token", "me@example.com")
+			},
+			errmsg: "邮箱已经被使用了",
+		},
+		{
+			name: "verifyemail existing email",
+			store: fakeUserStore{
+				user:         map[string]interface{}{"uid": "5"},
+				keylimitData: map[string]string{"email.me@example.com.123456": "5.me@example.com"},
+				userByEmail:  map[string]interface{}{"uid": "9"},
+			},
+			call: func(s *Service) (int, string, error) {
+				return s.UserVerifyEmailEdge(ctx, "token", "me@example.com", "123456")
+			},
+			errmsg: "邮箱已经被使用",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service := NewService(tc.store, "https://res.example.test")
+			retcode, errmsg, err := tc.call(service)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantRetcode := -1
+			if tc.name == "checkemail available" {
+				wantRetcode = 0
+			}
+			if retcode != wantRetcode || errmsg != tc.errmsg {
+				t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+			}
+		})
 	}
 }
 
@@ -1151,6 +1523,34 @@ func TestTaskboxQRLinkUsesTaskboxConfig(t *testing.T) {
 	}
 	if data["qrlink"] != "https://box.test?u=https://a.test&c=9IX" {
 		t.Fatalf("qrlink = %#v", data["qrlink"])
+	}
+}
+
+func TestTaskboxQRCodeRendersTaskboxLink(t *testing.T) {
+	renderer := &fakeQRCodeRenderer{body: []byte("fake-png")}
+	service := NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5", "uniqkey": "12345"},
+		settings: map[string]map[string]interface{}{
+			"baseset": {"value": "a:1:{s:10:\"inviteUrls\";s:14:\"https://a.test\";}"},
+		},
+		calldata: map[string]map[string]interface{}{
+			"taskbox.qrcode.link": {"type": "code", "content": "https://box.test?u={inviteUrl}&c={inviteCode}"},
+		},
+	}, "https://res.example.test").WithQRCodeRenderer(renderer)
+	service.now = func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) }
+
+	body, retcode, errmsg, err := service.TaskboxQRCode(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if string(body) != "fake-png" {
+		t.Fatalf("body = %q", body)
+	}
+	if renderer.content != "https://box.test?u=https://a.test&c=9IX" {
+		t.Fatalf("renderer content = %q", renderer.content)
 	}
 }
 

@@ -89,7 +89,7 @@ func (h *MiniVODHandler) ReqLong(c *gin.Context) {
 
 func (h *MiniVODHandler) ParseLongM3U8(c *gin.Context) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
-	_, retcode, errmsg, err := h.service.ReqLong(c.Request.Context(), authToken(c), vodID)
+	body, retcode, errmsg, err := h.service.ParseLongM3U8(c.Request.Context(), authToken(c), vodID)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
@@ -99,7 +99,7 @@ func (h *MiniVODHandler) ParseLongM3U8(c *gin.Context) {
 		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
 		return
 	}
-	c.JSON(http.StatusOK, legacyjson.Error("m3u8解析成功分支暂未迁移"))
+	c.Data(http.StatusOK, "vnd.apple.mpegurl", []byte(body))
 }
 
 func (h *MiniVODHandler) ReqCoin(c *gin.Context) {

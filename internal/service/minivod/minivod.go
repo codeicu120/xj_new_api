@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,7 +46,9 @@ type Store interface {
 	UsersByIDs(ctx context.Context, ids []int) ([]map[string]interface{}, error)
 	VODsByIDs(ctx context.Context, ids []int, orderByField bool) ([]map[string]interface{}, error)
 	PendingViewLogs(ctx context.Context, uid int, sid string, limit int) ([]map[string]interface{}, error)
+	PullViewLogs(ctx context.Context, uid int, sid string) (int, error)
 	MarkViewLogsShown(ctx context.Context, uid int, sid string, logIDs []int, now int64) error
+	MiniVODAdCallRows(ctx context.Context) ([]map[string]interface{}, error)
 	UpDownByUser(ctx context.Context, uid int, vodID int) (map[string]interface{}, error)
 	DeleteUpDown(ctx context.Context, uid int, vodID int) error
 	SaveUpDown(ctx context.Context, uid int, vodID int, updown int, now int64) (int, error)
@@ -54,6 +59,7 @@ type Store interface {
 	CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error)
 	RecordMiniMedia(ctx context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error
 	ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error)
+	LongToShortMapByLongID(ctx context.Context, vodID int) (map[string]interface{}, error)
 }
 
 type VODProcessor interface {
@@ -71,6 +77,10 @@ type VoteLimiter interface {
 	Delete(ctx context.Context, key string) error
 }
 
+type M3U8Fetcher interface {
+	Fetch(ctx context.Context, url string) (string, error)
+}
+
 var (
 	ErrVODNotFound    = errors.New("minivod not found")
 	ErrAuthorNotFound = errors.New("minivod author not found")
@@ -81,7 +91,9 @@ type Service struct {
 	vodProcessor    VODProcessor
 	auth            AuthStore
 	limiter         VoteLimiter
+	m3u8Fetcher     M3U8Fetcher
 	now             func() time.Time
+	randomIntn      func(int) int
 	resourceBaseURL string
 }
 
@@ -100,11 +112,18 @@ type ThrowCoinRequest struct {
 }
 
 func NewService(store Store, vodProcessor VODProcessor, resourceBaseURL string) *Service {
-	return &Service{store: store, vodProcessor: vodProcessor, limiter: newMemoryVoteLimiter(), now: time.Now, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/")}
+	return &Service{store: store, vodProcessor: vodProcessor, limiter: newMemoryVoteLimiter(), m3u8Fetcher: httpM3U8Fetcher{client: http.DefaultClient}, now: time.Now, randomIntn: rand.Intn, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/")}
 }
 
 func (s *Service) WithAuth(auth AuthStore) *Service {
 	s.auth = auth
+	return s
+}
+
+func (s *Service) WithM3U8Fetcher(fetcher M3U8Fetcher) *Service {
+	if fetcher != nil {
+		s.m3u8Fetcher = fetcher
+	}
 	return s
 }
 
@@ -185,9 +204,25 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, d
 	if err != nil {
 		return nil, err
 	}
-	logs, err := s.store.PendingViewLogs(ctx, atoi(user["uid"]), str(user["sid"]), 10)
+	uid := atoi(user["uid"])
+	sid := str(user["sid"])
+	const pageSize = 10
+	logs, err := s.store.PendingViewLogs(ctx, uid, sid, 100)
 	if err != nil {
 		return nil, err
+	}
+	if len(logs) < 100 {
+		if _, err := s.store.PullViewLogs(ctx, uid, sid); err != nil {
+			return nil, err
+		}
+		logs, err = s.store.PendingViewLogs(ctx, uid, sid, pageSize)
+		if err != nil {
+			return nil, err
+		}
+	}
+	shuffleRows(logs, s.randomIntn)
+	if len(logs) > pageSize {
+		logs = logs[:pageSize]
 	}
 	vodIDs := rowIDs(logs, "vodid")
 	logIDs := rowIDs(logs, "logid")
@@ -207,9 +242,9 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, d
 			return nil, err
 		}
 	}
-	if atoi(user["uid"]) > 0 {
+	if uid > 0 {
 		for _, row := range vodRows {
-			count, err := s.store.FavoriteCount(ctx, atoi(user["uid"]), atoi(row["vodid"]))
+			count, err := s.store.FavoriteCount(ctx, uid, atoi(row["vodid"]))
 			if err != nil {
 				return nil, err
 			}
@@ -237,9 +272,13 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, d
 		out = append(out, map[string]interface{}{"vodrow": row, "user": author})
 	}
 	if debug == 0 {
-		if err := s.store.MarkViewLogsShown(ctx, atoi(user["uid"]), str(user["sid"]), logIDs, s.now().Unix()); err != nil {
+		if err := s.store.MarkViewLogsShown(ctx, uid, sid, logIDs, s.now().Unix()); err != nil {
 			return nil, err
 		}
+	}
+	out, err = s.insertMiniVODAdRows(ctx, out, user)
+	if err != nil {
+		return nil, err
 	}
 	return map[string]interface{}{"rows": out}, nil
 }
@@ -400,6 +439,27 @@ func (s *Service) ReqLong(ctx context.Context, token string, vodID int) (string,
 		httpURL = strings.TrimRight(host, "/") + "/" + strings.TrimLeft(httpURL, "/")
 	}
 	return httpURL, 0, "", nil
+}
+
+func (s *Service) ParseLongM3U8(ctx context.Context, token string, vodID int) (string, int, string, error) {
+	m3u8URL, retcode, errmsg, err := s.ReqLong(ctx, token, vodID)
+	if err != nil || retcode != 0 {
+		return "", retcode, errmsg, err
+	}
+	row, err := s.store.LongToShortMapByLongID(ctx, vodID)
+	if err != nil {
+		return "", -1, "解析小视频长片m3u8失败", err
+	}
+	startTime, endTime := 0.0, 60.0
+	if len(row) > 0 {
+		startTime = atof(row["start"])
+		endTime = atof(row["end"])
+	}
+	body, err := generateProcessedM3U8(ctx, s.m3u8Fetcher, m3u8URL, startTime, endTime)
+	if err != nil {
+		return "", -1, "解析小视频长片m3u8失败", err
+	}
+	return body, 0, "", nil
 }
 
 func (s *Service) ReqCoin(ctx context.Context, token string, logid int) (int, string, error) {
@@ -790,6 +850,116 @@ func (s *Service) richRows(ctx context.Context, action string, params map[string
 	return out, nil
 }
 
+func (s *Service) insertMiniVODAdRows(ctx context.Context, rows []map[string]interface{}, user map[string]interface{}) ([]map[string]interface{}, error) {
+	if len(rows) == 0 {
+		return rows, nil
+	}
+	callRows, err := s.store.MiniVODAdCallRows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	adRows := []map[string]interface{}{}
+	for _, callRow := range callRows {
+		if !showAd(callRow, user, s.now().Unix()) {
+			continue
+		}
+		adRows = append(adRows, map[string]interface{}{
+			str(callRow["title0"]): str(callRow["url0"]),
+			str(callRow["title1"]): str(callRow["url1"]),
+			str(callRow["title2"]): str(callRow["url2"]),
+			"pic":                  resourceURL(s.resourceBaseURL, str(callRow["pic"])),
+		})
+	}
+	if len(adRows) == 0 {
+		return rows, nil
+	}
+	adIndex := randomIndex(len(adRows), s.randomIntn)
+	insertAt := randomIndex(len(rows), s.randomIntn)
+	if insertAt == 0 {
+		insertAt = 1
+	}
+	next := make([]map[string]interface{}, 0, len(rows)+1)
+	next = append(next, rows[:insertAt]...)
+	next = append(next, map[string]interface{}{"adrow": adRows[adIndex]})
+	next = append(next, rows[insertAt:]...)
+	return next, nil
+}
+
+func showAd(callRow map[string]interface{}, user map[string]interface{}, now int64) bool {
+	if atoi(user["uid"]) == 0 {
+		if atoi(callRow["regbegin"]) > 0 {
+			if atoi(callRow["regend"]) > 0 {
+				return int64(atoi(callRow["regend"])) > now
+			}
+			return false
+		}
+		if atoi(callRow["regend"]) > 0 {
+			return int64(atoi(callRow["regend"])) <= now
+		}
+		return true
+	}
+	if strings.TrimSpace(str(callRow["limitarea"])) != "" {
+		inArea := false
+		for _, area := range strings.Split(strings.TrimSpace(str(callRow["limitarea"])), ",") {
+			area = strings.TrimSpace(area)
+			if area != "" && strings.Contains(str(user["mobiloc"]), area) {
+				inArea = true
+				break
+			}
+		}
+		if !inArea {
+			return false
+		}
+	}
+	regbegin := atoi(callRow["regbegin"])
+	regend := atoi(callRow["regend"])
+	regtime := atoi(user["regtime"])
+	if regbegin > 0 {
+		if regend > 0 {
+			return regtime >= regbegin && regtime <= regend
+		}
+		return regtime <= regbegin
+	}
+	if regend > 0 {
+		return regtime >= regend
+	}
+	return true
+}
+
+func resourceURL(base string, uri string) string {
+	if strings.TrimSpace(uri) == "" {
+		return ""
+	}
+	if hasURLScheme(uri) {
+		return uri
+	}
+	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(uri, "/")
+}
+
+func shuffleRows(rows []map[string]interface{}, randomIntn func(int) int) {
+	for i := len(rows) - 1; i > 0; i-- {
+		j := randomIndex(i+1, randomIntn)
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+}
+
+func randomIndex(n int, randomIntn func(int) int) int {
+	if n <= 1 {
+		return 0
+	}
+	if randomIntn == nil {
+		return rand.Intn(n)
+	}
+	index := randomIntn(n)
+	if index < 0 {
+		return 0
+	}
+	if index >= n {
+		return n - 1
+	}
+	return index
+}
+
 func needsUserRows(action string, params map[string]string) bool {
 	switch action {
 	case "topzan", "topcomment", "topplay", "topcoin", "topnew", "topday", "topweek", "topmonth", "latest":
@@ -1042,6 +1212,159 @@ func hasURLScheme(value string) bool {
 	return false
 }
 
+type httpM3U8Fetcher struct {
+	client *http.Client
+}
+
+func (f httpM3U8Fetcher) Fetch(ctx context.Context, rawURL string) (string, error) {
+	client := f.client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Referer", "https://example.com/")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("fetch m3u8 %s: status %d", rawURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func generateProcessedM3U8(ctx context.Context, fetcher M3U8Fetcher, m3u8URL string, startTime float64, endTime float64) (string, error) {
+	if fetcher == nil {
+		return "", errors.New("m3u8 fetcher is nil")
+	}
+	parent, err := fetcher.Fetch(ctx, m3u8URL)
+	if err != nil {
+		return "", nil
+	}
+	subURL := firstSubM3U8URL(m3u8URL, parent)
+	if subURL == "" {
+		return "", nil
+	}
+	child, err := fetcher.Fetch(ctx, subURL)
+	if err != nil {
+		return "", nil
+	}
+	return processM3U8(subURL, child, startTime, endTime), nil
+}
+
+func firstSubM3U8URL(baseURL string, content string) string {
+	domain := urlDomain(baseURL)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		return absoluteM3U8URL(domain, line)
+	}
+	return ""
+}
+
+func processM3U8(baseURL string, content string, startTime float64, endTime float64) string {
+	domain := urlDomain(baseURL)
+	lines := strings.Split(content, "\n")
+	out := []string{}
+	currentDuration := 0.0
+	startFound := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "#EXT-X-KEY") {
+			line = rewriteKeyURI(line, domain)
+		}
+		if strings.HasPrefix(line, "#EXTM3U") || strings.HasPrefix(line, "#EXT-X") {
+			out = append(out, line)
+			continue
+		}
+		if strings.Contains(line, "#EXTINF:") {
+			duration := extinfDuration(line)
+			if currentDuration+duration < startTime {
+				currentDuration += duration
+				continue
+			}
+			if !startFound {
+				startFound = true
+			}
+			if currentDuration >= endTime {
+				break
+			}
+			out = append(out, line)
+			currentDuration += duration
+			continue
+		}
+		if startFound && currentDuration <= endTime {
+			if line != "" && !strings.HasPrefix(line, "http") {
+				line = absoluteM3U8URL(domain, line)
+			}
+			out = append(out, line)
+		}
+	}
+	out = append(out, "#EXT-X-ENDLIST")
+	return strings.Join(out, "\n")
+}
+
+func rewriteKeyURI(line string, domain string) string {
+	const marker = `URI="`
+	start := strings.Index(line, marker)
+	if start < 0 {
+		return line
+	}
+	valueStart := start + len(marker)
+	valueEnd := strings.Index(line[valueStart:], `"`)
+	if valueEnd < 0 {
+		return line
+	}
+	valueEnd += valueStart
+	uri := line[valueStart:valueEnd]
+	if !strings.HasPrefix(uri, "http") {
+		uri = absoluteM3U8URL(domain, uri)
+	}
+	return line[:valueStart] + uri + line[valueEnd:]
+}
+
+func extinfDuration(line string) float64 {
+	value := strings.TrimPrefix(line, "#EXTINF:")
+	value = strings.TrimSuffix(value, ",")
+	if comma := strings.Index(value, ","); comma >= 0 {
+		value = value[:comma]
+	}
+	var duration float64
+	_, _ = fmt.Sscan(value, &duration)
+	return duration
+}
+
+func urlDomain(rawURL string) string {
+	schemeEnd := strings.Index(rawURL, "://")
+	if schemeEnd < 0 {
+		return ""
+	}
+	hostStart := schemeEnd + len("://")
+	hostEnd := strings.Index(rawURL[hostStart:], "/")
+	if hostEnd < 0 {
+		return rawURL
+	}
+	return rawURL[:hostStart+hostEnd]
+}
+
+func absoluteM3U8URL(domain string, value string) string {
+	if strings.HasPrefix(value, "http") {
+		return value
+	}
+	return strings.TrimRight(domain, "/") + "/" + strings.TrimLeft(value, "/")
+}
+
 func (s *Service) checkMiniPerm(row map[string]interface{}, user map[string]interface{}) (int, string) {
 	perms := user["perms"]
 	if atoi(row["isvip"]) == 1 && getMiniPermInt(perms, "allow.minivod.vip") != 1 {
@@ -1158,6 +1481,12 @@ func str(value interface{}) string {
 
 func atoi(value interface{}) int {
 	var n int
+	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
+	return n
+}
+
+func atof(value interface{}) float64 {
+	var n float64
 	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
 	return n
 }

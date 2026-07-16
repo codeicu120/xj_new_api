@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -38,11 +39,44 @@ func (s fakeWaliAuthStore) UserBySession(context.Context, string) (map[string]in
 type fakeWaliClient struct {
 	rawURL string
 	body   []byte
+	err    error
 }
 
 func (c *fakeWaliClient) Get(_ context.Context, rawURL string) ([]byte, error) {
 	c.rawURL = rawURL
+	if c.err != nil {
+		return nil, c.err
+	}
 	return c.body, nil
+}
+
+type fakeWaliHistoryStore struct {
+	fakeWaliStore
+	history map[string]interface{}
+	deleted []int
+	saved   []struct {
+		uid        int
+		platformID int
+		gameID     int
+	}
+}
+
+func (s *fakeWaliHistoryStore) GameHistoryByUniqueKey(_ context.Context, uid int, platformID int, gameID int) (map[string]interface{}, error) {
+	return s.history, nil
+}
+
+func (s *fakeWaliHistoryStore) DeleteGameHistory(_ context.Context, id int) error {
+	s.deleted = append(s.deleted, id)
+	return nil
+}
+
+func (s *fakeWaliHistoryStore) SaveGameHistory(_ context.Context, uid int, platformID int, gameID int) (int, error) {
+	s.saved = append(s.saved, struct {
+		uid        int
+		platformID int
+		gameID     int
+	}{uid: uid, platformID: platformID, gameID: gameID})
+	return 88, nil
 }
 
 func TestWaliServicePingBuildsSignedEncryptedRequest(t *testing.T) {
@@ -111,6 +145,80 @@ func TestWaliServiceBalanceRequiresLogin(t *testing.T) {
 	}
 	if retcode != -9999 || errmsg != "您还没有登录" {
 		t.Fatalf("unexpected auth result %d %q", retcode, errmsg)
+	}
+}
+
+func TestWaliServiceEnterRequiresLogin(t *testing.T) {
+	service := NewWaliService(fakeWaliStore{}, fakeWaliAuthStore{}, &fakeWaliClient{})
+
+	_, retcode, errmsg, err := service.Enter(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("enter: %v", err)
+	}
+	if retcode != -9999 || errmsg != "您还没有登录" {
+		t.Fatalf("unexpected auth result %d %q", retcode, errmsg)
+	}
+}
+
+func TestWaliServiceEnterSuccessSavesHistoryAndReturnsURL(t *testing.T) {
+	client := &fakeWaliClient{body: []byte(`{"code":0,"data":{"gameUrl":"https://play.example/game"}}`)}
+	store := &fakeWaliHistoryStore{
+		fakeWaliStore: fakeWaliStore{row: map[string]interface{}{
+			"status":      "1",
+			"config_json": `{"url":"https://wali.example/api","account":"acct","aesKey":"1234567890abcdef","signKey":"sign","agentId":"agent"}`,
+		}},
+		history: map[string]interface{}{"id": "7"},
+	}
+	service := NewWaliService(store, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, client)
+	service.now = func() time.Time { return time.Unix(100, 0) }
+
+	gameURL, retcode, errmsg, err := service.Enter(context.Background(), "token", "12")
+	if err != nil {
+		t.Fatalf("enter: %v", err)
+	}
+	if retcode != 0 || errmsg != "" || gameURL != "https://play.example/game" {
+		t.Fatalf("unexpected enter result url=%q retcode=%d errmsg=%q", gameURL, retcode, errmsg)
+	}
+	if !strings.Contains(client.rawURL, "/enterGame?") || !strings.Contains(client.rawURL, "a=acct") {
+		t.Fatalf("unexpected url %q", client.rawURL)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != 7 {
+		t.Fatalf("unexpected deleted history %#v", store.deleted)
+	}
+	if len(store.saved) != 1 || store.saved[0].uid != 5 || store.saved[0].platformID != 1 || store.saved[0].gameID != 12 {
+		t.Fatalf("unexpected saved history %#v", store.saved)
+	}
+}
+
+func TestWaliServiceEnterExternalFailureIsSafe(t *testing.T) {
+	client := &fakeWaliClient{err: errors.New("network down")}
+	store := &fakeWaliHistoryStore{fakeWaliStore: fakeWaliStore{row: map[string]interface{}{
+		"status":      "1",
+		"config_json": `{"url":"https://wali.example/api","account":"acct","aesKey":"1234567890abcdef","signKey":"sign","agentId":"agent"}`,
+	}}}
+	service := NewWaliService(store, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, client)
+
+	_, retcode, errmsg, err := service.Enter(context.Background(), "token", "12")
+	if err != nil {
+		t.Fatalf("enter failure should be safe: %v", err)
+	}
+	if retcode != -1 || errmsg != "进入游戏失败" {
+		t.Fatalf("unexpected failure response %d %q", retcode, errmsg)
+	}
+	if len(store.saved) != 0 {
+		t.Fatalf("history should not be saved on external failure: %#v", store.saved)
+	}
+}
+
+func TestWaliServiceEnterMissingConfigIsSafe(t *testing.T) {
+	service := NewWaliService(fakeWaliStore{}, fakeWaliAuthStore{user: map[string]interface{}{"uid": "5"}}, &fakeWaliClient{})
+
+	_, retcode, errmsg, err := service.Enter(context.Background(), "token", "12")
+	if err != nil {
+		t.Fatalf("enter missing config should be safe: %v", err)
+	}
+	if retcode != -1 || errmsg != "进入游戏失败" {
+		t.Fatalf("unexpected missing config response %d %q", retcode, errmsg)
 	}
 }
 

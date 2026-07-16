@@ -106,12 +106,14 @@ func NewRouter(opts Options) *gin.Engine {
 	captchaHandler := handler.NewCaptchaHandler(captchaService.NewService(cfg.SMSCaptcha, cfg.CaptchaStyle, nil))
 	testHandler := handler.NewTestHandler(captchaService.NewTestImageService())
 	ipLocHandler := handler.NewIPLocHandler(iplocService.NewService(newIPLocator(cfg.IPDBPath, logger)))
+	gamePlatformRepository := gameRepo.NewPlatformRepository(db)
 	gameHandler := handler.NewGameHandler(
-		gameService.NewPlatformService(gameRepo.NewPlatformRepository(db)),
+		gameService.NewPlatformService(gamePlatformRepository),
 		gameService.NewCategoryService(gameRepo.NewCategoryRepository(db), cfg.GameResourceURL),
 		gameService.NewListingService(gameRepo.NewGameRepository(db), cfg.ResourceBaseURL),
 		gameService.NewBroadcastService(gameRepo.NewBroadcastRepository(db)),
-		gameService.NewWaliService(gameRepo.NewPlatformRepository(db), userRepository, nil),
+		gameService.NewWaliService(gamePlatformRepository, userRepository, nil),
+		gameService.NewLotteryService(gamePlatformRepository, userRepository, nil),
 	)
 	indexRepository := indexRepo.NewSettingsRepository(db)
 	ucpRepository := ucpRepo.NewRepository(db)
@@ -157,7 +159,10 @@ func NewRouter(opts Options) *gin.Engine {
 	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).WithExternalClient(aiundressExternalClient))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
-	respondHandler := handler.NewRespondHandler(respondService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
+	respondHandler := handler.NewRespondHandler(respondService.NewService(
+		ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository},
+		respondService.WithRegistry(respondService.NewRegistryFromConfig(cfg.RespondProviders)),
+	))
 
 	router.GET("/healthz", healthHandler(cfg))
 	router.GET("/readyz", healthHandler(cfg))
@@ -191,12 +196,12 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/game/wali/balance", gameHandler.WaliBalance)
 	router.Any("/game/wali/topup", gameHandler.TransferTopup("瓦力游戏上分成功分支暂未迁移"))
 	router.Any("/game/wali/withdraw", gameHandler.TransferWithdraw("瓦力游戏下分成功分支暂未迁移"))
-	router.Any("/game/wali/enter", gameHandler.HighRiskAction("瓦力游戏进入成功分支暂未迁移"))
+	router.Any("/game/wali/enter", gameHandler.WaliEnter)
 	router.Any("/game/lottery/gameList", gameHandler.LotteryGames)
 	router.Any("/game/lottery/topup", gameHandler.TransferTopup("彩票游戏上分成功分支暂未迁移"))
 	router.Any("/game/lottery/withdraw", gameHandler.TransferWithdraw("彩票游戏下分成功分支暂未迁移"))
-	router.Any("/game/lottery/enter", gameHandler.HighRiskAction("彩票游戏进入成功分支暂未迁移"))
-	router.Any("/game/lottery/balance", gameHandler.HighRiskAction("彩票游戏余额成功分支暂未迁移"))
+	router.Any("/game/lottery/enter", gameHandler.LotteryEnter)
+	router.Any("/game/lottery/balance", gameHandler.LotteryBalance)
 	router.Any("/hgame/index", hgameHandler.Index)
 	router.Any("/starLive/index", starLiveHandler.Index)
 	router.Any("/starLive/queryCoinBalance", starLiveHandler.QueryCoinBalance)
@@ -273,13 +278,13 @@ func NewRouter(opts Options) *gin.Engine {
 		"newpaypi", "newpaypx", "newpaypxwx", "newpayqk", "newpayrq", "newpayxh", "newpayxxx",
 		"newpayxy", "newpayxyf", "newpayya", "newpayyh", "newpayys", "newpayyswx",
 	} {
-		router.Any("/respond/"+action, respondHandler.Failed("failed"))
+		router.Any("/respond/"+action, respondHandler.Provider(action, "failed"))
 	}
 	for _, action := range []string{"pay12"} {
-		router.Any("/respond/"+action, respondHandler.Failed("Err"))
+		router.Any("/respond/"+action, respondHandler.Provider(action, "Err"))
 	}
 	for _, action := range []string{"newpayhf", "newpaykf", "newpaykk", "newpaylep"} {
-		router.Any("/respond/"+action, respondHandler.Failed("FAILED"))
+		router.Any("/respond/"+action, respondHandler.Provider(action, "FAILED"))
 	}
 	router.Any("/respond/chan1", respondHandler.Chan1)
 	router.Any("/bought/listing", boughtHandler.Listing)
@@ -370,7 +375,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/ucp/taskbox/share", ucpHandler.TaskboxShare)
 	router.Any("/ucp/taskbox/qrlink", ucpHandler.TaskboxQRLink)
 	router.Any("/ucp/taskbox/taskboxopen", ucpHandler.TaskboxOpen)
-	router.Any("/ucp/taskbox/qrcode", ucpHandler.HighRiskAction("任务宝箱二维码图片生成成功分支暂未迁移"))
+	router.Any("/ucp/taskbox/qrcode", ucpHandler.TaskboxQRCode)
 	router.Any("/ucp/affcenter", ucpHandler.AffCenter)
 	router.Any("/ucp/upgrade", ucpHandler.Upgrade)
 	router.Any("/ucp/payment", ucpHandler.PaymentListing)

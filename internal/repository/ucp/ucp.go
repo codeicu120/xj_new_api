@@ -2,7 +2,9 @@ package ucp
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -39,6 +41,18 @@ func (r *Repository) Posters(ctx context.Context) ([]map[string]interface{}, err
 	rows, err := r.db.QueryContext(ctx, "SELECT * FROM poster WHERE status=1")
 	if err != nil {
 		return nil, fmt.Errorf("query posters: %w", err)
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func (r *Repository) Nicknames(ctx context.Context) ([]map[string]interface{}, error) {
+	if r.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, "SELECT id, name, gender FROM nicknames WHERE status=1")
+	if err != nil {
+		return nil, fmt.Errorf("query nicknames: %w", err)
 	}
 	defer rows.Close()
 	return scanRows(rows)
@@ -771,6 +785,64 @@ func (r *Repository) FeedbackByID(ctx context.Context, id int) (map[string]inter
 	return row, nil
 }
 
+func (r *Repository) UserByEmail(ctx context.Context, email string) (map[string]interface{}, error) {
+	if r.db == nil || strings.TrimSpace(email) == "" {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users WHERE email=?", email)
+	if err != nil {
+		return nil, fmt.Errorf("query user by email: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) KeylimitCountSince(ctx context.Context, key string, since int64) (int, error) {
+	if r.db == nil || strings.TrimSpace(key) == "" {
+		return 0, nil
+	}
+	query := "SELECT SUM(keynum) FROM keylimits WHERE keyid=?"
+	args := []interface{}{md5Hex(key)}
+	if since > 0 {
+		query += " AND ctimestamp>?"
+		args = append(args, since)
+	}
+	var total sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("query keylimit %s: %w", key, err)
+	}
+	if !total.Valid {
+		return 0, nil
+	}
+	return int(total.Int64), nil
+}
+
+func (r *Repository) KeylimitDataSince(ctx context.Context, key string, since int64) (string, error) {
+	if r.db == nil || strings.TrimSpace(key) == "" {
+		return "", nil
+	}
+	query := "SELECT keydata FROM keylimits WHERE keyid=?"
+	args := []interface{}{md5Hex(key)}
+	if since > 0 {
+		query += " AND ctimestamp>?"
+		args = append(args, since)
+	}
+	query += " ORDER BY ctimestamp DESC LIMIT 1"
+	var data sql.NullString
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&data); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", fmt.Errorf("query keylimit data %s: %w", key, err)
+	}
+	if !data.Valid {
+		return "", nil
+	}
+	return data.String, nil
+}
+
 func (r *Repository) CountFeedbacksSince(ctx context.Context, uid int, since int64) (int, error) {
 	if r.db == nil || uid <= 0 {
 		return 0, nil
@@ -1457,6 +1529,11 @@ func str(value interface{}) string {
 		return ""
 	}
 	return fmt.Sprint(value)
+}
+
+func md5Hex(value string) string {
+	sum := md5.Sum([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func miniVODTimeColumn(action int) string {
