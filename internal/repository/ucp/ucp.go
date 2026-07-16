@@ -18,6 +18,14 @@ type Repository struct {
 	db *sql.DB
 }
 
+const coinTypeTaskbox = 19
+const coinTypeUpgradeSuperDeduct = 103
+const beanTypeBuyCoin = 20
+const coinTypeRMB2Coin = 8
+const coinTypeCoin2RMB = 104
+const payTypeCoin2RMB = 9
+const payTypeRMB2Coin = 10
+
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -82,6 +90,70 @@ func (r *Repository) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey
 		return map[string]interface{}{}, nil
 	}
 	return r.queryOne(ctx, "SELECT * FROM promotion_taskboxlogs WHERE uid=? AND taskid=? AND daykey=?", uid, taskID, dayKey)
+}
+
+func (r *Repository) OpenTaskbox(ctx context.Context, uid int, task map[string]interface{}, dayKey int, addCoin int, now int64, duplicateMessage string) (string, error) {
+	if r.db == nil || uid <= 0 {
+		return "", nil
+	}
+	taskID := atoi(task["taskid"])
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin open taskbox: %w", err)
+	}
+	defer tx.Rollback()
+
+	existing, err := queryOneTx(ctx, tx, "SELECT * FROM promotion_taskboxlogs WHERE uid=? AND taskid=? AND daykey=? FOR UPDATE", uid, taskID, dayKey)
+	if err != nil {
+		return "", fmt.Errorf("lock taskbox log: %w", err)
+	}
+	if len(existing) > 0 {
+		if duplicateMessage == "" {
+			duplicateMessage = "任务宝箱已领过了"
+		}
+		return duplicateMessage, nil
+	}
+
+	result, err := tx.ExecContext(ctx, `INSERT INTO promotion_taskboxlogs
+(uid, taskid, addcoin, prize, addtime, updatetime, taskstatus, daykey)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+		uid, taskID, addCoin, task["prize"], now, now, 2, dayKey)
+	if err != nil {
+		return "", fmt.Errorf("insert taskbox log: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return "记录写入失败，请重试", nil
+	}
+
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		if err == sql.ErrNoRows {
+			return "账户不存在", nil
+		}
+		return "", fmt.Errorf("lock users quota: %w", err)
+	}
+	newBalance := balance + addCoin
+	if newBalance != balance {
+		result, err = tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+		if err != nil {
+			return "", fmt.Errorf("update users quota: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return "资金变动不成功", nil
+		}
+	}
+	remark := fmt.Sprintf("宝箱开启收入[%d]", taskID)
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeTaskbox, uid, addCoin, newBalance, now, remark)
+	if err != nil {
+		return "", fmt.Errorf("insert user coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return "金币明细日志写入失败", nil
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit open taskbox: %w", err)
+	}
+	return "", nil
 }
 
 func (r *Repository) TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error) {
@@ -716,6 +788,294 @@ func (r *Repository) SumCoinLogsSinceByType(ctx context.Context, uid int, coinTy
 	return int(total.Int64), nil
 }
 
+func (r *Repository) AwardCoins(ctx context.Context, uid int, coinType int, addCoin int, now int64, remark string) error {
+	if r.db == nil || uid <= 0 || addCoin == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin award coins: %w", err)
+	}
+	defer tx.Rollback()
+
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newBalance := balance + addCoin
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinType, uid, addCoin, newBalance, now, remark)
+	if err != nil {
+		return fmt.Errorf("insert user coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert user coinlog affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit award coins: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) SignGuest(ctx context.Context, sid string, addCoin int, now int64) error {
+	if r.db == nil || strings.TrimSpace(sid) == "" {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin guest sign: %w", err)
+	}
+	defer tx.Rollback()
+
+	var goldcoin int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM user_guests WHERE sid=? FOR UPDATE", sid).Scan(&goldcoin); err != nil {
+		return fmt.Errorf("lock guest: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE user_guests SET goldcoin=?, signtime=? WHERE sid=?", goldcoin+addCoin, now, sid)
+	if err != nil {
+		return fmt.Errorf("update guest sign: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update guest sign affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit guest sign: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) UpgradeVIP(ctx context.Context, uid int, deductCoin int, vipGID int, expiry int64, now int64) error {
+	if r.db == nil || uid <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin upgrade vip: %w", err)
+	}
+	defer tx.Rollback()
+
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newBalance := balance - deductCoin
+	if newBalance < 0 {
+		return fmt.Errorf("金币不足")
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeUpgradeSuperDeduct, uid, -deductCoin, newBalance, now, "")
+	if err != nil {
+		return fmt.Errorf("insert upgrade coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert upgrade coinlog affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "UPDATE users SET sysgid=?, sysgid_exptime=? WHERE uid=?", vipGID, expiry, uid)
+	if err != nil {
+		return fmt.Errorf("update user vip: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update user vip affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit upgrade vip: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) BuyBeansWithCoins(ctx context.Context, uid int, deductCoin int, addBeans int, now int64) error {
+	if r.db == nil || uid <= 0 || deductCoin <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin buy beans: %w", err)
+	}
+	defer tx.Rollback()
+
+	var coinBalance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&coinBalance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newCoinBalance := coinBalance - deductCoin
+	if newCoinBalance < 0 {
+		return fmt.Errorf("goldcoin insufficient")
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newCoinBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeUpgradeSuperDeduct, uid, -deductCoin, newCoinBalance, now, "")
+	if err != nil {
+		return fmt.Errorf("insert coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert coinlog affected %d rows", affected)
+	}
+
+	var beanBalance int
+	if err := tx.QueryRowContext(ctx, "SELECT gold_bean FROM users_goldbean WHERE uid=? FOR UPDATE", uid).Scan(&beanBalance); err != nil {
+		if err != sql.ErrNoRows {
+			return fmt.Errorf("lock users goldbean: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO users_goldbean(uid, gold_bean) VALUES(?, 0)", uid); err != nil {
+			return fmt.Errorf("create users goldbean: %w", err)
+		}
+		beanBalance = 0
+	}
+	newBeanBalance := beanBalance + addBeans
+	if newBeanBalance != beanBalance {
+		result, err = tx.ExecContext(ctx, "UPDATE users_goldbean SET gold_bean=? WHERE uid=?", newBeanBalance, uid)
+		if err != nil {
+			return fmt.Errorf("update users goldbean: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return fmt.Errorf("update users goldbean affected %d rows", affected)
+		}
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_beanlogs(bean_type, uid, bean_num, balance, add_time, remark) VALUES(?, ?, ?, ?, ?, ?)", beanTypeBuyCoin, uid, addBeans, newBeanBalance, now, "")
+	if err != nil {
+		return fmt.Errorf("insert beanlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert beanlog affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit buy beans: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ExchangeCoinsAndBalance(ctx context.Context, uid int, extype int, coinnum int, amount int, now int64) error {
+	if r.db == nil || uid <= 0 || coinnum <= 0 || amount <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin exchange: %w", err)
+	}
+	defer tx.Rollback()
+
+	switch extype {
+	case 1:
+		if err := exchangeCoinToBalance(ctx, tx, uid, coinnum, amount, now); err != nil {
+			return err
+		}
+	case 2:
+		if err := exchangeBalanceToCoin(ctx, tx, uid, coinnum, amount, now); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported exchange type %d", extype)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit exchange: %w", err)
+	}
+	return nil
+}
+
+func exchangeCoinToBalance(ctx context.Context, tx *sql.Tx, uid int, coinnum int, amount int, now int64) error {
+	var coinBalance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&coinBalance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newCoinBalance := coinBalance - coinnum
+	if newCoinBalance < 0 {
+		return fmt.Errorf("goldcoin insufficient")
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newCoinBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeCoin2RMB, uid, -coinnum, newCoinBalance, now, "兑换支出")
+	if err != nil {
+		return fmt.Errorf("insert coin2rmb coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert coin2rmb coinlog affected %d rows", affected)
+	}
+	return addAccountBalance(ctx, tx, uid, payTypeCoin2RMB, amount, 0, now, "兑换收入")
+}
+
+func exchangeBalanceToCoin(ctx context.Context, tx *sql.Tx, uid int, coinnum int, amount int, now int64) error {
+	if err := addAccountBalance(ctx, tx, uid, payTypeRMB2Coin, 0, amount, now, "兑换支出"); err != nil {
+		return err
+	}
+	var coinBalance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&coinBalance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newCoinBalance := coinBalance + coinnum
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newCoinBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinTypeRMB2Coin, uid, coinnum, newCoinBalance, now, "兑换收入")
+	if err != nil {
+		return fmt.Errorf("insert rmb2coin coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert rmb2coin coinlog affected %d rows", affected)
+	}
+	return nil
+}
+
+func addAccountBalance(ctx context.Context, tx *sql.Tx, uid int, payType int, trxIn int, trxOut int, now int64, remark string) error {
+	var balance, frozen int
+	if err := tx.QueryRowContext(ctx, "SELECT balance, frozen FROM users_account WHERE uid=? FOR UPDATE", uid).Scan(&balance, &frozen); err != nil {
+		if err != sql.ErrNoRows {
+			return fmt.Errorf("lock users account: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO users_account(uid, balance, frozen, deposit, game_balance, game_frozen) VALUES(?, 0, 0, 0, 0, 0)", uid); err != nil {
+			return fmt.Errorf("create users account: %w", err)
+		}
+		balance = 0
+		frozen = 0
+	}
+	newBalance := balance + trxIn - trxOut
+	if newBalance-frozen < 0 {
+		return fmt.Errorf("balance insufficient")
+	}
+	if newBalance != balance {
+		result, err := tx.ExecContext(ctx, "UPDATE users_account SET balance=? WHERE uid=?", newBalance, uid)
+		if err != nil {
+			return fmt.Errorf("update users account: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return fmt.Errorf("update users account affected %d rows", affected)
+		}
+	}
+	result, err := tx.ExecContext(ctx, "INSERT INTO user_balancelogs(paytype, uid, trxin, trxout, balance, trxtime, remark) VALUES(?, ?, ?, ?, ?, ?, ?)", payType, uid, trxIn, trxOut, newBalance, now, remark)
+	if err != nil {
+		return fmt.Errorf("insert balance log: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert balance log affected %d rows", affected)
+	}
+	return nil
+}
+
 func (r *Repository) CountVODCommentsSince(ctx context.Context, uid int, since int64, unique bool) (int, error) {
 	if r.db == nil {
 		return 0, nil
@@ -824,6 +1184,60 @@ func (r *Repository) UserByEmail(ctx context.Context, email string) (map[string]
 	return row, nil
 }
 
+func (r *Repository) VerifyEmail(ctx context.Context, uid int, email string, key string) error {
+	if r.db == nil || uid <= 0 || strings.TrimSpace(email) == "" {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin verify email: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, "UPDATE users SET email=? WHERE uid=?", email, uid)
+	if err != nil {
+		return fmt.Errorf("update user email: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update user email affected %d rows", affected)
+	}
+	if strings.TrimSpace(key) != "" {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM keylimits WHERE keyid=?", md5Hex(key)); err != nil {
+			return fmt.Errorf("delete email keylimit: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit verify email: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) BindMobi(ctx context.Context, uid int, mobi string) error {
+	if r.db == nil || uid <= 0 || strings.TrimSpace(mobi) == "" {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin bind mobi: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "UPDATE users SET mobi=CONCAT('~', uniqkey) WHERE mobi=? AND uid<>?", mobi, uid); err != nil {
+		return fmt.Errorf("release old mobi: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users SET mobi=? WHERE uid=?", mobi, uid)
+	if err != nil {
+		return fmt.Errorf("update user mobi: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update user mobi affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit bind mobi: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) KeylimitCountSince(ctx context.Context, key string, since int64) (int, error) {
 	if r.db == nil || strings.TrimSpace(key) == "" {
 		return 0, nil
@@ -866,6 +1280,60 @@ func (r *Repository) KeylimitDataSince(ctx context.Context, key string, since in
 		return "", nil
 	}
 	return data.String, nil
+}
+
+func (r *Repository) ChangePasswordAndLogin(ctx context.Context, uid int, passwordHash string, salt string, sid string, token string, now int64) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin change password: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, "UPDATE users SET password=?, salt=? WHERE uid=?", passwordHash, salt, uid)
+	if err != nil {
+		return nil, fmt.Errorf("update password: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return nil, fmt.Errorf("update password affected %d rows", affected)
+	}
+	_, err = tx.ExecContext(ctx, "REPLACE INTO sessions(sid, token, uid, type, timestamp) VALUES(?, ?, ?, ?, ?)", sid, token, uid, 0, now)
+	if err != nil {
+		return nil, fmt.Errorf("replace session: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE uid=? AND type=0 AND sid!=?", uid, sid)
+	if err != nil {
+		return nil, fmt.Errorf("delete old sessions: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT * FROM users WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query changed user: %w", err)
+	}
+	items, scanErr := scanRows(rows)
+	rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("changed user not found")
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit change password: %w", err)
+	}
+	return items[0], nil
+}
+
+func (r *Repository) SetKeylimit(ctx context.Context, key string, keynum int, keydata string, now int64) error {
+	if r.db == nil || strings.TrimSpace(key) == "" {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "INSERT INTO keylimits(keyid, keynum, keydata, ctimestamp) VALUES(?, ?, ?, ?)", md5Hex(key), keynum, keydata, now)
+	if err != nil {
+		return fmt.Errorf("insert keylimit %s: %w", key, err)
+	}
+	return nil
 }
 
 func (r *Repository) CountFeedbacksSince(ctx context.Context, uid int, since int64) (int, error) {
@@ -1479,6 +1947,22 @@ func (r *Repository) queryOne(ctx context.Context, query string, args ...interfa
 	}
 	if len(items) == 0 {
 		return nil, nil
+	}
+	return items[0], nil
+}
+
+func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
 	}
 	return items[0], nil
 }

@@ -88,23 +88,42 @@ func (h *UCPHandler) TaskInvite(c *gin.Context) {
 }
 
 func (h *UCPHandler) TaskSign(c *gin.Context) {
-	retcode, errmsg, err := h.service.TaskSignEdge(c.Request.Context(), authToken(c))
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.TaskSign(c.Request.Context(), authToken(c))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) TaskInviteCodeInput(c *gin.Context) {
-	retcode, errmsg, err := h.service.TaskInviteCodeInputEdge(c.Request.Context(), authToken(c), inputValue(c, "inviteCode"))
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.TaskInviteCodeInput(c.Request.Context(), authToken(c), inputValue(c, "inviteCode"))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) TaskAdviewClick(c *gin.Context) {
-	retcode, errmsg, err := h.service.TaskAdviewClickEdge(c.Request.Context(), authToken(c))
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.TaskAdviewClick(c.Request.Context(), authToken(c))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) TaskQRCodeSave(c *gin.Context) {
-	retcode, errmsg, err := h.service.TaskQRCodeSaveEdge(c.Request.Context(), authToken(c))
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.TaskQRCodeSave(c.Request.Context(), authToken(c))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) TaskShare(c *gin.Context) {
+	data, retcode, errmsg, err := h.service.TaskShare(c.Request.Context(), authToken(c), inputValue(c, "pid"))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
+}
+
+func (h *UCPHandler) TaskQRCode(c *gin.Context) {
+	body, retcode, errmsg, err := h.service.TaskQRCode(c.Request.Context(), authToken(c), inputValue(c, "pid"))
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.Data(http.StatusOK, "image/png", body)
 }
 
 func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
@@ -121,8 +140,8 @@ func (h *UCPHandler) HighRiskAction(message string) gin.HandlerFunc {
 
 func (h *UCPHandler) Upgrade(c *gin.Context) {
 	day, _ := strconv.Atoi(inputValue(c, "day"))
-	retcode, errmsg, err := h.service.UpgradeEdge(c.Request.Context(), authToken(c), day)
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.Upgrade(c.Request.Context(), authToken(c), day)
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) UserCheckEmail(c *gin.Context) {
@@ -152,8 +171,8 @@ func (h *UCPHandler) UserProfile(c *gin.Context) {
 }
 
 func (h *UCPHandler) UserPasswd(c *gin.Context) {
-	retcode, errmsg, err := h.service.UserPasswdEdge(c.Request.Context(), authToken(c), inputValue(c, "password_old"), inputValue(c, "password"), inputValue(c, "password_confirm"))
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.UserPasswd(c.Request.Context(), authToken(c), inputValue(c, "password_old"), inputValue(c, "password"), inputValue(c, "password_confirm"))
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) CoinLogExchange(c *gin.Context) {
@@ -186,8 +205,8 @@ func (h *UCPHandler) VODOrderSupport(c *gin.Context) {
 
 func (h *UCPHandler) VIPPkgCoinOrder(c *gin.Context) {
 	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
-	retcode, errmsg, err := h.service.VIPPkgCoinOrderEdge(c.Request.Context(), authToken(c), pkgID)
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.VIPPkgCoinOrder(c.Request.Context(), authToken(c), pkgID)
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) VIPPkgPlaceOrder(c *gin.Context) {
@@ -210,14 +229,23 @@ func (h *UCPHandler) BeanPkgPlaceOrder(c *gin.Context) {
 
 func (h *UCPHandler) BeanPkgCoinOrder(c *gin.Context) {
 	pkgID, _ := strconv.Atoi(inputValue(c, "pkgid"))
-	retcode, errmsg, err := h.service.BeanPkgCoinOrderEdge(c.Request.Context(), authToken(c), pkgID)
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.BeanPkgCoinOrder(c.Request.Context(), authToken(c), pkgID)
+	h.respondDataEdge(c, data, retcode, errmsg, err)
 }
 
 func (h *UCPHandler) TaskboxOpen(c *gin.Context) {
 	taskID, _ := strconv.Atoi(inputValue(c, "taskid"))
-	retcode, errmsg, err := h.service.TaskboxOpenEdge(c.Request.Context(), authToken(c), taskID)
-	h.respondEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.service.TaskboxOpen(c.Request.Context(), authToken(c), taskID)
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.OK(data))
 }
 
 func (h *UCPHandler) respondEdge(c *gin.Context, retcode int, errmsg string, err error) {
@@ -227,6 +255,19 @@ func (h *UCPHandler) respondEdge(c *gin.Context, retcode int, errmsg string, err
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+}
+
+func (h *UCPHandler) respondDataEdge(c *gin.Context, data map[string]interface{}, retcode int, errmsg string, err error) {
+	c.Header("X-Served-By", "newbie")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode != 0 {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})
+		return
+	}
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: 0, ErrMsg: errmsg, Data: data})
 }
 
 func (h *UCPHandler) TaskIndex(c *gin.Context) {

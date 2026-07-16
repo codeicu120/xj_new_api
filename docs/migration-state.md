@@ -1548,7 +1548,7 @@
 - 已迁移：`/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi`。
 - PHP: `src/c/api/ucp/user.php::checkemail/sendemail/verifyemail/bindmobi`。
 - Go: `internal/handler.UCPHandler.UserCheckEmail/UserSendEmail/UserVerifyEmail/UserBindMobi`、`internal/service/ucp.Service` contact edge methods。
-- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后邮箱格式错误返回 `请输入正确的邮箱地址`；`checkemail/sendemail` 频控返回 `发送太频率请稍后重试`，当日上限返回 `系统维护稍后重试`；邮箱已存在返回 `邮箱已经被使用了` 或 verify 分支的 `邮箱已经被使用`；`checkemail` 邮箱可用只读成功返回 `retcode=0 errmsg=邮箱可用`；`sendemail` 邮件配置缺失返回 `邮箱功能暂未开启，请稍后重试`；邮箱验证码缺失/失效返回 `验证码不存在或已失效`；手机验证码缺失/错误返回 `手机验证码不正确`。邮件发送、keylimit 写入、邮箱/手机绑定写入暂未接管。
+- 兼容规则：未登录返回 `retcode=-9999 errmsg=您还没有登录`；登录后邮箱格式错误返回 `请输入正确的邮箱地址`；`checkemail/sendemail` 频控返回 `发送太频率请稍后重试`，当日上限返回 `系统维护稍后重试`；邮箱已存在返回 `邮箱已经被使用了` 或 verify 分支的 `邮箱已经被使用`；`checkemail` 邮箱可用只读成功返回 `retcode=0 errmsg=邮箱可用`；`sendemail` 邮件配置缺失返回 `邮箱功能暂未开启，请稍后重试`；邮箱验证码缺失/失效返回 `验证码不存在或已失效`；手机验证码缺失/错误返回 `手机验证码不正确`。邮件发送和发送成功后的 keylimit 写入暂未接管；邮箱/手机绑定写入已在后续迁移中补齐。
 - 测试：`go test ./internal/service/ucp ./internal/server` 通过。
 
 ### OneGo 投注前置分支
@@ -1564,7 +1564,7 @@
 - 已迁移 UCP 前置分支：`/ucp/coinlog/exchange`、`/ucp/vodorder/create`、`/ucp/vodorder/support`、`/ucp/user/profile`、`/ucp/user/passwd`。
 - PHP: `src/c/api/ucp/coinlog.php`、`vodorder.php`、`user.php`。
 - Go: `internal/handler.UCPHandler`、`internal/service/ucp.Service`。
-- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；资料修改校验昵称长度、字符集和性别昵称白名单，并已接管 `users.gender/nickname` 写入成功分支；密码修改校验原密码、长度和确认密码一致。扣费、通知、密码更新和重新登录暂未接管。
+- 兼容规则：保留未登录 `retcode=-9999 errmsg=您还没有登录`；金币兑换校验兑换类型、兑换数量和 100 万上限；求片校验番号/名称、金币最低 100、助力记录 id；资料修改校验昵称长度、字符集和性别昵称白名单，并已接管 `users.gender/nickname` 写入成功分支；密码修改校验原密码、长度和确认密码一致。求片扣费和通知暂未接管；密码更新和重新登录、金币/余额互换已在后续迁移中补齐。
 - 已迁移小视频投币未登录分支：`/minivod/throwcoin/:vodid`，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；投币事务和作者收益暂未接管。
 - 已迁移 StarLive raw JSON 安全失败分支：`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`。游客长 `memberId` 返回 `游客用户请先登录`，未知用户返回 `未知用户`，`tryAgain` 未知业务类型返回 `未知业务类型`；下注、结算、翻译扣款和外部幂等回调暂未接管。
 - 已迁移 Respond token 失败分支：`/respond/chan1`，`md5(mobi+"|"+secret)` 校验失败返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理暂未接管。
@@ -1574,7 +1574,7 @@
 
 ### UCP 个人中心进度核对与 profile/placeorder 补充迁移
 
-- 新增文档：`docs/ucp-migration-progress.md`，按 PHP `/ucp/*` controller/action 核对后记录总计 70 个业务 action、49 个已完整迁移、21 个未完全迁移、0 个完全未注册到 Go。
+- 新增文档：`docs/ucp-migration-progress.md`，按 PHP `/ucp/*` controller/action 核对后记录总计 70 个业务 action；最新统计为 50 个已完整迁移、20 个未完全迁移、0 个完全未注册到 Go。
 - 已迁移：`/ucp/user/profile` 成功分支，保留旧 PHP 的性别默认、昵称格式和昵称白名单校验，通过后更新当前用户 `users.gender/nickname` 并返回 `retcode=0 errmsg=资料设置成功`。
 - 已迁移：`/ucp/vippkg/placeorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder` 的支付方式错误或不被允许分支，在套餐有效且进入订单创建前，只读校验支付通道、`paycode`、paytype 和金额范围；成功创建订单仍返回暂未迁移。
 - Subagent：`Meitner` 核对剩余 UCP action，建议优先切套餐 placeorder 的支付方式校验；其余多数剩余路径涉及资产写入、外部发送、keylimit/Redis/session 或提现/求片事务。
@@ -1640,7 +1640,7 @@
 - 已迁移：`/invite/bind` 已绑定邀请码、无效邀请码和无法绑定自己分支；保持 PHP 顺序为登录、已绑定、空邀请码、邀请码用户、禁止绑定自己，后续推荐关系、VIP/金币奖励和事务写入仍未接管。
 - 已迁移：`/game/wali/topup`、`/game/lottery/topup` 上分余额不足分支；只读 `users_quota.goldcoin`，停止于金币扣减、外部平台请求和失败归还之前。
 - 已迁移：`/onego/bet` 无效场次、无效期号、未开始、已结束、未知用户和余额不足分支；只读房间、期号和 quota，投注扣金币、号码生成和订单写入仍未接管。
-- 已迁移：`/ucp/coinlog/exchange` 兑换关闭、金币换人民币最小金币和兑换计算为 0 分支；按 PHP 顺序先检查 `exrate==0` 再检查登录，金币/余额双写事务仍未接管。
+- 已迁移：`/ucp/coinlog/exchange` 兑换关闭、金币换人民币最小金币和兑换计算为 0 分支；按 PHP 顺序先检查 `exrate==0` 再检查登录。金币/余额双写事务已在后续 “UCP 金币余额互换成功分支” 中补齐。
 - PHP: `src/c/api/invite.php::bind`、`src/c/api/game/wali.php::topup`、`src/c/api/game/lottery.php::topup`、`src/c/api/onego.php::bet`、`src/c/api/ucp/coinlog.php::exchange`。
 - Go: `internal/service/invite.Service.BindEdge`、`internal/service/game.WaliService.TopupEdge`、`internal/service/onego.Service.BetEdge`、`internal/service/ucp.Service.CoinLogExchangeEdge` 及对应 repository/handler。
 - Subagent：`Carson` 核对 invite/game/onego 的可迁顺序和错误文案；`Franklin` 核对 UCP 剩余项，建议优先做 coinlog exchange 与 vodorder 只读失败，暂缓支付通道复杂 placeorder。
@@ -1786,3 +1786,85 @@
 - 阻断：`trade_payments` 锁单、账户入账、`payment->doAction()`、提现冻结、金币/金豆/VIP 成功写入仍必须等真实 ledger repository、幂等表和 outbox 策略落地后再迁。
 - Subagent：`Dewey` 落 respond verifier 骨架；`Euclid` 做 provider 方案 CR；`Copernicus` 落 asset ledger 最小接口；`Carver` 做资产事务基线。
 - 测试：`go test ./internal/service/respond ./internal/handler ./internal/server`、`go test ./internal/domain/asset ./internal/service/asset` 通过。
+
+### UCP 任务宝箱开启成功分支
+
+- 已迁移：`/ucp/taskbox/taskboxopen` 未登录、任务不存在/停用、赠送金币为 0、每日/每周领取时间窗、已领取、推广人数不足和领奖成功分支。
+- PHP: `src/c/api/ucp/taskbox.php::taskboxopen`。
+- Go: `internal/handler.UCPHandler.TaskboxOpen`、`internal/service/ucp.Service.TaskboxOpen`、`internal/repository/ucp.Repository.OpenTaskbox`。
+- DB: 成功分支在事务内锁定 `promotion_taskboxlogs(uid,taskid,daykey)`，写 `promotion_taskboxlogs`，锁定并更新 `users_quota.goldcoin`，写 `user_coinlogs(cointype=19, remark=宝箱开启收入[taskid])`，提交后返回 `retcode=0 errmsg=宝箱成功开启 data.taskdone=addcoin`。
+- 兼容规则：每日宝箱使用 `ymd` daykey 和 22:00:00-22:04:59 时间窗；每周宝箱使用 `yW` daykey 且仅周六同一时间窗；推广宝箱 `daykey=0` 且要求 `users.recommend_total >= taskid`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 49/21 更新为 50/20；`MIGRATION_ENDPOINTS.md` 不再把 `taskboxopen` 标为未接管奖励写入。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/handler ./internal/server` 通过。
+
+### UCP 任务奖励成功分支
+
+- 已迁移：`/ucp/task/sign`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick` 的成功奖励分支。
+- PHP: `src/c/api/ucp/task.php::sign/qrcodeSave/invitecodeInput/adviewClick`。
+- Go: `internal/handler.UCPHandler.TaskSign/TaskQRCodeSave/TaskInviteCodeInput/TaskAdviewClick`、`internal/service/ucp.Service`、`internal/repository/ucp.Repository.AwardCoins/SignGuest`。
+- DB: 登录用户奖励在事务内锁 `users_quota`、更新 `goldcoin`、插入 `user_coinlogs`；游客签到更新 `user_guests.goldcoin/signtime`。`sign` 保留 PHP 实际 `keylimit->check()` 行为：当天二维码 key 不存在时加 `max.goldcoin.qrcode.num`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 50/20 更新为 54/16；`/ucp/task` 未完全迁移项只剩 `/ucp/task/share` 和 `/ucp/task/qrcode`。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/handler ./internal/server` 通过。
+
+### UCP 分享和二维码成功分支
+
+- 已迁移：`/ucp/task/share`、`/ucp/task/qrcode` 成功分支。
+- PHP: `src/c/api/ucp/task.php::share/qrcode`。
+- Go: `internal/handler.UCPHandler.TaskShare/TaskQRCode`、`internal/service/ucp.Service.TaskShare/TaskQRCode`、`internal/repository/ucp.Repository.SetKeylimit`。
+- DB: `share` 登录用户按 `COINTYPE_VOD_SHARE=2` 日上限发金币；`qrcode` 写 `keylimits(md5(task.qrcode.uid.Ymd))` 后返回 PNG。游客 `share` 保持 PHP 行为，不要求登录并返回随机邀请码替换后的分享文案。
+- 文档修正：`docs/ucp-migration-progress.md` 从 54/16 更新为 56/14；`/ucp/task/*` 可达业务 action 均已覆盖。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/handler ./internal/server` 通过。
+
+### UCP 金币升级尊贵会员成功分支
+
+- 已迁移：`/ucp/upgrade` 成功分支。
+- PHP: `src/c/api/ucp/index.php::upgrade`。
+- Go: `internal/handler.UCPHandler.Upgrade`、`internal/service/ucp.Service.Upgrade`、`internal/repository/ucp.Repository.UpgradeVIP`。
+- DB: 成功分支在事务内锁定 `users_quota`，扣除金币，写 `user_coinlogs(cointype=103, coinnum=-deduct_coin)`，更新 `users.sysgid=6/sysgid_exptime`，返回 `errmsg=您已成功尊贵会员` 和 `data.deduct_coin/expiry_date`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 56/14 更新为 57/13。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/handler ./internal/server` 通过。
+
+### UCP 修改密码成功分支
+
+- 已迁移：`/ucp/user/passwd` 成功分支。
+- PHP: `src/c/api/ucp/user.php::passwd`。
+- Go: `internal/handler.UCPHandler.UserPasswd`、`internal/service/ucp.Service.UserPasswd`、`internal/repository/ucp.Repository.ChangePasswordAndLogin`。
+- DB/Session: 成功分支在事务内更新 `users.password/salt`，写入新的 `sessions(type=0)`，删除该 uid 其他登录 session，并重新读取登录用户返回。保留 PHP 行为：旧密码为空时允许直接设置；成功响应包含 `data.user` 和 `data.xxx_api_auth=bin2hex(sid)`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 57/13 更新为 58/12；`/ucp/user` 未完全迁移项只剩 sendemail/verifyemail/bindmobi 成功分支。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/handler ./internal/server` 通过。
+
+### UCP 邮箱和手机绑定成功分支
+
+- 已迁移：`/ucp/user/verifyemail`、`/ucp/user/bindmobi` 成功分支。
+- PHP: `src/c/api/ucp/user.php::verifyemail/bindmobi`。
+- Go: `internal/handler.UCPHandler.UserVerifyEmail/UserBindMobi`、`internal/service/ucp.Service.UserVerifyEmailEdge/UserBindMobiEdge`、`internal/repository/ucp.Repository.VerifyEmail/BindMobi`。
+- DB: `verifyemail` 在事务内更新当前用户 `users.email` 并删除 `keylimits(md5(email.email.code))`；`bindmobi` 在事务内先将旧手机号持有人 `users.mobi` 改为 `~uniqkey`，再更新当前用户 `users.mobi`。短信和邮箱验证码的生成/发送仍留给 `/ucp/user/sendemail` 或上游短信接口。
+- 文档修正：`docs/ucp-migration-progress.md` 从 58/12 更新为 60/10；`/ucp/user` 未完全迁移项只剩 `/ucp/user/sendemail` SMTP 发送成功分支。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过。
+
+### UCP VIP 金币购买成功分支
+
+- 已迁移：`/ucp/vippkg/coinorder` 成功分支。
+- PHP: `src/c/api/ucp/vippkg.php::coinorder`。
+- Go: `internal/handler.UCPHandler.VIPPkgCoinOrder`、`internal/service/ucp.Service.VIPPkgCoinOrder`、`internal/repository/ucp.Repository.UpgradeVIP`。
+- DB: 成功分支复用 VIP 升级事务，锁定 `users_quota` 扣除套餐 `coinprice`，写 `user_coinlogs(cointype=103, coinnum=-deduct_coin)`，更新 `users.sysgid=6/sysgid_exptime`。若当前用户仍是有效尊贵会员，则在原 `sysgid_exptime` 基础上续期；否则从当前时间起算。
+- 文档修正：`docs/ucp-migration-progress.md` 从 60/10 更新为 61/9；`/ucp/vippkg` 未完全迁移项只剩 `/ucp/vippkg/placeorder` 支付下单成功分支。
+- 测试：`go test ./internal/service/ucp ./internal/server ./internal/repository/ucp` 通过。
+
+### UCP 金币兑换金豆成功分支
+
+- 已迁移：`/ucp/beanpkg/coinorder` 成功分支。
+- PHP: `src/c/api/ucp/beanpkg.php::coinorder`。
+- Go: `internal/handler.UCPHandler.BeanPkgCoinOrder`、`internal/service/ucp.Service.BeanPkgCoinOrder`、`internal/repository/ucp.Repository.BuyBeansWithCoins`。
+- DB: 成功分支在事务内锁定 `users_quota` 扣除按 `rmbprice/100*settings.exrate` 计算的金币，写 `user_coinlogs(cointype=103, coinnum=-deduct_coin)`；随后锁定或创建 `users_goldbean`，增加等额 `gold_bean` 并写 `user_beanlogs(bean_type=20, bean_num=deduct_coin)`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 61/9 更新为 62/8；`/ucp/beanpkg` 未完全迁移项只剩 `/ucp/beanpkg/placeorder` 支付下单成功分支。
+- 测试：`go test ./internal/service/ucp ./internal/server ./internal/repository/ucp` 通过。
+
+### UCP 金币余额互换成功分支
+
+- 已迁移：`/ucp/coinlog/exchange` 成功分支。
+- PHP: `src/c/api/ucp/coinlog.php::exchange`。
+- Go: `internal/handler.UCPHandler.CoinLogExchange`、`internal/service/ucp.Service.CoinLogExchangeEdge`、`internal/repository/ucp.Repository.ExchangeCoinsAndBalance`。
+- DB: `extype=1` 金币转余额时，在事务内扣 `users_quota.goldcoin`，写 `user_coinlogs(cointype=104, remark=兑换支出)`，再增加 `users_account.balance` 并写 `user_balancelogs(paytype=9, trxin=amount, remark=兑换收入)`；`extype=2` 余额转金币时先扣 `users_account.balance` 并写 `user_balancelogs(paytype=10, trxout=amount, remark=兑换支出)`，再增加 `users_quota.goldcoin` 并写 `user_coinlogs(cointype=8, remark=兑换收入)`。
+- 文档修正：`docs/ucp-migration-progress.md` 从 62/8 更新为 63/7；`/ucp/coinlog` 可达 action 均已覆盖。
+- 测试：`go test ./internal/service/ucp ./internal/server ./internal/repository/ucp` 通过。

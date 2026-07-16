@@ -188,6 +188,71 @@ func (s *Service) TaskInvite(ctx context.Context, token string) (int, string, er
 	return 0, "", nil
 }
 
+func (s *Service) TaskShare(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -1, "获取分享文案失败", err
+	}
+	pid = sanitizeTaskPID(pid)
+	sharetext, err := s.taskCallHTML(ctx, pid, "global.share.text")
+	if err != nil {
+		return nil, -1, "获取分享文案失败", err
+	}
+	inviteCode := randomInviteCode(4)
+	data := map[string]interface{}{}
+	uid := atoi(user["uid"])
+	if uid > 0 {
+		inviteCode = strings.ToUpper(taskBase36(atoi(user["uniqkey"])))
+		addCoin := getPermInt(user["perms"], "max.goldcoin.share.num")
+		maxCoin := getPermInt(user["perms"], "max.goldcoin.share.limit")
+		sentCoin, err := s.store.SumCoinLogsSinceByType(ctx, uid, coinTypeVODShare, dayStartUnix(s.now()))
+		if err != nil {
+			return nil, -1, "获取分享文案失败", err
+		}
+		if sentCoin+addCoin >= maxCoin {
+			addCoin = maxCoin - sentCoin
+		}
+		if addCoin > 0 {
+			if err := s.store.AwardCoins(ctx, uid, coinTypeVODShare, addCoin, s.now().Unix(), ""); err != nil {
+				return nil, -1, "获取分享文案失败", err
+			}
+			data["taskdone"] = addCoin
+		}
+	}
+	inviteURL, err := s.taskInviteURL(ctx)
+	if err != nil {
+		return nil, -1, "获取分享文案失败", err
+	}
+	sharetext = strings.ReplaceAll(sharetext, "{inviteUrl}", inviteURL)
+	sharetext = strings.ReplaceAll(sharetext, "{inviteCode}", inviteCode)
+	data["sharetext"] = sharetext
+	return data, 0, "", nil
+}
+
+func (s *Service) TaskQRCode(ctx context.Context, token string, pid string) ([]byte, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	key := "task.qrcode." + fmt.Sprint(uid) + "." + taskYMD(s.now())
+	if err := s.store.SetKeylimit(ctx, key, 1, "", s.now().Unix()); err != nil {
+		return nil, -1, "生成二维码失败", err
+	}
+	data, retcode, errmsg, err := s.TaskQRLink(ctx, token, pid)
+	if err != nil || retcode != 0 {
+		return nil, retcode, errmsg, err
+	}
+	body, err := s.qrRenderer.PNG(str(data["qrlink"]))
+	if err != nil {
+		return nil, -1, "生成二维码失败", err
+	}
+	return body, 0, "", nil
+}
+
 func (s *Service) TaskboxQRLink(ctx context.Context, token string, pid string) (map[string]interface{}, int, string, error) {
 	return s.taskQRLink(ctx, token, pid, "taskbox.qrcode.link")
 }

@@ -3,9 +3,11 @@ package ucp
 import (
 	"context"
 	"crypto/md5"
+	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
@@ -32,17 +34,22 @@ func (s *Service) HighRiskActionEdge(ctx context.Context, token string, pendingM
 }
 
 func (s *Service) UpgradeEdge(ctx context.Context, token string, day int) (int, string, error) {
+	_, retcode, errmsg, err := s.Upgrade(ctx, token, day)
+	return retcode, errmsg, err
+}
+
+func (s *Service) Upgrade(ctx context.Context, token string, day int) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
 	const superVIPGID = 6
 	if atoi(user["sysgid"]) == superVIPGID {
-		return -1, "您已经是尊贵会员", nil
+		return nil, -1, "您已经是尊贵会员", nil
 	}
 	pricing := map[int]int{
 		7:    100,
@@ -53,187 +60,298 @@ func (s *Service) UpgradeEdge(ctx context.Context, token string, day int) (int, 
 	}
 	deductCoin, ok := pricing[day]
 	if !ok {
-		return -1, "请选择一个时长", nil
+		return nil, -1, "请选择一个时长", nil
 	}
 	if day == 3650 {
-		return -1, "终身尊贵VIP暂停升级", nil
+		return nil, -1, "终身尊贵VIP暂停升级", nil
 	}
 	quota, err := s.store.Quota(ctx, uid)
 	if err != nil {
-		return -1, "会员升级失败", err
+		return nil, -1, "会员升级失败", err
 	}
 	if atoi(quota["goldcoin"]) < deductCoin {
-		return -1, "金币不足，快做任务获取金币吧！", nil
+		return nil, -1, "金币不足，快做任务获取金币吧！", nil
 	}
-	return -1, "会员升级成功分支暂未迁移", nil
+	now := s.now()
+	expiry := now.Add(time.Duration(day) * 24 * time.Hour).Unix()
+	if err := s.store.UpgradeVIP(ctx, uid, deductCoin, superVIPGID, expiry, now.Unix()); err != nil {
+		return nil, -1, "会员升级失败", err
+	}
+	return map[string]interface{}{
+		"deduct_coin": deductCoin,
+		"expiry_date": formatMinuteTime(expiry),
+	}, 0, "您已成功尊贵会员", nil
 }
 
 func (s *Service) TaskSignEdge(ctx context.Context, token string) (int, string, error) {
+	_, retcode, errmsg, err := s.TaskSign(ctx, token)
+	return retcode, errmsg, err
+}
+
+func (s *Service) TaskSign(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -1, "签到失败", err
+		return nil, -1, "签到失败", err
 	}
 	uid := atoi(user["uid"])
+	now := s.now()
 	if uid == 0 {
 		guest, err := s.store.GuestBySID(ctx, str(user["sid"]))
 		if err != nil {
-			return -1, "签到失败", err
+			return nil, -1, "签到失败", err
 		}
 		if len(guest) == 0 {
-			return -1, "请登录后操作，客户端游客请先携带信息", nil
+			return nil, -1, "请登录后操作，客户端游客请先携带信息", nil
 		}
-		if sameDay(atoi64(guest["signtime"]), s.now()) {
-			return -1, "您今天已经签过到了", nil
+		if sameDay(atoi64(guest["signtime"]), now) {
+			return nil, -1, "您今天已经签过到了", nil
 		}
-		return -1, "签到成功分支暂未迁移", nil
+		addCoin := getPermInt(user["perms"], "max.goldcoin.sign.num")
+		if err := s.store.SignGuest(ctx, str(user["sid"]), addCoin, now.Unix()); err != nil {
+			return nil, -1, "签到失败", err
+		}
+		return nil, 0, "", nil
 	}
-	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSign, dayStartUnix(s.now()))
+	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSign, dayStartUnix(now))
 	if err != nil {
-		return -1, "签到失败", err
+		return nil, -1, "签到失败", err
 	}
 	if count > 0 {
-		return -1, "您今天已经签过到了", nil
+		return nil, -1, "您今天已经签过到了", nil
 	}
-	return -1, "签到成功分支暂未迁移", nil
+	addCoin := getPermInt(user["perms"], "max.goldcoin.sign.num")
+	if boundContact(str(user["email"])) {
+		addCoin += getPermInt(user["perms"], "max.goldcoin.email.num")
+	}
+	if boundContact(str(user["mobi"])) {
+		addCoin += getPermInt(user["perms"], "max.goldcoin.mobi.num")
+	}
+	key := "task.qrcode." + fmt.Sprint(uid) + "." + taskYMD(now)
+	qrCount, err := s.store.KeylimitCountSince(ctx, key, 0)
+	if err != nil {
+		return nil, -1, "签到失败", err
+	}
+	if qrCount == 0 {
+		addCoin += getPermInt(user["perms"], "max.goldcoin.qrcode.num")
+	}
+	if addCoin > 0 {
+		if err := s.store.AwardCoins(ctx, uid, coinTypeSign, addCoin, now.Unix(), ""); err != nil {
+			return nil, -1, "签到失败", err
+		}
+		return map[string]interface{}{"taskdone": addCoin}, 0, "", nil
+	}
+	return nil, 0, "", nil
 }
 
 func (s *Service) TaskInviteCodeInputEdge(ctx context.Context, token string, inviteCode string) (int, string, error) {
+	_, retcode, errmsg, err := s.TaskInviteCodeInput(ctx, token, inviteCode)
+	return retcode, errmsg, err
+}
+
+func (s *Service) TaskInviteCodeInput(ctx context.Context, token string, inviteCode string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
-	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSaveQRCode, dayStartUnix(s.now()))
+	now := s.now()
+	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSaveQRCode, dayStartUnix(now))
 	if err != nil {
-		return -1, "保存二维码失败", err
+		return nil, -1, "保存二维码失败", err
 	}
 	if count > 0 {
-		return -1, "您今天已经保存过了", nil
+		return nil, -1, "您今天已经保存过了", nil
 	}
 	expected := strings.ToUpper(taskBase36(atoi(user["uniqkey"])))
 	if strings.TrimSpace(inviteCode) != expected {
-		return -1, "邀请码不正确", nil
+		return nil, -1, "邀请码不正确", nil
 	}
-	return -1, "邀请码绑定成功分支暂未迁移", nil
+	return s.awardTaskCoins(ctx, uid, coinTypeSaveQRCode, getPermInt(user["perms"], "max.goldcoin.saveqrcode.num"), now, "保存二维码已送金币")
 }
 
 func (s *Service) TaskAdviewClickEdge(ctx context.Context, token string) (int, string, error) {
+	_, retcode, errmsg, err := s.TaskAdviewClick(ctx, token)
+	return retcode, errmsg, err
+}
+
+func (s *Service) TaskAdviewClick(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
-	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeAdViewClick, dayStartUnix(s.now()))
+	now := s.now()
+	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeAdViewClick, dayStartUnix(now))
 	if err != nil {
-		return -1, "广告点击失败", err
+		return nil, -1, "广告点击失败", err
 	}
 	if count > 0 {
-		return -1, "您今天已经送过了", nil
+		return nil, -1, "您今天已经送过了", nil
 	}
-	return -1, "广告点击奖励成功分支暂未迁移", nil
+	return s.awardTaskCoins(ctx, uid, coinTypeAdViewClick, getPermInt(user["perms"], "max.goldcoin.adviewclick.num"), now, "点击广告已送金币")
 }
 
 func (s *Service) TaskQRCodeSaveEdge(ctx context.Context, token string) (int, string, error) {
+	_, retcode, errmsg, err := s.TaskQRCodeSave(ctx, token)
+	return retcode, errmsg, err
+}
+
+func (s *Service) TaskQRCodeSave(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
-	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSaveQRCode, dayStartUnix(s.now()))
+	now := s.now()
+	count, err := s.store.CountCoinLogsSinceByType(ctx, uid, coinTypeSaveQRCode, dayStartUnix(now))
 	if err != nil {
-		return -1, "保存二维码失败", err
+		return nil, -1, "保存二维码失败", err
 	}
 	if count > 0 {
-		return -1, "您今天已经保存过了", nil
+		return nil, -1, "您今天已经保存过了", nil
 	}
-	return -1, "保存二维码奖励成功分支暂未迁移", nil
+	return s.awardTaskCoins(ctx, uid, coinTypeSaveQRCode, getPermInt(user["perms"], "max.goldcoin.saveqrcode.num"), now, "保存二维码已送金币")
+}
+
+func (s *Service) awardTaskCoins(ctx context.Context, uid int, coinType int, addCoin int, now time.Time, messagePrefix string) (map[string]interface{}, int, string, error) {
+	if addCoin > 0 {
+		if err := s.store.AwardCoins(ctx, uid, coinType, addCoin, now.Unix(), ""); err != nil {
+			return nil, -1, messagePrefix + "失败", err
+		}
+		return map[string]interface{}{"taskdone": addCoin}, 0, fmt.Sprintf("%s: %d", messagePrefix, addCoin), nil
+	}
+	return nil, 0, fmt.Sprintf("%s: %d", messagePrefix, addCoin), nil
+}
+
+func boundContact(value string) bool {
+	return value != "" && !strings.HasPrefix(value, "~")
+}
+
+func taskYMD(now time.Time) string {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	return now.In(loc).Format("20060102")
+}
+
+func formatMinuteTime(ts int64) string {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	return time.Unix(ts, 0).In(loc).Format("2006-01-02 15:04")
 }
 
 func (s *Service) TaskboxOpenEdge(ctx context.Context, token string, taskID int) (int, string, error) {
+	_, retcode, errmsg, err := s.TaskboxOpen(ctx, token, taskID)
+	return retcode, errmsg, err
+}
+
+func (s *Service) TaskboxOpen(ctx context.Context, token string, taskID int) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
 	taskrow, err := s.store.TaskboxByID(ctx, taskID)
 	if err != nil {
-		return -1, "任务宝箱开启失败", err
+		return nil, -1, "任务宝箱开启失败", err
 	}
 	if len(taskrow) == 0 || atoi(taskrow["showtype"]) != 0 {
-		return -1, "任务不存在或已停用", nil
+		return nil, -1, "任务不存在或已停用", nil
 	}
-	if atoi(taskrow["mincoin"]) == 0 && atoi(taskrow["maxcoin"]) == 0 {
-		return -1, "宝箱赠送金币为0", nil
+	addCoin := inclusiveRand(atoi(taskrow["mincoin"]), atoi(taskrow["maxcoin"]))
+	if addCoin == 0 {
+		return nil, -1, "宝箱赠送金币为0", nil
 	}
 	now := s.now()
 	nowUnix := now.Unix()
 	dayKeyDaily, dayKeyWeekly, weekday, startTime := taskboxTimes(now)
 	taskID = atoi(taskrow["taskid"])
+	dayKey := 0
+	duplicateMessage := "推广任务宝箱已领过了"
 	switch taskID {
 	case 1022:
 		if nowUnix < startTime {
-			return -1, "每日神秘宝箱领取时间未开始", nil
+			return nil, -1, "每日神秘宝箱领取时间未开始", nil
 		}
 		if nowUnix >= startTime+300 {
-			return -1, "每日神秘宝箱领取时间已结束", nil
+			return nil, -1, "每日神秘宝箱领取时间已结束", nil
 		}
 		checkrow, err := s.store.TaskboxLog(ctx, uid, taskID, dayKeyDaily)
 		if err != nil {
-			return -1, "任务宝箱开启失败", err
+			return nil, -1, "任务宝箱开启失败", err
 		}
 		if len(checkrow) > 0 {
-			return -1, "每日神秘宝箱已领过了", nil
+			return nil, -1, "每日神秘宝箱已领过了", nil
 		}
+		dayKey = dayKeyDaily
+		duplicateMessage = "每日神秘宝箱已领过了"
 	case 1622:
 		if weekday != 6 {
-			return -1, "每周神秘宝箱周六晚开始", nil
+			return nil, -1, "每周神秘宝箱周六晚开始", nil
 		}
 		if nowUnix < startTime {
-			return -1, "每周神秘宝箱领取时间未开始", nil
+			return nil, -1, "每周神秘宝箱领取时间未开始", nil
 		}
 		if nowUnix >= startTime+300 {
-			return -1, "每周神秘宝箱领取时间已结束", nil
+			return nil, -1, "每周神秘宝箱领取时间已结束", nil
 		}
 		checkrow, err := s.store.TaskboxLog(ctx, uid, taskID, dayKeyWeekly)
 		if err != nil {
-			return -1, "任务宝箱开启失败", err
+			return nil, -1, "任务宝箱开启失败", err
 		}
 		if len(checkrow) > 0 {
-			return -1, "每周神秘宝箱已领过了", nil
+			return nil, -1, "每周神秘宝箱已领过了", nil
 		}
+		dayKey = dayKeyWeekly
+		duplicateMessage = "每周神秘宝箱已领过了"
 	default:
 		checkrow, err := s.store.TaskboxLog(ctx, uid, taskID, 0)
 		if err != nil {
-			return -1, "任务宝箱开启失败", err
+			return nil, -1, "任务宝箱开启失败", err
 		}
 		if len(checkrow) > 0 {
-			return -1, "推广任务宝箱已领过了", nil
+			return nil, -1, "推广任务宝箱已领过了", nil
 		}
 		currentUser, err := s.store.UserByID(ctx, uid)
 		if err != nil {
-			return -1, "任务宝箱开启失败", err
+			return nil, -1, "任务宝箱开启失败", err
 		}
 		recommendTotal := 0
 		if atoi(currentUser["uid"]) != 0 {
 			recommendTotal = atoi(currentUser["recommend_total"])
 		}
 		if recommendTotal < taskID {
-			return -1, "推广人数未达标，继续加油哦", nil
+			return nil, -1, "推广人数未达标，继续加油哦", nil
 		}
 	}
-	return -1, "任务宝箱开启成功分支暂未迁移", nil
+	if message, err := s.store.OpenTaskbox(ctx, uid, taskrow, dayKey, addCoin, nowUnix, duplicateMessage); err != nil {
+		return nil, -1, "任务宝箱开启失败", err
+	} else if message != "" {
+		return nil, -1, message, nil
+	}
+	return map[string]interface{}{"taskdone": addCoin}, 0, "宝箱成功开启", nil
+}
+
+func inclusiveRand(minValue int, maxValue int) int {
+	if maxValue < minValue {
+		maxValue = minValue
+	}
+	return rand.Intn(maxValue-minValue+1) + minValue
 }
 
 func sameDay(ts int64, now time.Time) bool {
@@ -330,7 +448,10 @@ func (s *Service) UserVerifyEmailEdge(ctx context.Context, token string, email s
 	if len(existing) > 0 {
 		return -1, "邮箱已经被使用", nil
 	}
-	return -1, "邮箱验证绑定成功分支暂未迁移", nil
+	if err := s.store.VerifyEmail(ctx, atoi(user["uid"]), email, "email."+email+"."+emailCode); err != nil {
+		return -1, "邮箱验证失败", err
+	}
+	return 0, "邮箱验证已确认，绑定成功", nil
 }
 
 func (s *Service) emailRateLimitMessage(ctx context.Context, key string, recentWindow time.Duration, dayLimit int) (string, error) {
@@ -379,7 +500,10 @@ func (s *Service) UserBindMobiEdge(ctx context.Context, token string, mobiPrefix
 	if _, err := s.store.UserByMobi(ctx, fullMobi); err != nil {
 		return -1, "手机验证失败", err
 	}
-	return -1, "手机验证绑定成功分支暂未迁移", nil
+	if err := s.store.BindMobi(ctx, atoi(user["uid"]), fullMobi); err != nil {
+		return -1, "手机验证失败", err
+	}
+	return 0, "手机验证已确认，绑定成功", nil
 }
 
 func (s *Service) UserProfileEdge(ctx context.Context, token string, gender int, nickname string) (int, string, error) {
@@ -429,28 +553,51 @@ func (s *Service) UserProfileEdge(ctx context.Context, token string, gender int,
 }
 
 func (s *Service) UserPasswdEdge(ctx context.Context, token string, passwordOld string, password string, passwordConfirm string) (int, string, error) {
+	_, retcode, errmsg, err := s.UserPasswd(ctx, token, passwordOld, password, passwordConfirm)
+	return retcode, errmsg, err
+}
+
+func (s *Service) UserPasswd(ctx context.Context, token string, passwordOld string, password string, passwordConfirm string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	uid := atoi(user["uid"])
 	if uid == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
+	}
+	groups, err := s.store.Groups(ctx)
+	if err != nil {
+		return nil, -1, "密码修改失败", err
 	}
 	user, err = s.store.UserByID(ctx, uid)
 	if err != nil {
-		return -1, "密码修改失败", err
+		return nil, -1, "密码修改失败", err
 	}
 	if str(user["password"]) != "" && phpPassword(passwordOld+str(user["salt"])) != str(user["password"]) {
-		return -1, "原密码不正确", nil
+		return nil, -1, "原密码不正确", nil
 	}
 	if len(password) < 6 || len(password) > 16 {
-		return -1, "密码6-16位", nil
+		return nil, -1, "密码6-16位", nil
 	}
 	if password != passwordConfirm {
-		return -1, "两次输入密码不一致", nil
+		return nil, -1, "两次输入密码不一致", nil
 	}
-	return -1, "密码修改成功分支暂未迁移", nil
+	salt := randomInviteCode(8)
+	passwordHash := phpPassword(password + salt)
+	sid := randomSessionID()
+	sessionToken := md5String(passwordHash + "_" + salt)
+	user, err = s.store.ChangePasswordAndLogin(ctx, uid, passwordHash, salt, sid, sessionToken, s.now().Unix())
+	if err != nil {
+		return nil, -1, "密码修改失败", err
+	}
+	user["password"] = passwordHash
+	user["salt"] = salt
+	data := map[string]interface{}{
+		"user":         singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		"xxx_api_auth": hex.EncodeToString([]byte(sid)),
+	}
+	return data, 0, "密码修改成功", nil
 }
 
 func validProfileNickname(nickname string) (bool, string) {
@@ -501,6 +648,19 @@ func phpPassword(password string) string {
 		password = password[:insertAt] + fmt.Sprintf("%x", val[name]) + password[insertAt:]
 	}
 	return password
+}
+
+func md5String(value string) string {
+	sum := md5.Sum([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func randomSessionID() string {
+	buf := make([]byte, 16)
+	if _, err := crand.Read(buf); err != nil {
+		return strings.ToLower(randomInviteCode(32))
+	}
+	return hex.EncodeToString(buf)
 }
 
 func phpHexByte(value string) int {
@@ -558,7 +718,18 @@ func (s *Service) CoinLogExchangeEdge(ctx context.Context, token string, extype 
 			return -1, "兑换计算所得人民币为0", nil
 		}
 	}
-	return -1, "金币兑换成功分支暂未迁移", nil
+	coinnum := exnum
+	amount := exnum * 100
+	if extype == 1 {
+		amount = exnum * 100 / exrate
+	}
+	if extype == 2 {
+		coinnum = exnum * exrate
+	}
+	if err := s.store.ExchangeCoinsAndBalance(ctx, atoi(user["uid"]), extype, coinnum, amount, s.now().Unix()); err != nil {
+		return -1, "金币兑换失败", err
+	}
+	return 0, "", nil
 }
 
 func (s *Service) VODOrderCreateEdge(ctx context.Context, token string, vodserial string, vodname string, coins int) (int, string, error) {

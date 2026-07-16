@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 func (s *Service) VIPPkgIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
@@ -19,11 +20,86 @@ func (s *Service) BeanPkgIndex(ctx context.Context, token string) (map[string]in
 }
 
 func (s *Service) VIPPkgCoinOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
-	return s.pkgCoinOrderEdge(ctx, token, "vip", pkgID)
+	_, retcode, errmsg, err := s.VIPPkgCoinOrder(ctx, token, pkgID)
+	return retcode, errmsg, err
 }
 
 func (s *Service) BeanPkgCoinOrderEdge(ctx context.Context, token string, pkgID int) (int, string, error) {
-	return s.pkgCoinOrderEdge(ctx, token, "bean", pkgID)
+	_, retcode, errmsg, err := s.BeanPkgCoinOrder(ctx, token, pkgID)
+	return retcode, errmsg, err
+}
+
+func (s *Service) VIPPkgCoinOrder(ctx context.Context, token string, pkgID int) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	pkg, err := s.store.PackageByID(ctx, "vip", pkgID)
+	if err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	if len(pkg) == 0 || atoi(pkg["showtype"]) != 0 {
+		return nil, -1, "套餐不存在或未启用", nil
+	}
+	deductCoin := atoi(pkg["coinprice"])
+	dayLen := atoi(pkg["daylen"])
+	now := s.now()
+	expiry := now.Add(time.Duration(dayLen) * 24 * time.Hour).Unix()
+	const superVIPGID = 6
+	if atoi(user["sysgid"]) == superVIPGID && atoi64(user["sysgid_exptime"]) > now.Unix() {
+		expiry = atoi64(user["sysgid_exptime"]) + int64(dayLen)*86400
+	}
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	if atoi(quota["goldcoin"]) < deductCoin {
+		return nil, -1, "金币不足，快做任务获取金币吧！", nil
+	}
+	if err := s.store.UpgradeVIP(ctx, uid, deductCoin, superVIPGID, expiry, now.Unix()); err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	return map[string]interface{}{
+		"deduct_coin": deductCoin,
+		"expiry_date": formatMinuteTime(expiry),
+	}, 0, "您已成功升级尊贵会员", nil
+}
+
+func (s *Service) BeanPkgCoinOrder(ctx context.Context, token string, pkgID int) (map[string]interface{}, int, string, error) {
+	user, _, err := s.authenticatedUser(ctx, token)
+	if err != nil {
+		return nil, -9999, "您还没有登录", err
+	}
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -9999, "您还没有登录", nil
+	}
+	pkg, err := s.store.PackageByID(ctx, "bean", pkgID)
+	if err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	if len(pkg) == 0 || atoi(pkg["showtype"]) != 0 {
+		return nil, -1, "套餐不存在或未启用", nil
+	}
+	deductCoin, err := s.coinOrderPrice(ctx, "bean", pkg)
+	if err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	quota, err := s.store.Quota(ctx, uid)
+	if err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	if atoi(quota["goldcoin"]) < deductCoin {
+		return nil, -1, "金币不足，快做任务获取金币吧！", nil
+	}
+	if err := s.store.BuyBeansWithCoins(ctx, uid, deductCoin, deductCoin, s.now().Unix()); err != nil {
+		return nil, -1, "套餐购买失败", err
+	}
+	return map[string]interface{}{"deduct_coin": deductCoin}, 0, "您已成功兑换金豆", nil
 }
 
 func (s *Service) VIPPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {

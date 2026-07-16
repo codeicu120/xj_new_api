@@ -20,6 +20,17 @@ type fakeUserStore struct {
 	countCoinLogSince   *int
 	countCoinLogTypes   []int
 	countCoinLogResult  int
+	sumCoinLogByType    map[int]int
+	awardedCoins        *map[string]interface{}
+	awardCoinsErr       error
+	signedGuest         *map[string]interface{}
+	signGuestErr        error
+	upgradedVIP         *map[string]interface{}
+	upgradeVIPErr       error
+	boughtBeans         *map[string]interface{}
+	buyBeansErr         error
+	exchangedCoins      *map[string]interface{}
+	exchangeCoinsErr    error
 	coinBonusStats      map[string]interface{}
 	feedbackRow         map[string]interface{}
 	feedbackSinceCount  int
@@ -33,6 +44,9 @@ type fakeUserStore struct {
 	taskboxRow          map[string]interface{}
 	taskboxLog          map[string]interface{}
 	taskboxLogs         []map[string]interface{}
+	openedTaskbox       *map[string]interface{}
+	openTaskboxMessage  string
+	openTaskboxErr      error
 	bankcards           []map[string]interface{}
 	bankcardRow         map[string]interface{}
 	createdBankcard     map[string]interface{}
@@ -58,11 +72,16 @@ type fakeUserStore struct {
 	myVODSupportCoins   int
 	userByID            map[string]interface{}
 	updatedProfile      *map[string]interface{}
+	changedPassword     *map[string]interface{}
+	changePasswordErr   error
+	verifiedEmail       *map[string]interface{}
+	boundMobi           *map[string]interface{}
 	userByEmail         map[string]interface{}
 	userByMobi          map[string]interface{}
 	keylimitCounts      map[string]int
 	keylimitTotalCounts map[string]int
 	keylimitData        map[string]string
+	setKeylimit         *map[string]interface{}
 	botByID             map[string]interface{}
 	sentMessage         map[string]interface{}
 }
@@ -90,8 +109,8 @@ func (s fakeUserStore) UserBySession(context.Context, string) (map[string]interf
 
 func (s fakeUserStore) Groups(context.Context) ([]map[string]interface{}, error) {
 	return []map[string]interface{}{
-		{"gid": "0", "gname": "游客", "gicon": "", "minup": "0", "weight": "0", "scope": "0", "perms": `{"max.vod.play.daynum":"10","max.vod.down.daynum":"8","max.minivod.play.daynum":"20","max.minivod.down.daynum":"18"}`},
-		{"gid": "4", "gname": "普通会员", "gicon": "V4", "minup": "100", "weight": "4", "scope": "0", "perms": `{"max.vod.play.daynum":"40","max.vod.down.daynum":"30","max.comment.post.daynum":"4","max.minivod.play.daynum":"150","max.minivod.down.daynum":"150","max.goldcoin.share.num":"1","max.goldcoin.share.limit":"3","max.goldcoin.comment.num":"2","max.goldcoin.comment.limit":"6","max.goldcoin.favorite.num":"3","max.goldcoin.favorite.limit":"9","max.goldcoin.play10.num":"4","max.goldcoin.play10.limit":"12","max.goldcoin.saveqrcode.num":"5","max.goldcoin.adviewclick.num":"6","max.goldcoin.minivod.down.coinnum":"7","max.goldcoin.minivod.down.limit":"21"}`},
+		{"gid": "0", "gname": "游客", "gicon": "", "minup": "0", "weight": "0", "scope": "0", "perms": `{"max.vod.play.daynum":"10","max.vod.down.daynum":"8","max.minivod.play.daynum":"20","max.minivod.down.daynum":"18","max.goldcoin.sign.num":"3"}`},
+		{"gid": "4", "gname": "普通会员", "gicon": "V4", "minup": "100", "weight": "4", "scope": "0", "perms": `{"max.vod.play.daynum":"40","max.vod.down.daynum":"30","max.comment.post.daynum":"4","max.minivod.play.daynum":"150","max.minivod.down.daynum":"150","max.goldcoin.sign.num":"3","max.goldcoin.email.num":"2","max.goldcoin.mobi.num":"4","max.goldcoin.qrcode.num":"5","max.goldcoin.share.num":"1","max.goldcoin.share.limit":"3","max.goldcoin.comment.num":"2","max.goldcoin.comment.limit":"6","max.goldcoin.favorite.num":"3","max.goldcoin.favorite.limit":"9","max.goldcoin.play10.num":"4","max.goldcoin.play10.limit":"12","max.goldcoin.saveqrcode.num":"5","max.goldcoin.adviewclick.num":"6","max.goldcoin.minivod.down.coinnum":"7","max.goldcoin.minivod.down.limit":"21"}`},
 		{"gid": "7", "gname": "禁止发言", "gicon": "V7", "minup": "2000000", "weight": "7", "scope": "0", "perms": `{"max.vod.play.daynum":"0","max.vod.down.daynum":"0","max.comment.post.daynum":"0","max.minivod.play.daynum":"0","max.minivod.down.daynum":"0"}`},
 		{"gid": "6", "gname": "尊贵VIP", "gicon": "V6", "minup": "1000000", "weight": "6", "scope": "0", "perms": `{"max.vod.play.daynum":"1000","max.vod.down.daynum":"202","max.comment.post.daynum":"50","max.minivod.play.daynum":"999","max.minivod.down.daynum":"200"}`},
 	}, nil
@@ -150,6 +169,20 @@ func (s fakeUserStore) TaskboxLog(context.Context, int, int, int) (map[string]in
 		return s.taskboxLog, nil
 	}
 	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) OpenTaskbox(_ context.Context, uid int, task map[string]interface{}, dayKey int, addCoin int, now int64, duplicateMessage string) (string, error) {
+	if s.openedTaskbox != nil {
+		*s.openedTaskbox = map[string]interface{}{
+			"uid":              uid,
+			"taskid":           task["taskid"],
+			"daykey":           dayKey,
+			"addcoin":          addCoin,
+			"now":              now,
+			"duplicateMessage": duplicateMessage,
+		}
+	}
+	return s.openTaskboxMessage, s.openTaskboxErr
 }
 
 func (s fakeUserStore) TaskboxCompletedLogs(context.Context, int) ([]map[string]interface{}, error) {
@@ -315,7 +348,72 @@ func (s fakeUserStore) CountCoinLogsSinceByType(context.Context, int, int, int64
 }
 
 func (s fakeUserStore) SumCoinLogsSinceByType(_ context.Context, _ int, coinType int, _ int64) (int, error) {
+	if s.sumCoinLogByType != nil {
+		return s.sumCoinLogByType[coinType], nil
+	}
 	return coinType, nil
+}
+
+func (s fakeUserStore) AwardCoins(_ context.Context, uid int, coinType int, addCoin int, now int64, remark string) error {
+	if s.awardedCoins != nil {
+		*s.awardedCoins = map[string]interface{}{
+			"uid":      uid,
+			"cointype": coinType,
+			"addcoin":  addCoin,
+			"now":      now,
+			"remark":   remark,
+		}
+	}
+	return s.awardCoinsErr
+}
+
+func (s fakeUserStore) SignGuest(_ context.Context, sid string, addCoin int, now int64) error {
+	if s.signedGuest != nil {
+		*s.signedGuest = map[string]interface{}{
+			"sid":     sid,
+			"addcoin": addCoin,
+			"now":     now,
+		}
+	}
+	return s.signGuestErr
+}
+
+func (s fakeUserStore) UpgradeVIP(_ context.Context, uid int, deductCoin int, vipGID int, expiry int64, now int64) error {
+	if s.upgradedVIP != nil {
+		*s.upgradedVIP = map[string]interface{}{
+			"uid":        uid,
+			"deductCoin": deductCoin,
+			"vipGID":     vipGID,
+			"expiry":     expiry,
+			"now":        now,
+		}
+	}
+	return s.upgradeVIPErr
+}
+
+func (s fakeUserStore) BuyBeansWithCoins(_ context.Context, uid int, deductCoin int, addBeans int, now int64) error {
+	if s.boughtBeans != nil {
+		*s.boughtBeans = map[string]interface{}{
+			"uid":        uid,
+			"deductCoin": deductCoin,
+			"addBeans":   addBeans,
+			"now":        now,
+		}
+	}
+	return s.buyBeansErr
+}
+
+func (s fakeUserStore) ExchangeCoinsAndBalance(_ context.Context, uid int, extype int, coinnum int, amount int, now int64) error {
+	if s.exchangedCoins != nil {
+		*s.exchangedCoins = map[string]interface{}{
+			"uid":     uid,
+			"extype":  extype,
+			"coinnum": coinnum,
+			"amount":  amount,
+			"now":     now,
+		}
+	}
+	return s.exchangeCoinsErr
 }
 
 func (s fakeUserStore) CountVODCommentsSince(context.Context, int, int64, bool) (int, error) {
@@ -452,6 +550,54 @@ func (s fakeUserStore) UpdateUserProfile(_ context.Context, uid int, gender int,
 			row["nickname"] = *nickname
 		}
 		*s.updatedProfile = row
+	}
+	return nil
+}
+
+func (s fakeUserStore) ChangePasswordAndLogin(_ context.Context, uid int, passwordHash string, salt string, sid string, token string, now int64) (map[string]interface{}, error) {
+	if s.changedPassword != nil {
+		*s.changedPassword = map[string]interface{}{
+			"uid":      uid,
+			"password": passwordHash,
+			"salt":     salt,
+			"sid":      sid,
+			"token":    token,
+			"now":      now,
+		}
+	}
+	if s.changePasswordErr != nil {
+		return nil, s.changePasswordErr
+	}
+	row := map[string]interface{}{}
+	for k, v := range s.user {
+		row[k] = v
+	}
+	for k, v := range s.userByID {
+		row[k] = v
+	}
+	row["uid"] = fmt.Sprint(uid)
+	row["password"] = passwordHash
+	row["salt"] = salt
+	return row, nil
+}
+
+func (s fakeUserStore) VerifyEmail(_ context.Context, uid int, email string, key string) error {
+	if s.verifiedEmail != nil {
+		*s.verifiedEmail = map[string]interface{}{
+			"uid":   uid,
+			"email": email,
+			"key":   key,
+		}
+	}
+	return nil
+}
+
+func (s fakeUserStore) BindMobi(_ context.Context, uid int, mobi string) error {
+	if s.boundMobi != nil {
+		*s.boundMobi = map[string]interface{}{
+			"uid":  uid,
+			"mobi": mobi,
+		}
 	}
 	return nil
 }
@@ -735,6 +881,18 @@ func (s fakeUserStore) KeylimitDataSince(_ context.Context, key string, _ int64)
 	return "", nil
 }
 
+func (s fakeUserStore) SetKeylimit(_ context.Context, key string, keynum int, keydata string, now int64) error {
+	if s.setKeylimit != nil {
+		*s.setKeylimit = map[string]interface{}{
+			"key":     key,
+			"keynum":  keynum,
+			"keydata": keydata,
+			"now":     now,
+		}
+	}
+	return nil
+}
+
 func (s fakeUserStore) PackageRows(context.Context, string) ([]map[string]interface{}, error) {
 	return s.packages, nil
 }
@@ -935,13 +1093,103 @@ func TestTaskRewardEdgePrechecks(t *testing.T) {
 		t.Fatalf("qrcode save saved retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, countCoinLogSince: &zero}, "https://res.example.test")
-	retcode, errmsg, err = service.TaskQRCodeSaveEdge(context.Background(), "token")
+	awarded := map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5", "gid": "4"},
+		countCoinLogSince: &zero,
+		awardedCoins:      &awarded,
+	}, "https://res.example.test")
+	data, retcode, errmsg, err := service.TaskQRCodeSave(context.Background(), "token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "保存二维码奖励成功分支暂未迁移" {
-		t.Fatalf("qrcode save success placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "保存二维码已送金币: 5" || atoi(data["taskdone"]) != 5 {
+		t.Fatalf("qrcode save success retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(awarded["uid"]) != 5 || atoi(awarded["cointype"]) != coinTypeSaveQRCode || atoi(awarded["addcoin"]) != 5 {
+		t.Fatalf("qrcode save award mismatch: %v", awarded)
+	}
+}
+
+func TestTaskRewardSuccessBranches(t *testing.T) {
+	zero := 0
+	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+
+	signedGuest := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "0", "sid": "guest", "perms": `{"max.goldcoin.sign.num":"3"}`},
+		guest:             map[string]interface{}{"sid": "guest", "goldcoin": "9", "signtime": "0"},
+		signedGuest:       &signedGuest,
+		countCoinLogSince: &zero,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	data, retcode, errmsg, err := service.TaskSign(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" || data != nil {
+		t.Fatalf("guest sign retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if signedGuest["sid"] != "guest" || atoi(signedGuest["addcoin"]) != 3 {
+		t.Fatalf("guest sign mismatch: %v", signedGuest)
+	}
+
+	awarded := map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user: map[string]interface{}{
+			"uid":     "5",
+			"gid":     "4",
+			"email":   "me@example.com",
+			"mobi":    "86.13800138000",
+			"uniqkey": "12345",
+		},
+		countCoinLogSince: &zero,
+		awardedCoins:      &awarded,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return now }
+	data, retcode, errmsg, err = service.TaskSign(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" || atoi(data["taskdone"]) != 14 {
+		t.Fatalf("user sign retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(awarded["cointype"]) != coinTypeSign || atoi(awarded["addcoin"]) != 14 {
+		t.Fatalf("user sign award mismatch: %v", awarded)
+	}
+
+	awarded = map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5", "gid": "4", "uniqkey": "12345"},
+		countCoinLogSince: &zero,
+		awardedCoins:      &awarded,
+	}, "https://res.example.test")
+	data, retcode, errmsg, err = service.TaskInviteCodeInput(context.Background(), "token", "9IX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "保存二维码已送金币: 5" || atoi(data["taskdone"]) != 5 {
+		t.Fatalf("invite code retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(awarded["cointype"]) != coinTypeSaveQRCode || atoi(awarded["addcoin"]) != 5 {
+		t.Fatalf("invite code award mismatch: %v", awarded)
+	}
+
+	awarded = map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5", "gid": "4"},
+		countCoinLogSince: &zero,
+		awardedCoins:      &awarded,
+	}, "https://res.example.test")
+	data, retcode, errmsg, err = service.TaskAdviewClick(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "点击广告已送金币: 6" || atoi(data["taskdone"]) != 6 {
+		t.Fatalf("adview retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(awarded["cointype"]) != coinTypeAdViewClick || atoi(awarded["addcoin"]) != 6 {
+		t.Fatalf("adview award mismatch: %v", awarded)
 	}
 }
 
@@ -1066,17 +1314,25 @@ func TestTaskboxOpenEdgePromotionTaskFailures(t *testing.T) {
 		t.Fatalf("insufficient retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	openedTaskbox := map[string]interface{}{}
 	service = NewService(fakeUserStore{
-		user:       map[string]interface{}{"uid": "5"},
-		taskboxRow: map[string]interface{}{"taskid": "3", "showtype": "0", "mincoin": "1", "maxcoin": "2"},
-		userByID:   map[string]interface{}{"uid": "5", "recommend_total": "3"},
+		user:          map[string]interface{}{"uid": "5"},
+		taskboxRow:    map[string]interface{}{"taskid": "3", "showtype": "0", "mincoin": "2", "maxcoin": "2"},
+		userByID:      map[string]interface{}{"uid": "5", "recommend_total": "3"},
+		openedTaskbox: &openedTaskbox,
 	}, "https://res.example.test")
-	retcode, errmsg, err = service.TaskboxOpenEdge(context.Background(), "token", 3)
+	data, retcode, errmsg, err := service.TaskboxOpen(context.Background(), "token", 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "任务宝箱开启成功分支暂未迁移" {
-		t.Fatalf("success placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "宝箱成功开启" || atoi(data["taskdone"]) != 2 {
+		t.Fatalf("success retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(openedTaskbox["uid"]) != 5 || atoi(openedTaskbox["taskid"]) != 3 || atoi(openedTaskbox["daykey"]) != 0 || atoi(openedTaskbox["addcoin"]) != 2 {
+		t.Fatalf("opened taskbox mismatch: %v", openedTaskbox)
+	}
+	if openedTaskbox["duplicateMessage"] != "推广任务宝箱已领过了" {
+		t.Fatalf("duplicate message mismatch: %v", openedTaskbox)
 	}
 }
 
@@ -1195,6 +1451,39 @@ func TestUserContactEdges(t *testing.T) {
 	if retcode != -1 || errmsg != "密码6-16位" {
 		t.Fatalf("passwd valid old password retcode=%d errmsg=%q", retcode, errmsg)
 	}
+
+	changedPassword := map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user: map[string]interface{}{"uid": "5"},
+		userByID: map[string]interface{}{
+			"uid":      "5",
+			"username": "tester",
+			"password": phpPassword("oldpasssalt1234"),
+			"salt":     "salt1234",
+			"gid":      "4",
+			"sysgid":   "0",
+			"regtime":  "1700000000",
+			"gender":   "1",
+			"avatar":   "",
+		},
+		changedPassword: &changedPassword,
+	}, "https://res.example.test")
+	data, retcode, errmsg, err := service.UserPasswd(context.Background(), "token", "oldpass", "newpass1", "newpass1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "密码修改成功" {
+		t.Fatalf("passwd success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["xxx_api_auth"] == "" {
+		t.Fatalf("missing api auth data=%#v", data)
+	}
+	if changedPassword["uid"] != 5 || changedPassword["password"] == "" || changedPassword["salt"] == "" || changedPassword["sid"] == "" || changedPassword["token"] == "" {
+		t.Fatalf("changed password=%#v", changedPassword)
+	}
+	if changedPassword["password"] == phpPassword("oldpasssalt1234") {
+		t.Fatalf("password hash was not changed: %#v", changedPassword)
+	}
 }
 
 func TestUserBindMobiEdgePrechecks(t *testing.T) {
@@ -1209,29 +1498,39 @@ func TestUserBindMobiEdgePrechecks(t *testing.T) {
 		t.Fatalf("bound retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	boundMobi := map[string]interface{}{}
 	service = NewService(fakeUserStore{
 		user:           map[string]interface{}{"uid": "5", "mobi": "~old"},
 		keylimitCounts: map[string]int{"sms.86.13800138000.123456": 1},
+		boundMobi:      &boundMobi,
 	}, "https://res.example.test")
 	retcode, errmsg, err = service.UserBindMobiEdge(ctx, "token", "", "13800138000", "123456")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "手机验证绑定成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "手机验证已确认，绑定成功" {
 		t.Fatalf("default prefix retcode=%d errmsg=%q", retcode, errmsg)
 	}
+	if boundMobi["uid"] != 5 || boundMobi["mobi"] != "86.13800138000" {
+		t.Fatalf("bound mobi=%#v", boundMobi)
+	}
 
+	boundMobi = map[string]interface{}{}
 	service = NewService(fakeUserStore{
 		user:           map[string]interface{}{"uid": "5", "mobi": "~old"},
 		keylimitCounts: map[string]int{"sms.1.5550001.999999": 1},
 		userByMobi:     map[string]interface{}{"uid": "9", "mobi": "1.5550001"},
+		boundMobi:      &boundMobi,
 	}, "https://res.example.test")
 	retcode, errmsg, err = service.UserBindMobiEdge(ctx, "token", " 1 ", " 5550001 ", " 999999 ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "手机验证绑定成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "手机验证已确认，绑定成功" {
 		t.Fatalf("existing mobi placeholder retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if boundMobi["uid"] != 5 || boundMobi["mobi"] != "1.5550001" {
+		t.Fatalf("bound existing mobi=%#v", boundMobi)
 	}
 }
 
@@ -1334,6 +1633,23 @@ func TestUserEmailEdges(t *testing.T) {
 			}
 		})
 	}
+
+	verifiedEmail := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:          map[string]interface{}{"uid": "5"},
+		keylimitData:  map[string]string{"email.me@example.com.123456": "5.me@example.com"},
+		verifiedEmail: &verifiedEmail,
+	}, "https://res.example.test")
+	retcode, errmsg, err := service.UserVerifyEmailEdge(ctx, "token", "me@example.com", "123456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "邮箱验证已确认，绑定成功" {
+		t.Fatalf("verifyemail success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if verifiedEmail["uid"] != 5 || verifiedEmail["email"] != "me@example.com" || verifiedEmail["key"] != "email.me@example.com.123456" {
+		t.Fatalf("verified email=%#v", verifiedEmail)
+	}
 }
 
 func TestUCPWriteActionPrecheckEdges(t *testing.T) {
@@ -1373,12 +1689,33 @@ func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 		t.Fatalf("exchange min retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	exchanged := map[string]interface{}{}
+	exchangeNow := time.Unix(1700000900, 0)
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, exchangedCoins: &exchanged}, "https://res.example.test")
+	service.now = func() time.Time { return exchangeNow }
 	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "金币兑换成功分支暂未迁移" {
-		t.Fatalf("exchange pending retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("exchange coin2rmb retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if exchanged["uid"] != 5 || exchanged["extype"] != 1 || exchanged["coinnum"] != 10 || exchanged["amount"] != 100 || exchanged["now"] != exchangeNow.Unix() {
+		t.Fatalf("exchange coin2rmb=%#v", exchanged)
+	}
+
+	exchanged = map[string]interface{}{}
+	service = NewService(fakeUserStore{user: map[string]interface{}{"uid": "5"}, exchangedCoins: &exchanged}, "https://res.example.test")
+	service.now = func() time.Time { return exchangeNow }
+	retcode, errmsg, err = service.CoinLogExchangeEdge(context.Background(), "token", 2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("exchange rmb2coin retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if exchanged["uid"] != 5 || exchanged["extype"] != 2 || exchanged["coinnum"] != 20 || exchanged["amount"] != 200 || exchanged["now"] != exchangeNow.Unix() {
+		t.Fatalf("exchange rmb2coin=%#v", exchanged)
 	}
 
 	retcode, errmsg, err = service.VODOrderCreateEdge(context.Background(), "token", "", "", 0)
@@ -1465,6 +1802,66 @@ func TestTaskQRLinkFormatsLinkAndFallsBackFromPID(t *testing.T) {
 	}
 	if data["qrlink"] != "https://qr.test?u=https://b.test&c=9IX" {
 		t.Fatalf("qrlink = %#v", data["qrlink"])
+	}
+}
+
+func TestTaskShareAwardsAndFormatsText(t *testing.T) {
+	awarded := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:             map[string]interface{}{"uid": "5", "gid": "4", "uniqkey": "12345"},
+		sumCoinLogByType: map[int]int{coinTypeVODShare: 0},
+		awardedCoins:     &awarded,
+		settings: map[string]map[string]interface{}{
+			"baseset": {"value": "a:1:{s:10:\"inviteUrls\";s:14:\"https://a.test\";}"},
+		},
+		calldata: map[string]map[string]interface{}{
+			"global.share.text": {"type": "html", "content": "share {inviteUrl} {inviteCode}"},
+		},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) }
+
+	data, retcode, errmsg, err := service.TaskShare(context.Background(), "token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["sharetext"] != "share https://a.test 9IX" || atoi(data["taskdone"]) != 1 {
+		t.Fatalf("share data = %#v", data)
+	}
+	if atoi(awarded["cointype"]) != coinTypeVODShare || atoi(awarded["addcoin"]) != 1 {
+		t.Fatalf("share award mismatch: %v", awarded)
+	}
+}
+
+func TestTaskQRCodeSetsKeylimitAndRendersPNG(t *testing.T) {
+	renderer := &fakeQRCodeRenderer{body: []byte("task-png")}
+	setKeylimit := map[string]interface{}{}
+	service := NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "uniqkey": "12345"},
+		setKeylimit: &setKeylimit,
+		settings: map[string]map[string]interface{}{
+			"baseset": {"value": "a:1:{s:10:\"inviteUrls\";s:14:\"https://a.test\";}"},
+		},
+		calldata: map[string]map[string]interface{}{
+			"global.qrcode.link": {"type": "code", "content": "https://qr.test?u={inviteUrl}&c={inviteCode}"},
+		},
+	}, "https://res.example.test").WithQRCodeRenderer(renderer)
+	service.now = func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) }
+
+	body, retcode, errmsg, err := service.TaskQRCode(context.Background(), "token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" || string(body) != "task-png" {
+		t.Fatalf("retcode=%d errmsg=%q body=%q", retcode, errmsg, body)
+	}
+	if setKeylimit["key"] != "task.qrcode.5.20260701" || atoi(setKeylimit["keynum"]) != 1 {
+		t.Fatalf("keylimit mismatch: %v", setKeylimit)
+	}
+	if renderer.content != "https://qr.test?u=https://a.test&c=9IX" {
+		t.Fatalf("renderer content = %q", renderer.content)
 	}
 }
 
@@ -1968,6 +2365,50 @@ func TestPackageOrderEdges(t *testing.T) {
 		t.Fatalf("vip balance retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	vipNow := time.Unix(1700000000, 0)
+	upgradedVIP := map[string]interface{}{}
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "sysgid": "4"},
+		quota:       map[string]interface{}{"goldcoin": "100"},
+		packageRow:  map[string]interface{}{"pkgid": "1", "showtype": "0", "coinprice": "100", "daylen": "30"},
+		upgradedVIP: &upgradedVIP,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return vipNow }
+	data, retcode, errmsg, err := service.VIPPkgCoinOrder(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "您已成功升级尊贵会员" {
+		t.Fatalf("vip coinorder success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	wantExpiry := vipNow.Add(30 * 24 * time.Hour).Unix()
+	if data["deduct_coin"] != 100 || data["expiry_date"] != formatMinuteTime(wantExpiry) {
+		t.Fatalf("vip coinorder data=%#v", data)
+	}
+	if upgradedVIP["uid"] != 5 || upgradedVIP["deductCoin"] != 100 || upgradedVIP["vipGID"] != 6 || upgradedVIP["expiry"] != wantExpiry {
+		t.Fatalf("upgraded vip=%#v", upgradedVIP)
+	}
+
+	upgradedVIP = map[string]interface{}{}
+	currentExpiry := vipNow.Add(10 * 24 * time.Hour).Unix()
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5", "sysgid": "6", "sysgid_exptime": fmt.Sprint(currentExpiry)},
+		quota:       map[string]interface{}{"goldcoin": "100"},
+		packageRow:  map[string]interface{}{"pkgid": "1", "showtype": "0", "coinprice": "100", "daylen": "30"},
+		upgradedVIP: &upgradedVIP,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return vipNow }
+	_, retcode, errmsg, err = service.VIPPkgCoinOrder(context.Background(), "token", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "您已成功升级尊贵会员" {
+		t.Fatalf("vip coinorder extend retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if upgradedVIP["expiry"] != currentExpiry+30*86400 {
+		t.Fatalf("extended vip=%#v", upgradedVIP)
+	}
+
 	service = NewService(fakeUserStore{
 		user:       map[string]interface{}{"uid": "5"},
 		quota:      map[string]interface{}{"goldcoin": "20"},
@@ -1990,8 +2431,31 @@ func TestPackageOrderEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "金币购买成功分支暂未迁移" {
-		t.Fatalf("bean pending retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "您已成功兑换金豆" {
+		t.Fatalf("bean success edge retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	boughtBeans := map[string]interface{}{}
+	beanNow := time.Unix(1700000600, 0)
+	service = NewService(fakeUserStore{
+		user:        map[string]interface{}{"uid": "5"},
+		quota:       map[string]interface{}{"goldcoin": "30"},
+		packageRow:  map[string]interface{}{"pkgid": "2", "showtype": "0", "rmbprice": "300"},
+		boughtBeans: &boughtBeans,
+	}, "https://res.example.test")
+	service.now = func() time.Time { return beanNow }
+	data, retcode, errmsg, err = service.BeanPkgCoinOrder(context.Background(), "token", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "您已成功兑换金豆" {
+		t.Fatalf("bean success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if data["deduct_coin"] != 30 {
+		t.Fatalf("bean data=%#v", data)
+	}
+	if boughtBeans["uid"] != 5 || boughtBeans["deductCoin"] != 30 || boughtBeans["addBeans"] != 30 || boughtBeans["now"] != beanNow.Unix() {
+		t.Fatalf("bought beans=%#v", boughtBeans)
 	}
 
 	service = NewService(fakeUserStore{
@@ -2174,16 +2638,23 @@ func TestUpgradeEdgePrechecks(t *testing.T) {
 		t.Fatalf("gold retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	upgraded := map[string]interface{}{}
 	service = NewService(fakeUserStore{
-		user:  map[string]interface{}{"uid": "5", "sysgid": "4"},
-		quota: map[string]interface{}{"goldcoin": "100"},
+		user:        map[string]interface{}{"uid": "5", "sysgid": "4"},
+		quota:       map[string]interface{}{"goldcoin": "100"},
+		upgradedVIP: &upgraded,
 	}, "https://res.example.test")
-	retcode, errmsg, err = service.UpgradeEdge(context.Background(), "token", 7)
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	data, retcode, errmsg, err := service.Upgrade(context.Background(), "token", 7)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "会员升级成功分支暂未迁移" {
-		t.Fatalf("pending retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "您已成功尊贵会员" || atoi(data["deduct_coin"]) != 100 || data["expiry_date"] != "2026-07-08 20:00" {
+		t.Fatalf("upgrade retcode=%d errmsg=%q data=%v", retcode, errmsg, data)
+	}
+	if atoi(upgraded["uid"]) != 5 || atoi(upgraded["deductCoin"]) != 100 || atoi(upgraded["vipGID"]) != 6 || atoi64(upgraded["expiry"]) != now.Add(7*24*time.Hour).Unix() {
+		t.Fatalf("upgrade write mismatch: %v", upgraded)
 	}
 }
 

@@ -27,6 +27,26 @@ func (s ucpStore) UpdateUserProfile(ctx context.Context, uid int, gender int, ni
 	return s.user.UpdateUserProfile(ctx, uid, gender, nickname)
 }
 
+func (s ucpStore) ChangePasswordAndLogin(ctx context.Context, uid int, passwordHash string, salt string, sid string, token string, now int64) (map[string]interface{}, error) {
+	return s.ucp.ChangePasswordAndLogin(ctx, uid, passwordHash, salt, sid, token, now)
+}
+
+func (s ucpStore) BuyBeansWithCoins(ctx context.Context, uid int, deductCoin int, addBeans int, now int64) error {
+	return s.ucp.BuyBeansWithCoins(ctx, uid, deductCoin, addBeans, now)
+}
+
+func (s ucpStore) ExchangeCoinsAndBalance(ctx context.Context, uid int, extype int, coinnum int, amount int, now int64) error {
+	return s.ucp.ExchangeCoinsAndBalance(ctx, uid, extype, coinnum, amount, now)
+}
+
+func (s ucpStore) VerifyEmail(ctx context.Context, uid int, email string, key string) error {
+	return s.ucp.VerifyEmail(ctx, uid, email, key)
+}
+
+func (s ucpStore) BindMobi(ctx context.Context, uid int, mobi string) error {
+	return s.ucp.BindMobi(ctx, uid, mobi)
+}
+
 func (s ucpStore) UserByEmail(ctx context.Context, email string) (map[string]interface{}, error) {
 	return s.ucp.UserByEmail(ctx, email)
 }
@@ -97,6 +117,10 @@ func (s ucpStore) TaskboxByID(ctx context.Context, taskID int) (map[string]inter
 
 func (s ucpStore) TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error) {
 	return s.ucp.TaskboxLog(ctx, uid, taskID, dayKey)
+}
+
+func (s ucpStore) OpenTaskbox(ctx context.Context, uid int, task map[string]interface{}, dayKey int, addCoin int, now int64, duplicateMessage string) (string, error) {
+	return s.ucp.OpenTaskbox(ctx, uid, task, dayKey, addCoin, now, duplicateMessage)
 }
 
 func (s ucpStore) TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error) {
@@ -189,6 +213,18 @@ func (s ucpStore) CountCoinLogsSinceByType(ctx context.Context, uid int, coinTyp
 
 func (s ucpStore) SumCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error) {
 	return s.ucp.SumCoinLogsSinceByType(ctx, uid, coinType, since)
+}
+
+func (s ucpStore) AwardCoins(ctx context.Context, uid int, coinType int, addCoin int, now int64, remark string) error {
+	return s.ucp.AwardCoins(ctx, uid, coinType, addCoin, now, remark)
+}
+
+func (s ucpStore) SignGuest(ctx context.Context, sid string, addCoin int, now int64) error {
+	return s.ucp.SignGuest(ctx, sid, addCoin, now)
+}
+
+func (s ucpStore) UpgradeVIP(ctx context.Context, uid int, deductCoin int, vipGID int, expiry int64, now int64) error {
+	return s.ucp.UpgradeVIP(ctx, uid, deductCoin, vipGID, expiry, now)
 }
 
 func (s ucpStore) CountVODCommentsSince(ctx context.Context, uid int, since int64, unique bool) (int, error) {
@@ -333,6 +369,10 @@ func (s ucpStore) KeylimitCountSince(ctx context.Context, key string, since int6
 
 func (s ucpStore) KeylimitDataSince(ctx context.Context, key string, since int64) (string, error) {
 	return s.ucp.KeylimitDataSince(ctx, key, since)
+}
+
+func (s ucpStore) SetKeylimit(ctx context.Context, key string, keynum int, keydata string, now int64) error {
+	return s.ucp.SetKeylimit(ctx, key, keynum, keydata, now)
 }
 
 func (s ucpStore) PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error) {

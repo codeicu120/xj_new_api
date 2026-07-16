@@ -60,7 +60,7 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | `/ucp/taskbox/qrlink` | `c.api.ucp.taskbox->qrlink` | 本轮完成 | 登录只读任务宝箱推广二维码链接；复用 qrlink 兼容逻辑但读取 `taskbox.qrcode.link`。 |
 | `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | 本轮完成 | 登录生成任务宝箱推广二维码 PNG；复用 `taskbox.qrcode.link` 和每日推广 URL，不写奖励或 keylimit。 |
 | `/onego/history` | `c.api.onego->history` | 本轮完成 | 登录只读本人一元购投注历史；投注写入 `/onego/bet` 未接管。 |
-| `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | 本轮完成 | 登录只读当前用户资料；资料修改、密码和邮箱/手机验证码 action 已接管前置失败和部分只读成功分支，成功写入仍未接管。 |
+| `/ucp/user`、`/ucp/user/index` | `c.api.ucp.user->index` | 本轮完成 | 登录只读当前用户资料；资料修改和密码修改已接管成功写入分支，邮箱/手机验证码 action 已接管前置失败和部分只读成功分支。 |
 | `/ucp/bankcard`、`/ucp/bankcard/index` | `c.api.ucp.bankcard->index` | 本轮完成 | 登录只读提款地址和后台银行列表。 |
 | `/ucp/bankcard/create`、`/ucp/bankcard/modify`、`/ucp/bankcard/delete` | `c.api.ucp.bankcard->create/modify/delete` | 本轮完成 | 登录新增、修改、删除本人提款地址；保留 PHP 旧文案、类型映射和默认地址逻辑。 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | 本轮完成 | 登录只读 VIP 套餐；支付通道通过接口隔离，当前不伪造旧 PHP `conf/payment.php`。 |
@@ -73,6 +73,6 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 
 | 接口 | 原因 |
 | --- | --- |
-| `/ucp/task/*`（除 `/ucp/task`、`/ucp/task/index`、`/ucp/task/sharepic`、`/ucp/task/qrlink`） | 涉及写库、奖励、图片生成或状态变更，需要单独测试和回滚策略。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/ucp/coinlog/exchange`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/withdraw/listing`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
+| `/ucp/task/:action?`（除已列 action） | PHP `ucp/task.php` 仅定义 `index/sign/sharepic/share/qrcode/qrlink/qrcodeSave/invitecodeInput/adviewClick/invite`，均已覆盖；后续只保留二维码视觉合成兼容增强。 |
+| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/withdraw/listing`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/ucp/coinlog/exchange`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/lottery/topup`、`/game/lottery/withdraw` | 游戏资产或外部转账调用；`/game/wali/enter`、`/game/lottery/enter` 已接管外部进入游戏成功/失败分支，`/game/lottery/balance` 已接管外部只读余额查询，仍需灰度观察平台配置。 |

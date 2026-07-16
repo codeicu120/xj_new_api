@@ -37,6 +37,11 @@ type UserStore interface {
 	CountGuestMiniVODViewLogsSince(ctx context.Context, sid string, since int64, action int) (int, error)
 	CountCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error)
 	SumCoinLogsSinceByType(ctx context.Context, uid int, coinType int, since int64) (int, error)
+	AwardCoins(ctx context.Context, uid int, coinType int, addCoin int, now int64, remark string) error
+	SignGuest(ctx context.Context, sid string, addCoin int, now int64) error
+	UpgradeVIP(ctx context.Context, uid int, deductCoin int, vipGID int, expiry int64, now int64) error
+	BuyBeansWithCoins(ctx context.Context, uid int, deductCoin int, addBeans int, now int64) error
+	ExchangeCoinsAndBalance(ctx context.Context, uid int, extype int, coinnum int, amount int, now int64) error
 	CountVODCommentsSince(ctx context.Context, uid int, since int64, unique bool) (int, error)
 	CountVODFavoritesSince(ctx context.Context, uid int, since int64) (int, error)
 	CountFeedbacks(ctx context.Context, uid int) (int, error)
@@ -53,6 +58,9 @@ type UserStore interface {
 	MsgConversation(ctx context.Context, uid int, cid int) (map[string]interface{}, error)
 	UserByID(ctx context.Context, uid int) (map[string]interface{}, error)
 	UpdateUserProfile(ctx context.Context, uid int, gender int, nickname *string) error
+	ChangePasswordAndLogin(ctx context.Context, uid int, passwordHash string, salt string, sid string, token string, now int64) (map[string]interface{}, error)
+	VerifyEmail(ctx context.Context, uid int, email string, key string) error
+	BindMobi(ctx context.Context, uid int, mobi string) error
 	UserByEmail(ctx context.Context, email string) (map[string]interface{}, error)
 	UserByMobi(ctx context.Context, mobi string) (map[string]interface{}, error)
 	BotByID(ctx context.Context, uid int) (map[string]interface{}, error)
@@ -84,6 +92,7 @@ type UserStore interface {
 	CalldataByUUID(ctx context.Context, uuid string) (map[string]interface{}, error)
 	KeylimitCountSince(ctx context.Context, key string, since int64) (int, error)
 	KeylimitDataSince(ctx context.Context, key string, since int64) (string, error)
+	SetKeylimit(ctx context.Context, key string, keynum int, keydata string, now int64) error
 	PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error)
 	PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error)
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
@@ -103,6 +112,7 @@ type UserStore interface {
 	Taskboxes(ctx context.Context) ([]map[string]interface{}, error)
 	TaskboxByID(ctx context.Context, taskID int) (map[string]interface{}, error)
 	TaskboxLog(ctx context.Context, uid int, taskID int, dayKey int) (map[string]interface{}, error)
+	OpenTaskbox(ctx context.Context, uid int, task map[string]interface{}, dayKey int, addCoin int, now int64, duplicateMessage string) (string, error)
 	TaskboxCompletedLogs(ctx context.Context, limit int) ([]map[string]interface{}, error)
 	CountTaskboxLogs(ctx context.Context, uid int) (int, error)
 	TaskboxLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)

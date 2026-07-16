@@ -250,7 +250,6 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 
 	paths := []string{
 		"/ucp/upgrade",
-		"/ucp/task/share",
 		"/ucp/task/qrcode",
 		"/ucp/task/qrcodeSave",
 		"/ucp/task/invitecodeInput",
@@ -270,6 +269,21 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 		"/ucp/vodorder/create",
 		"/ucp/vodorder/support",
 	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/ucp/task/share", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/ucp/task/share: expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var shareBody legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &shareBody); err != nil {
+		t.Fatalf("/ucp/task/share decode response: %v", err)
+	}
+	if shareBody.RetCode != 0 {
+		t.Fatalf("/ucp/task/share unexpected response %#v", shareBody)
+	}
+
 	for _, path := range paths {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, path, nil)
@@ -287,8 +301,8 @@ func TestUCPHighRiskRoutesRequireLogin(t *testing.T) {
 		}
 	}
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/ucp/coinlog/exchange", nil)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/ucp/coinlog/exchange", nil)
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/ucp/coinlog/exchange: expected status %d, got %d", http.StatusOK, rec.Code)

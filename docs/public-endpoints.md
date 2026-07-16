@@ -112,17 +112,17 @@
 | `/hgame/index` | `c.api.hgame->index` | 本轮完成 | HGame 公共只读列表，返回 `data.data.list/slide`，`/hgame` 本身保持旧 PHP 404 未接管。 |
 | `/ucp/rolltitle` | `c.api.ucp.index->rolltitle` | 本轮完成 | 个人中心滚动消息公共只读接口，读 `roll_titles` 中 `status=1` 的最近 10 条。 |
 | `/ucp/task/sharepic` | `c.api.ucp.task->sharepic` | 本轮完成 | 公共随机推广海报，只读 `poster.status=1`，随机行按 shape 对比。 |
-| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 无稳定响应未接管，领奖 action 未接管。 |
+| `/ucp/taskbox/index` | `c.api.ucp.taskbox->index` | 本轮完成 | 公共只读任务宝箱状态和最近开启记录；`/ucp/taskbox` 无稳定响应未接管，领奖 action 已由 `/ucp/taskbox/taskboxopen` 接管。 |
 | `/ucp/taskbox/share` | `c.api.ucp.taskbox->share` | 本轮完成 | 公共只读任务宝箱分享文案；随机游客邀请码/登录邀请码和每日推广 URL 形态对齐。 |
 | `/ucp/taskbox/taskboxlog` | `c.api.ucp.taskbox->taskboxlog` | 本轮完成 | 登录只读本人任务宝箱日志；未登录错误、登录测试 token 分页和首行内容 live 对比通过。 |
 | `/ucp/task/invite` | `c.api.ucp.task->invite` | 本轮完成 | 未登录返回旧错误；登录后 PHP 方法体为空，Go 返回 200 空 body。 |
-| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/withdraw/create`、`/ucp/vippkg/placeorder`、`/ucp/vippkg/coinorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/beanpkg/coinorder` | `c.api.ucp.*` | 本轮完成 | 接管高风险写入接口未登录及部分只读失败分支：`sign` 已签到/游客缺失、邀请码错误、二维码今日已保存、广告今日已送、宝箱不存在/金币为 0、每日/每周宝箱时间窗、已领取和推广人数不足；`taskbox/qrcode` 已接管登录后 `image/png` 二维码生成且不写 keylimit；`upgrade` 补齐已是尊贵会员、无效时长、终身 VIP 暂停和金币不足；`withdraw/create` 补齐金额、最小提现、限制提现、邀请人数、收款账号、日次数、渠道金额范围、游戏余额不足和普通提现兑换前置失败；套餐下单/金币兑换补齐套餐不存在/停用、余额不足和 VIP `rmbprice=3800` 失败分支；登录成功奖励、资产、支付下单、提现事务、`task/qrcode` keylimit 写入和图片生成仍未接管。 |
-| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | 本轮完成 | 接管兑换关闭、未登录、缺兑换类型、缺兑换数量、超过 100 万、金币换人民币最小金币和计算为 0 前置失败分支；金币兑换成功分支未接管。 |
+| `/ucp/task/sign`、`/ucp/task/share`、`/ucp/task/qrcode`、`/ucp/task/qrcodeSave`、`/ucp/task/invitecodeInput`、`/ucp/task/adviewClick`、`/ucp/taskbox/taskboxopen`、`/ucp/taskbox/qrcode`、`/ucp/upgrade`、`/ucp/vippkg/coinorder`、`/ucp/beanpkg/coinorder`、`/ucp/withdraw/create`、`/ucp/vippkg/placeorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder` | `c.api.ucp.*` | 本轮完成 | `/ucp/task/*` 可达业务 action 已全部覆盖；`taskboxopen`、`upgrade`、`vippkg/coinorder`、`beanpkg/coinorder` 已接管资产写入成功分支；`taskbox/qrcode` 已接管登录后 `image/png` 二维码生成且不写 keylimit；`withdraw/create` 和套餐支付下单仍只补齐前置失败分支，支付下单和提现事务仍未接管。 |
+| `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | 本轮完成 | 接管兑换关闭、未登录、缺兑换类型、缺兑换数量、超过 100 万、金币换人民币最小金币、计算为 0、金币转余额和余额转金币成功事务。 |
 | `/ucp/vodorder/create`、`/ucp/vodorder/support` | `c.api.ucp.vodorder->create/support` | 本轮完成 | 接管未登录、求片缺番号/名称、求片金币低于 100、金币不足、助力记录缺失、助力时间窗口、助力金币低于 1 和金币不足前置失败分支；求片扣费、助力写入和通知未接管。 |
 | `/ucp/msg/show` | `c.api.ucp.msg->show` | 本轮完成 | 登录消息详情；返回会话、对方用户、消息列表并标记已读，错误壳和成功样例对比通过。 |
 | `/ucp/msg/setread`、`/ucp/msg/cleanread`、`/ucp/msg/delete` | `c.api.ucp.msg->setread/cleanread/delete` | 本轮完成 | 登录消息状态写入；未登录和空数组成功分支对比通过，旧 PHP 动态 `xxx_api_auth` 不回传。 |
-| `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | 本轮完成 | 接管未登录、邮箱格式错误、邮箱频控/日限、邮箱已存在、`checkemail` 邮箱可用只读成功、邮件配置缺失、邮箱验证码缺失/失效、verify 邮箱已存在和手机验证码错误分支；邮件发送、邮箱/手机绑定成功分支未接管。 |
-| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | 本轮完成 | 接管未登录、昵称长度/字符集/白名单、原密码错误、密码长度和确认密码不一致分支；资料更新、密码更新和重新登录未接管。 |
+| `/ucp/user/checkemail`、`/ucp/user/sendemail`、`/ucp/user/verifyemail`、`/ucp/user/bindmobi` | `c.api.ucp.user->$action` | 本轮完成 | `checkemail/verifyemail/bindmobi` 已完整接管；`sendemail` 接管未登录、邮箱格式错误、邮箱频控/日限、邮箱已存在和邮件配置缺失分支，SMTP 发送和验证码 keylimit 写入成功分支未接管。 |
+| `/ucp/user/profile`、`/ucp/user/passwd` | `c.api.ucp.user->profile/passwd` | 本轮完成 | 接管未登录、昵称长度/字符集/白名单、资料更新、原密码错误、密码长度、确认密码不一致、密码更新和重新登录成功分支。 |
 | `/onego` | `c.api.onego->rules`（旧路由默认行为） | 本轮完成 | 裸一元购入口按旧服务返回规则/未开放错误壳，忽略旧中间件动态 `data.xxx_api_auth`。 |
 | `/onego/index` | `c.api.onego->index` | 本轮完成 | 旧 PHP 空方法，返回 `text/html` 空 body。 |
 | `/onego/rules`、`/onego/rooms`、`/onego/current`、`/onego/last` | `c.api.onego->rules/rooms/current/last` | 本轮完成 | 一元购公共只读接口，读 `one_go`、`one_go_rooms`、`one_go_records`；本地错误分支和房间列表业务数据对齐，忽略旧中间件动态 `data.xxx_api_auth`。 |
