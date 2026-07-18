@@ -10,11 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"xj_comp/internal/config"
 	"xj_comp/internal/server"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	cfg := config.FromEnv()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: cfg.LogLevel,
