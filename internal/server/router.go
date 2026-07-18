@@ -28,6 +28,7 @@ import (
 	inviteRepo "xj_comp/internal/repository/invite"
 	minivodRepo "xj_comp/internal/repository/minivod"
 	onegoRepo "xj_comp/internal/repository/onego"
+	redisRepo "xj_comp/internal/repository/redis"
 	soRepo "xj_comp/internal/repository/so"
 	starliveRepo "xj_comp/internal/repository/starlive"
 	statsRepo "xj_comp/internal/repository/stats"
@@ -97,7 +98,8 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Use(requestLogger(logger))
 
 	db := openMySQL(cfg.MySQLDSN, logger)
-	userRepository := userRepo.NewRepository(db)
+	redisHashStore := redisRepo.NewHashStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	userRepository := userRepo.NewRepository(db).WithDeletionList(redisHashStore)
 	userHandler := handler.NewUserHandler(
 		userService.NewSysAvatarService(cfg.ResourceBaseURL),
 		userService.NewLogoutService(userRepository),
