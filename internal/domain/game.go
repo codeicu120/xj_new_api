@@ -23,3 +23,17 @@ type GameWaliData struct {
 type OneGoData struct {
 	Data interface{} `json:"data"`
 }
+
+type OneGoBetInput struct {
+	UID      int
+	Period   string
+	RoomID   int
+	Quantity int
+	BetCoins int
+	Now      int64
+}
+
+type OneGoBetResult struct {
+	BetNo      []int `json:"bet_no"`
+	TotalBetNo []int `json:"total_bet_no"`
+}

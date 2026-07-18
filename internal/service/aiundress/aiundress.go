@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -25,11 +27,28 @@ type Store interface {
 	List(ctx context.Context, uid int, module int, total int, page int, pageSize int) ([]map[string]interface{}, error)
 	ByID(ctx context.Context, id int) (map[string]interface{}, error)
 	ByUIDImage(ctx context.Context, uid int, image string) (map[string]interface{}, error)
+	MarkDeleted(ctx context.Context, id int, updateTime int64) error
 	SettingByUUID(ctx context.Context, uuid string) (string, error)
 }
 
 type ExternalClient interface {
 	PostJSON(ctx context.Context, path string, payload map[string]interface{}) (ExternalResponse, error)
+}
+
+type FileDeleter interface {
+	Delete(path string) error
+}
+
+type osFileDeleter struct{}
+
+func (osFileDeleter) Delete(path string) error {
+	if path == "" {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 type ExternalResponse struct {
@@ -97,8 +116,10 @@ type Service struct {
 	auth            AuthStore
 	store           Store
 	resourceBaseURL string
+	uploadPath      string
 	env             string
 	externalClient  ExternalClient
+	fileDeleter     FileDeleter
 	now             func() time.Time
 }
 
@@ -112,12 +133,25 @@ func NewService(auth AuthStore, store Store, resourceBaseURL string, env ...stri
 		store:           store,
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		env:             strings.ToLower(strings.TrimSpace(envValue)),
+		fileDeleter:     osFileDeleter{},
 		now:             time.Now,
 	}
 }
 
 func (s *Service) WithExternalClient(client ExternalClient) *Service {
 	s.externalClient = client
+	return s
+}
+
+func (s *Service) WithUploadPath(uploadPath string) *Service {
+	s.uploadPath = strings.TrimRight(strings.TrimSpace(uploadPath), "/")
+	return s
+}
+
+func (s *Service) WithFileDeleter(deleter FileDeleter) *Service {
+	if deleter != nil {
+		s.fileDeleter = deleter
+	}
 	return s
 }
 
@@ -204,7 +238,18 @@ func (s *Service) DeleteEdge(ctx context.Context, token string, id int) (int, st
 	if len(row) == 0 {
 		return 0, "", nil
 	}
-	return -1, "AI 删除成功分支暂未迁移", nil
+	if s.fileDeleter != nil && s.uploadPath != "" {
+		if image := strings.TrimSpace(fmt.Sprint(row["image"])); image != "" {
+			_ = s.fileDeleter.Delete(filepath.Join(s.uploadPath, image))
+		}
+		if output := strings.TrimSpace(fmt.Sprint(row["output"])); output != "" {
+			_ = s.fileDeleter.Delete(filepath.Join(s.uploadPath, output))
+		}
+	}
+	if err := s.store.MarkDeleted(ctx, atoi(row["id"]), s.now().Unix()); err != nil {
+		return -1, "AI 删除失败", err
+	}
+	return 0, "", nil
 }
 
 func (s *Service) ModuleList(ctx context.Context) (domain.AIUndressExternalData, int, string, error) {

@@ -105,13 +105,13 @@ func (h *OneGoHandler) History(c *gin.Context) {
 func (h *OneGoHandler) Bet(c *gin.Context) {
 	quantity, _ := strconv.Atoi(inputValue(c, "quantity"))
 	roomID, _ := strconv.Atoi(inputValue(c, "roomid"))
-	retcode, errmsg, err := h.service.BetEdge(c.Request.Context(), authToken(c), inputValue(c, "period"), roomID, quantity)
+	data, retcode, errmsg, err := h.service.BetEdge(c.Request.Context(), authToken(c), inputValue(c, "period"), roomID, quantity)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
 		return
 	}
-	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: map[string]interface{}{}})
+	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
 }
 
 func (h *OneGoHandler) Lucky(c *gin.Context) {

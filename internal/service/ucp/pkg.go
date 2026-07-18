@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 func (s *Service) VIPPkgIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
@@ -103,57 +105,106 @@ func (s *Service) BeanPkgCoinOrder(ctx context.Context, token string, pkgID int)
 }
 
 func (s *Service) VIPPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "vip", pkgID, paycode)
+	_, retcode, errmsg, err := s.pkgPlaceOrder(ctx, token, "vip", pkgID, paycode, "")
+	return retcode, errmsg, err
 }
 
 func (s *Service) CoinPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "coin", pkgID, paycode)
+	_, retcode, errmsg, err := s.pkgPlaceOrder(ctx, token, "coin", pkgID, paycode, "")
+	return retcode, errmsg, err
 }
 
 func (s *Service) BeanPkgPlaceOrderEdge(ctx context.Context, token string, pkgID int, paycode string) (int, string, error) {
-	return s.pkgPlaceOrderEdge(ctx, token, "bean", pkgID, paycode)
+	_, retcode, errmsg, err := s.pkgPlaceOrder(ctx, token, "bean", pkgID, paycode, "")
+	return retcode, errmsg, err
 }
 
-func (s *Service) pkgPlaceOrderEdge(ctx context.Context, token string, kind string, pkgID int, paycode string) (int, string, error) {
+func (s *Service) VIPPkgPlaceOrder(ctx context.Context, token string, pkgID int, paycode string, pid string) (map[string]interface{}, int, string, error) {
+	return s.pkgPlaceOrder(ctx, token, "vip", pkgID, paycode, pid)
+}
+
+func (s *Service) CoinPkgPlaceOrder(ctx context.Context, token string, pkgID int, paycode string, pid string) (map[string]interface{}, int, string, error) {
+	return s.pkgPlaceOrder(ctx, token, "coin", pkgID, paycode, pid)
+}
+
+func (s *Service) BeanPkgPlaceOrder(ctx context.Context, token string, pkgID int, paycode string, pid string) (map[string]interface{}, int, string, error) {
+	return s.pkgPlaceOrder(ctx, token, "bean", pkgID, paycode, pid)
+}
+
+func (s *Service) pkgPlaceOrder(ctx context.Context, token string, kind string, pkgID int, paycode string, pid string) (map[string]interface{}, int, string, error) {
 	user, _, err := s.authenticatedUser(ctx, token)
 	if err != nil {
-		return -9999, "您还没有登录", err
+		return nil, -9999, "您还没有登录", err
 	}
 	if atoi(user["uid"]) == 0 {
-		return -9999, "您还没有登录", nil
+		return nil, -9999, "您还没有登录", nil
 	}
 	pkg, err := s.store.PackageByID(ctx, kind, pkgID)
 	if err != nil {
-		return -1, "套餐下单失败", err
+		return nil, -1, "套餐下单失败", err
 	}
 	if len(pkg) == 0 || atoi(pkg["showtype"]) != 0 {
-		return -1, "套餐不存在或未启用", nil
+		return nil, -1, "套餐不存在或未启用", nil
 	}
 	if kind == "vip" && atoi(pkg["rmbprice"]) == 3800 {
-		return -1, "套餐仅支持金币兑换", nil
+		return nil, -1, "套餐仅支持金币兑换", nil
 	}
 	settingRow, err := s.store.SettingByUUID(ctx, "setting")
 	if err != nil {
-		return -1, "套餐下单失败", err
+		return nil, -1, "套餐下单失败", err
 	}
 	setting := parseTaskPHPSerializedMap(str(settingRow["value"]))
 	if kind == "vip" || kind == "bean" {
 		if retcode, errmsg, blocked, err := s.checkPackageOrderLimits(ctx, kind, user, setting); err != nil || blocked {
-			return retcode, errmsg, err
+			return nil, retcode, errmsg, err
 		}
 	}
 	channels, err := s.store.PaymentChannels(ctx, false)
 	if err != nil {
-		return -1, "套餐下单失败", err
+		return nil, -1, "套餐下单失败", err
 	}
 	paycode = strings.TrimSpace(paycode)
-	if isRandomPaycode(paycode) && atoi(setting["randomPaywayStatus"]) != 0 && !randomPaymentCodeAvailable(channels, packagePayType(kind), paycode, atoi(pkg["rmbprice"])) {
-		return -1, "该支付方式当前没有可用通道", nil
+	if isRandomPaycode(paycode) && atoi(setting["randomPaywayStatus"]) != 0 {
+		resolvedPaycode := randomPaymentCode(channels, packagePayType(kind), paycode, atoi(pkg["rmbprice"]))
+		if resolvedPaycode == "" {
+			return nil, -1, "该支付方式当前没有可用通道", nil
+		}
+		paycode = resolvedPaycode
 	}
 	if !paymentCodeAllowed(channels, packagePayType(kind), paycode, atoi(pkg["rmbprice"])) {
-		return -1, "支付方式错误或不被允许", nil
+		return nil, -1, "支付方式错误或不被允许", nil
 	}
-	return -1, "支付下单成功分支暂未迁移", nil
+	payway, paycodePart := splitPaycode(paycode)
+	if payway == "" || paycodePart == "" {
+		return nil, -1, "支付方式错误或不被允许", nil
+	}
+	pid = normalizePackagePID(pid)
+	now := s.now()
+	input := domain.PackagePaymentInput{
+		PayID:     genPackagePayID(atoi(user["uid"]), now),
+		PayType:   packageDBPayType(kind),
+		Payway:    payway,
+		Paycode:   paycodePart,
+		ItemName:  str(pkg["pkgname"]),
+		Amount:    atoi(pkg["rmbprice"]),
+		UID:       atoi(user["uid"]),
+		PID:       pid,
+		CreatedAt: now.Unix(),
+		Params:    packagePaymentParams(kind, pkg, setting),
+	}
+	if kind == "vip" && str(user["username"]) == "1~2220076537" {
+		input.Payway = "pay12"
+		input.Paycode = "925"
+		input.NoCheck = 1
+	}
+	payid, err := s.store.CreatePackagePayment(ctx, input)
+	if err != nil {
+		return nil, -1, "下单失败，请重试！", err
+	}
+	if payid == 0 {
+		return nil, -1, "下单失败，请重试！", nil
+	}
+	return map[string]interface{}{"payid": payid}, 0, "", nil
 }
 
 func (s *Service) checkPackageOrderLimits(ctx context.Context, kind string, user map[string]interface{}, setting map[string]interface{}) (int, string, bool, error) {
@@ -360,6 +411,70 @@ func packagePayType(kind string) int {
 	}
 }
 
+func packageDBPayType(kind string) int {
+	switch kind {
+	case "vip":
+		return 8
+	case "coin":
+		return 7
+	case "bean":
+		return 21
+	default:
+		return 0
+	}
+}
+
+func packagePaymentParams(kind string, row map[string]interface{}, setting map[string]interface{}) map[string]interface{} {
+	params := map[string]interface{}{
+		"pkgid": atoi(row["pkgid"]),
+	}
+	if kind == "vip" {
+		params["daylen"] = atoi(row["daylen"])
+		params["bonus_vip_days"] = atoi(row["bonus_vip_days"])
+		params["recommend"] = atoi(row["recommend"])
+		return params
+	}
+	params["coinnum"] = atoi(row["rmbprice"]) / 100 * atoi(setting["exrate"])
+	params["bonus_vip_days"] = atoi(row["bonus_vip_days"])
+	params["bonus_coins"] = atoi(row["bonus_coins"])
+	params["recommend"] = atoi(row["recommend"])
+	return params
+}
+
+func splitPaycode(paycode string) (string, string) {
+	parts := strings.SplitN(paycode, ".", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+func normalizePackagePID(pid string) string {
+	pid = strings.TrimSpace(pid)
+	if len(pid) != 2 {
+		return ""
+	}
+	for _, r := range pid {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			continue
+		}
+		return ""
+	}
+	return pid
+}
+
+func genPackagePayID(uid int, now time.Time) int64 {
+	year := now.Year() % 100
+	monthDay := int(now.Month())<<5 | now.Day()
+	key := fmt.Sprintf("%02d%03d%d%d%d", year, monthDay, now.Hour()%10, now.Minute()%10, now.Second()%10)
+	milli := now.Nanosecond() / int(time.Millisecond)
+	if milli == 0 {
+		milli = now.Nanosecond() / int(time.Microsecond) % 1000
+	}
+	key += fmt.Sprintf("%03d%03d", milli%1000, uid%1000)
+	return atoi64(key)
+}
+
 func paymentCodeAllowed(channels []map[string]interface{}, payType int, paycode string, amount int) bool {
 	if payType == 0 || paycode == "" {
 		return false
@@ -395,6 +510,10 @@ func isRandomPaycode(paycode string) bool {
 }
 
 func randomPaymentCodeAvailable(channels []map[string]interface{}, payType int, paycode string, amount int) bool {
+	return randomPaymentCode(channels, payType, paycode, amount) != ""
+}
+
+func randomPaymentCode(channels []map[string]interface{}, payType int, paycode string, amount int) string {
 	for _, channel := range channels {
 		if atoi(channel["disabled"]) > 0 {
 			continue
@@ -411,10 +530,10 @@ func randomPaymentCodeAvailable(channels []map[string]interface{}, payType int, 
 			if !paymentCodeAllowed([]map[string]interface{}{{"payways": []map[string]interface{}{payway}}}, payType, code, amount) {
 				continue
 			}
-			return true
+			return code
 		}
 	}
-	return false
+	return ""
 }
 
 func paywayAllowsType(payway map[string]interface{}, payType int) bool {

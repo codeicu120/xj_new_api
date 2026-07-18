@@ -60,6 +60,7 @@ type Store interface {
 	RecordMiniMedia(ctx context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error
 	ReqTaskCoin(ctx context.Context, uid int, sid string, logid int, now int64) (int, string, error)
 	LongToShortMapByLongID(ctx context.Context, vodID int) (map[string]interface{}, error)
+	ThrowCoin(ctx context.Context, input domain.MiniVODThrowCoinInput) (int, string, error)
 }
 
 type VODProcessor interface {
@@ -523,7 +524,17 @@ func (s *Service) ThrowCoinEdge(ctx context.Context, req ThrowCoinRequest) (map[
 	if (minCoin > 0 || maxCoin > 0) && (req.Coin < minCoin || req.Coin > maxCoin) {
 		return nil, -1, "投币数额请在合理范围", nil
 	}
-	return nil, -1, "小视频投币成功分支暂未迁移", nil
+	retcode, errmsg, err := s.store.ThrowCoin(ctx, domain.MiniVODThrowCoinInput{
+		UID:       atoi(user["uid"]),
+		AuthorUID: atoi(author["uid"]),
+		VODID:     atoi(row["vodid"]),
+		CoinNum:   req.Coin,
+		Now:       s.now().Unix(),
+	})
+	if err != nil {
+		return nil, -1, "小视频投币失败", err
+	}
+	return nil, retcode, errmsg, nil
 }
 
 func (s *Service) ReqPlay(ctx context.Context, token string, vodID int, playIndex int) (map[string]interface{}, int, string, error) {

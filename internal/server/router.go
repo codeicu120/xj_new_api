@@ -156,7 +156,7 @@ func NewRouter(opts Options) *gin.Engine {
 	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
 	starLiveHandler := handler.NewStarLiveHandler(starliveService.NewService(starliveRepo.NewRepository(db), userRepository, ucpRepository, ucpRepository))
 	aiundressExternalClient := aiundressService.NewHTTPExternalClient(cfg.AIUndressHost, cfg.AIUndressKey, 5*time.Second)
-	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).WithExternalClient(aiundressExternalClient))
+	aiundressHandler := handler.NewAIUndressHandler(aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).WithExternalClient(aiundressExternalClient).WithUploadPath(cfg.UploadPath))
 	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
 	respondHandler := handler.NewRespondHandler(respondService.NewService(

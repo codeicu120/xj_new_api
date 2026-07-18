@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type Filter struct {
@@ -28,7 +30,11 @@ type Repository struct {
 	db *sql.DB
 }
 
-const coinTypeMiniVODPlayTask = 25
+const (
+	coinTypeMiniVODPlayTask = 25
+	coinTypeMiniVODThrowIn  = 21
+	coinTypeMiniVODThrowOut = 106
+)
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
@@ -558,6 +564,76 @@ func (r *Repository) ReqTaskCoin(ctx context.Context, uid int, sid string, logid
 		return r.reqUserTaskCoin(ctx, tx, uid, logid, now)
 	}
 	return r.reqGuestTaskCoin(ctx, tx, sid, logid, now)
+}
+
+func (r *Repository) ThrowCoin(ctx context.Context, input domain.MiniVODThrowCoinInput) (int, string, error) {
+	if r.db == nil {
+		return 0, "已投币成功", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return -1, "", fmt.Errorf("begin minivod throwcoin: %w", err)
+	}
+	defer tx.Rollback()
+	authorQuota, err := lockQuota(ctx, tx, input.AuthorUID)
+	if err != nil {
+		return -1, "", err
+	}
+	if len(authorQuota) == 0 {
+		return -1, "作者账户不存在", nil
+	}
+	userQuota, err := lockQuota(ctx, tx, input.UID)
+	if err != nil {
+		return -1, "", err
+	}
+	if atoi(userQuota["goldcoin"]) < input.CoinNum {
+		return -1, "用户可用金币不足", nil
+	}
+	if ok, errmsg, err := changeCoin(ctx, tx, coinTypeMiniVODThrowOut, input.UID, -input.CoinNum, fmt.Sprintf("%d:%d", input.VODID, input.AuthorUID), input.Now); err != nil || !ok {
+		return -1, errmsg, err
+	}
+	if ok, errmsg, err := changeCoin(ctx, tx, coinTypeMiniVODThrowIn, input.AuthorUID, input.CoinNum, fmt.Sprintf("%d:%d", input.VODID, input.UID), input.Now); err != nil || !ok {
+		return -1, errmsg, err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO minivod_coinlogs(uid, vodid, coinnum, addtime) VALUES(?, ?, ?, ?)", input.UID, input.VODID, input.CoinNum, input.Now); err != nil {
+		return -1, "", fmt.Errorf("insert minivod coinlog: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return -1, "", fmt.Errorf("commit minivod throwcoin: %w", err)
+	}
+	return 0, "已投币成功", nil
+}
+
+func lockQuota(ctx context.Context, tx *sql.Tx, uid int) (map[string]interface{}, error) {
+	return queryOneTx(ctx, tx, "SELECT uid,goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid)
+}
+
+func changeCoin(ctx context.Context, tx *sql.Tx, coinType int, uid int, coinNum int, remark string, now int64) (bool, string, error) {
+	quota, err := lockQuota(ctx, tx, uid)
+	if err != nil {
+		return false, "", fmt.Errorf("lock users quota: %w", err)
+	}
+	if len(quota) == 0 {
+		return false, "账户不存在", nil
+	}
+	balance := atoi(quota["goldcoin"])
+	newBalance := balance + coinNum
+	if newBalance < 0 {
+		return false, "金币不足", nil
+	}
+	if newBalance != balance {
+		result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+		if err != nil {
+			return false, "", fmt.Errorf("update users quota: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return false, "资金变动不成功", nil
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinType, uid, coinNum, newBalance, now, remark); err != nil {
+		return false, "", fmt.Errorf("insert user coinlog: %w", err)
+	}
+	return true, "", nil
 }
 
 func (r *Repository) reqUserTaskCoin(ctx context.Context, tx *sql.Tx, uid int, logid int, now int64) (int, string, error) {

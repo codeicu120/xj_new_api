@@ -5,7 +5,9 @@ import (
 	"crypto/md5"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,6 +25,10 @@ const coinTypeUpgradeSuperDeduct = 103
 const beanTypeBuyCoin = 20
 const coinTypeRMB2Coin = 8
 const coinTypeCoin2RMB = 104
+const coinTypeVODOrder = 108
+const coinTypeVODOrderSupport = 109
+const payTypeWithdraw = 4
+const payTypeGameWithdraw = 14
 const payTypeCoin2RMB = 9
 const payTypeRMB2Coin = 10
 
@@ -436,6 +442,112 @@ func (r *Repository) LatestVODIssue(ctx context.Context) (map[string]interface{}
 	return row, nil
 }
 
+func (r *Repository) EnsureVODIssue(ctx context.Context, today int64, periodDays int) (map[string]interface{}, error) {
+	if r.db == nil {
+		return map[string]interface{}{"issue": today}, nil
+	}
+	latest, err := r.LatestVODIssue(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(latest) != 0 && periodDays > 0 {
+		issue := atoi64(latest["issue"])
+		intervalDays := (today - issue) / 86400
+		if intervalDays < int64(periodDays) {
+			return latest, nil
+		}
+		today = issue + (intervalDays/int64(periodDays))*int64(periodDays)*86400
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO user_vod_issue(issue) VALUES(?)", today)
+	if err != nil {
+		return nil, fmt.Errorf("insert vod issue: %w", err)
+	}
+	id, _ := result.LastInsertId()
+	return map[string]interface{}{"id": id, "issue": today}, nil
+}
+
+func (r *Repository) CreateVODOrder(ctx context.Context, input domain.VODOrderCreateInput) error {
+	if r.db == nil || input.UID <= 0 || input.Coins <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin create vod order: %w", err)
+	}
+	defer tx.Rollback()
+	if err := changeUserCoinsTx(ctx, tx, input.UID, -input.Coins, coinTypeVODOrder, input.CreatedAt, "求片"); err != nil {
+		return err
+	}
+	startTime := input.Issue + int64(input.Period)*86400
+	stopTime := startTime + int64(input.Support)*86400
+	expireTime := input.Issue + int64(input.Period)*2*86400
+	result, err := tx.ExecContext(ctx, `INSERT INTO user_vod_order
+(uid, vod_serial, vod_name, coins, support_users, support_coins, create_time, start_time, stop_time, expire_time)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.UID,
+		input.Serial,
+		input.Name,
+		input.Coins,
+		0,
+		0,
+		input.CreatedAt,
+		startTime,
+		stopTime,
+		expireTime,
+	)
+	if err != nil {
+		return fmt.Errorf("insert vod order: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert vod order affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit create vod order: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) SupportVODOrder(ctx context.Context, input domain.VODOrderSupportInput) error {
+	if r.db == nil || input.UID <= 0 || input.OrderID <= 0 || input.Coins <= 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin support vod order: %w", err)
+	}
+	defer tx.Rollback()
+	var orderUID int
+	if err := tx.QueryRowContext(ctx, "SELECT uid FROM user_vod_order WHERE id=? FOR UPDATE", input.OrderID).Scan(&orderUID); err != nil {
+		return fmt.Errorf("lock vod order: %w", err)
+	}
+	if err := changeUserCoinsTx(ctx, tx, input.UID, -input.Coins, coinTypeVODOrderSupport, input.CreatedAt, "助力求片"); err != nil {
+		return err
+	}
+	var result sql.Result
+	if orderUID == input.UID {
+		result, err = tx.ExecContext(ctx, "UPDATE user_vod_order SET coins=coins+? WHERE id=?", input.Coins, input.OrderID)
+	} else {
+		result, err = tx.ExecContext(ctx, "INSERT INTO user_vod_support(uid, void, coins, support_time) VALUES(?, ?, ?, ?)", input.UID, input.OrderID, input.Coins, input.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("insert vod support: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected < 1 {
+			return fmt.Errorf("insert vod support affected %d rows", affected)
+		}
+		result, err = tx.ExecContext(ctx, "UPDATE user_vod_order SET support_users=support_users+1, support_coins=support_coins+? WHERE id=?", input.Coins, input.OrderID)
+	}
+	if err != nil {
+		return fmt.Errorf("update vod order support: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("update vod order support affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit support vod order: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error) {
 	if r.db == nil {
 		return 0, nil
@@ -597,6 +709,39 @@ func (r *Repository) CountPaymentsByUIDPayTypePayway(ctx context.Context, uid in
 		return 0, fmt.Errorf("count payments by uid paytype payway: %w", err)
 	}
 	return total, nil
+}
+
+func (r *Repository) CreatePackagePayment(ctx context.Context, input domain.PackagePaymentInput) (int64, error) {
+	if r.db == nil || input.PayID == 0 || input.UID <= 0 {
+		return input.PayID, nil
+	}
+	params, err := json.Marshal(input.Params)
+	if err != nil {
+		return 0, fmt.Errorf("marshal payment params: %w", err)
+	}
+	result, err := r.db.ExecContext(ctx, `INSERT INTO trade_payments
+(payid, paytype, payway, paycode, nocheck, itemname, trx_amount, pay_amount, uid, pid, createtime, params)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.PayID,
+		input.PayType,
+		input.Payway,
+		input.Paycode,
+		input.NoCheck,
+		input.ItemName,
+		input.Amount,
+		input.Amount,
+		input.UID,
+		input.PID,
+		input.CreatedAt,
+		string(params),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert package payment: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return 0, nil
+	}
+	return input.PayID, nil
 }
 
 func (r *Repository) Payments(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
@@ -819,6 +964,32 @@ func (r *Repository) AwardCoins(ctx context.Context, uid int, coinType int, addC
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit award coins: %w", err)
+	}
+	return nil
+}
+
+func changeUserCoinsTx(ctx context.Context, tx *sql.Tx, uid int, addCoin int, coinType int, now int64, remark string) error {
+	var balance int
+	if err := tx.QueryRowContext(ctx, "SELECT goldcoin FROM users_quota WHERE uid=? FOR UPDATE", uid).Scan(&balance); err != nil {
+		return fmt.Errorf("lock users quota: %w", err)
+	}
+	newBalance := balance + addCoin
+	if newBalance < 0 {
+		return fmt.Errorf("goldcoin insufficient")
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, uid)
+	if err != nil {
+		return fmt.Errorf("update users quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return fmt.Errorf("update users quota affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, ?)", coinType, uid, addCoin, newBalance, now, remark)
+	if err != nil {
+		return fmt.Errorf("insert user coinlog: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return fmt.Errorf("insert user coinlog affected %d rows", affected)
 	}
 	return nil
 }
@@ -1749,6 +1920,126 @@ func (r *Repository) SumWithdrawAmount(ctx context.Context, uid int) (int, error
 	return int(total.Int64), nil
 }
 
+func (r *Repository) CreateWithdraw(ctx context.Context, input domain.WithdrawCreateInput) (int64, error) {
+	if r.db == nil || input.UID <= 0 || input.WithdrawAmount <= 0 {
+		return 1, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin create withdraw: %w", err)
+	}
+	defer tx.Rollback()
+
+	var balance, frozen, gameBalance, gameFrozen int
+	if err := tx.QueryRowContext(ctx, "SELECT balance, frozen, game_balance, game_frozen FROM users_account WHERE uid=? FOR UPDATE", input.UID).Scan(&balance, &frozen, &gameBalance, &gameFrozen); err != nil {
+		return 0, fmt.Errorf("lock users account: %w", err)
+	}
+	if input.ConvertAmount > 0 {
+		if err := changeUserCoinsTx(ctx, tx, input.UID, -input.CoinNum, coinTypeCoin2RMB, input.CreatedAt, "兑换支出"); err != nil {
+			return 0, err
+		}
+		balance += input.ConvertAmount
+		result, err := tx.ExecContext(ctx, "UPDATE users_account SET balance=? WHERE uid=?", balance, input.UID)
+		if err != nil {
+			return 0, fmt.Errorf("update account balance: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected != 1 {
+			return 0, fmt.Errorf("update account balance affected %d rows", affected)
+		}
+		result, err = tx.ExecContext(ctx, "INSERT INTO user_balancelogs(paytype, uid, trxin, trxout, balance, trxtime, remark) VALUES(?, ?, ?, ?, ?, ?, ?)", payTypeCoin2RMB, input.UID, input.ConvertAmount, 0, balance, input.CreatedAt, "兑换收入")
+		if err != nil {
+			return 0, fmt.Errorf("insert balance log: %w", err)
+		}
+		if affected, _ := result.RowsAffected(); affected < 1 {
+			return 0, fmt.Errorf("insert balance log affected %d rows", affected)
+		}
+	}
+
+	result, err := tx.ExecContext(ctx, `INSERT INTO user_withdraws
+(uid, wdtype, withdraw_amount, createtime, lastupdate, name, cardnum, bankname, cardtype, wdstatus)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.UID, input.WDType, input.WithdrawAmount, input.CreatedAt, input.CreatedAt, input.CardName, input.CardNum, input.BankName, input.CardType, 0)
+	if err != nil {
+		return 0, fmt.Errorf("insert withdraw: %w", err)
+	}
+	wdid, _ := result.LastInsertId()
+	if wdid == 0 {
+		return 0, fmt.Errorf("insert withdraw returned zero id")
+	}
+
+	var freeQuota int
+	if err := tx.QueryRowContext(ctx, "SELECT withdraw_freequota FROM users_quota WHERE uid=? FOR UPDATE", input.UID).Scan(&freeQuota); err != nil {
+		return 0, fmt.Errorf("lock withdraw free quota: %w", err)
+	}
+	commissionAmount := input.WithdrawAmount - freeQuota
+	freeQuotaUsed := 0
+	if commissionAmount > 0 {
+		freeQuotaUsed = input.WithdrawAmount - commissionAmount
+	} else {
+		freeQuotaUsed = input.WithdrawAmount
+		commissionAmount = 0
+	}
+	sysCommission := 0
+	if input.WDType == 1 && input.GameRate > 0 && commissionAmount > 0 {
+		sysCommission = int(math.Round(float64(commissionAmount) * input.GameRate))
+	}
+	remitAmount := input.WithdrawAmount - sysCommission
+	if remitAmount <= 0 {
+		return 0, fmt.Errorf("操作失败，实际放款为0")
+	}
+	newFreeQuota := freeQuota - input.WithdrawAmount
+	if newFreeQuota < 0 {
+		newFreeQuota = 0
+	}
+
+	payType := payTypeWithdraw
+	newFrozen := frozen + input.WithdrawAmount
+	if input.WDType == 1 {
+		payType = payTypeGameWithdraw
+		if gameBalance-gameFrozen < input.WithdrawAmount {
+			return 0, fmt.Errorf("冻结金额大于可用余额")
+		}
+		newFrozen = gameFrozen + input.WithdrawAmount
+		result, err = tx.ExecContext(ctx, "UPDATE users_account SET game_frozen=? WHERE uid=?", newFrozen, input.UID)
+	} else {
+		if balance-frozen < input.WithdrawAmount {
+			return 0, fmt.Errorf("冻结金额大于可用余额")
+		}
+		result, err = tx.ExecContext(ctx, "UPDATE users_account SET frozen=? WHERE uid=?", newFrozen, input.UID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("update frozen: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return 0, fmt.Errorf("update frozen affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO user_frozenlogs(paytype, uid, fzin, fzout, frozen, fztime, remark) VALUES(?, ?, ?, ?, ?, ?, ?)", payType, input.UID, input.WithdrawAmount, 0, newFrozen, input.CreatedAt, "提现冻结")
+	if err != nil {
+		return 0, fmt.Errorf("insert frozen log: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected < 1 {
+		return 0, fmt.Errorf("insert frozen log affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "UPDATE user_withdraws SET wdstatus=1, sys_commission=?, freequota_used=?, remit_amount=?, lastupdate=? WHERE wdid=?", sysCommission, freeQuotaUsed, remitAmount, input.CreatedAt, wdid)
+	if err != nil {
+		return 0, fmt.Errorf("update withdraw request: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return 0, fmt.Errorf("update withdraw request affected %d rows", affected)
+	}
+	result, err = tx.ExecContext(ctx, "UPDATE users_quota SET withdraw_freequota=? WHERE uid=?", newFreeQuota, input.UID)
+	if err != nil {
+		return 0, fmt.Errorf("update withdraw free quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return 0, fmt.Errorf("update withdraw free quota affected %d rows", affected)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit create withdraw: %w", err)
+	}
+	return wdid, nil
+}
+
 func (r *Repository) CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return r.CoinLogsByTypes(ctx, uid, nil, page, pageSize, "logid DESC")
 }
@@ -2020,6 +2311,11 @@ func normalizeSQLValue(value interface{}) interface{} {
 
 func atoi(value interface{}) int {
 	parsed, _ := strconv.Atoi(fmt.Sprint(value))
+	return parsed
+}
+
+func atoi64(value interface{}) int64 {
+	parsed, _ := strconv.ParseInt(fmt.Sprint(value), 10, 64)
 	return parsed
 }
 

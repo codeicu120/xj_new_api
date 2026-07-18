@@ -151,6 +151,10 @@ func (s ucpStore) CountPaymentsByUIDPayTypePayway(ctx context.Context, uid int, 
 	return s.ucp.CountPaymentsByUIDPayTypePayway(ctx, uid, payType, payway)
 }
 
+func (s ucpStore) CreatePackagePayment(ctx context.Context, input domain.PackagePaymentInput) (int64, error) {
+	return s.ucp.CreatePackagePayment(ctx, input)
+}
+
 func (s ucpStore) VIPPackageByID(ctx context.Context, pkgID int) (map[string]interface{}, error) {
 	return s.ucp.VIPPackageByID(ctx, pkgID)
 }
@@ -331,6 +335,10 @@ func (s ucpStore) SumWithdrawAmount(ctx context.Context, uid int) (int, error) {
 	return s.ucp.SumWithdrawAmount(ctx, uid)
 }
 
+func (s ucpStore) CreateWithdraw(ctx context.Context, input domain.WithdrawCreateInput) (int64, error) {
+	return s.ucp.CreateWithdraw(ctx, input)
+}
+
 func (s ucpStore) CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error) {
 	return s.ucp.CoinLogs(ctx, uid, page, pageSize)
 }
@@ -401,6 +409,18 @@ func (s ucpStore) VODOrderByID(ctx context.Context, orderID int) (map[string]int
 
 func (s ucpStore) LatestVODIssue(ctx context.Context) (map[string]interface{}, error) {
 	return s.ucp.LatestVODIssue(ctx)
+}
+
+func (s ucpStore) EnsureVODIssue(ctx context.Context, today int64, periodDays int) (map[string]interface{}, error) {
+	return s.ucp.EnsureVODIssue(ctx, today, periodDays)
+}
+
+func (s ucpStore) CreateVODOrder(ctx context.Context, input domain.VODOrderCreateInput) error {
+	return s.ucp.CreateVODOrder(ctx, input)
+}
+
+func (s ucpStore) SupportVODOrder(ctx context.Context, input domain.VODOrderSupportInput) error {
+	return s.ucp.SupportVODOrder(ctx, input)
 }
 
 func (s ucpStore) CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error) {

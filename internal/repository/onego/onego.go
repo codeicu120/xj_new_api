@@ -4,12 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type Repository struct {
 	db *sql.DB
 }
+
+const coinTypeOneGoOrder = 112
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
@@ -176,11 +181,138 @@ func (r *Repository) Quota(ctx context.Context, uid int) (map[string]interface{}
 	return rows[0], nil
 }
 
+func (r *Repository) Bet(ctx context.Context, input domain.OneGoBetInput) (domain.OneGoBetResult, int, string, error) {
+	if r.db == nil {
+		betNo := make([]int, 0, input.Quantity)
+		for i := 0; i < input.Quantity; i++ {
+			betNo = append(betNo, i)
+		}
+		return domain.OneGoBetResult{BetNo: betNo, TotalBetNo: betNo}, 0, "", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("begin onego bet: %w", err)
+	}
+	defer tx.Rollback()
+
+	quota, err := queryOneTx(ctx, tx, "SELECT uid,goldcoin FROM users_quota WHERE uid=? FOR UPDATE", input.UID)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("lock onego quota: %w", err)
+	}
+	if len(quota) == 0 {
+		return domain.OneGoBetResult{}, -1, "未知用户", nil
+	}
+	balance := atoi(quota["goldcoin"])
+	if balance < input.BetCoins {
+		return domain.OneGoBetResult{}, -1, "余额不足", nil
+	}
+	newBalance := balance - input.BetCoins
+	result, err := tx.ExecContext(ctx, "UPDATE users_quota SET goldcoin=? WHERE uid=?", newBalance, input.UID)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("update onego quota: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return domain.OneGoBetResult{}, -1, "下注失败1", nil
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO user_coinlogs(cointype, uid, coinnum, balance, addtime, remark) VALUES(?, ?, ?, ?, ?, '')", coinTypeOneGoOrder, input.UID, -input.BetCoins, newBalance, input.Now); err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("insert onego coinlog: %w", err)
+	}
+
+	record, err := queryOneTx(ctx, tx, "SELECT * FROM one_go_records WHERE period=? AND room_id=? FOR UPDATE", input.Period, input.RoomID)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("lock onego record: %w", err)
+	}
+	if len(record) == 0 {
+		return domain.OneGoBetResult{}, -1, "无效的活动期号", nil
+	}
+	totalBets := atoi(record["total_bets"])
+	betNo := make([]int, 0, input.Quantity)
+	for i := 0; i < input.Quantity; i++ {
+		betNo = append(betNo, totalBets+i)
+	}
+	result, err = tx.ExecContext(ctx, "UPDATE one_go_records SET total_bets=?, total_coins=? WHERE id=?", totalBets+input.Quantity, atoi(record["total_coins"])+input.BetCoins, record["id"])
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("update onego record: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return domain.OneGoBetResult{}, -1, "下注失败2", nil
+	}
+	betNoText := joinInts(betNo)
+	result, err = tx.ExecContext(ctx, "INSERT INTO one_go_orders(uid, period, room_id, bet_coins, bet_no, bet_time) VALUES(?, ?, ?, ?, ?, ?)", input.UID, input.Period, input.RoomID, input.BetCoins, betNoText, input.Now)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("insert onego order: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return domain.OneGoBetResult{}, -1, "购买失败", nil
+	}
+	orders, err := queryRowsTx(ctx, tx, "SELECT bet_no FROM one_go_orders WHERE period=? AND room_id=? AND uid=?", input.Period, input.RoomID, input.UID)
+	if err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("query onego user orders: %w", err)
+	}
+	totalBetNo := []int{}
+	for _, order := range orders {
+		totalBetNo = append(totalBetNo, splitInts(fmt.Sprint(order["bet_no"]))...)
+	}
+	if len(totalBetNo) == 0 {
+		totalBetNo = betNo
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.OneGoBetResult{}, -1, "", fmt.Errorf("commit onego bet: %w", err)
+	}
+	return domain.OneGoBetResult{BetNo: betNo, TotalBetNo: totalBetNo}, 0, "", nil
+}
+
 func offset(page int, pageSize int) int {
 	if page < 1 {
 		page = 1
 	}
 	return (page - 1) * pageSize
+}
+
+func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := queryRowsTx(ctx, tx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return rows[0], nil
+}
+
+func queryRowsTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) ([]map[string]interface{}, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
+func joinInts(values []int) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprint(value))
+	}
+	return strings.Join(parts, ",")
+}
+
+func splitInts(value string) []int {
+	out := []int{}
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, atoi(part))
+	}
+	return out
+}
+
+func atoi(value interface{}) int {
+	var n int
+	_, _ = fmt.Sscan(fmt.Sprint(value), &n)
+	return n
 }
 
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {

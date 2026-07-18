@@ -8,6 +8,7 @@ import (
 type fakeRedisHashStore struct {
 	key    string
 	field  string
+	value  interface{}
 	exists bool
 }
 
@@ -15,6 +16,13 @@ func (s *fakeRedisHashStore) HExists(_ context.Context, key string, field string
 	s.key = key
 	s.field = field
 	return s.exists, nil
+}
+
+func (s *fakeRedisHashStore) HSet(_ context.Context, key string, field string, value interface{}) error {
+	s.key = key
+	s.field = field
+	s.value = value
+	return nil
 }
 
 func TestAccountDeletionExistsUsesDelAccountListHash(t *testing.T) {
@@ -30,5 +38,17 @@ func TestAccountDeletionExistsUsesDelAccountListHash(t *testing.T) {
 	}
 	if redis.key != "delAccountList" || redis.field != "7" {
 		t.Fatalf("unexpected redis lookup key=%q field=%q", redis.key, redis.field)
+	}
+}
+
+func TestRequestAccountDeletionWritesDelAccountListHash(t *testing.T) {
+	redis := &fakeRedisHashStore{}
+	repo := NewRepository(nil).WithDeletionList(redis)
+
+	if err := repo.RequestAccountDeletion(context.Background(), 7, "", 12345); err != nil {
+		t.Fatalf("request account deletion: %v", err)
+	}
+	if redis.key != "delAccountList" || redis.field != "7" || redis.value != int64(12345) {
+		t.Fatalf("unexpected redis hset key=%q field=%q value=%#v", redis.key, redis.field, redis.value)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"xj_comp/internal/domain"
 	minivodRepo "xj_comp/internal/repository/minivod"
 )
 
@@ -34,6 +35,9 @@ type fakeStore struct {
 	settings   map[string]string
 	recorded   *miniMediaRecord
 	l2sMap     map[string]interface{}
+	throwCoin  domain.MiniVODThrowCoinInput
+	throwRet   int
+	throwMsg   string
 }
 
 type miniMediaRecord struct {
@@ -108,6 +112,14 @@ func (s *fakeStore) UserQuota(context.Context, int) (map[string]interface{}, err
 		return s.quota, nil
 	}
 	return map[string]interface{}{"goldcoin": "88"}, nil
+}
+
+func (s *fakeStore) ThrowCoin(_ context.Context, input domain.MiniVODThrowCoinInput) (int, string, error) {
+	s.throwCoin = input
+	if s.throwMsg != "" || s.throwRet != 0 {
+		return s.throwRet, s.throwMsg, nil
+	}
+	return 0, "已投币成功", nil
 }
 
 func (s *fakeStore) SimilarVODsByTagIDs(context.Context, []int, int, int) ([]map[string]interface{}, error) {
@@ -834,5 +846,35 @@ func TestThrowCoinEdgePrechecks(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "投币数额请在合理范围" {
 		t.Fatalf("unexpected range response %d %q", retcode, errmsg)
+	}
+}
+
+func TestThrowCoinEdgeSuccess(t *testing.T) {
+	store := &fakeStore{settings: map[string]string{"mincoin": "5", "maxcoin": "10"}}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithAuth(fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}})
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	data, retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{Token: "token", VODID: 9, Method: "POST", Coin: 6})
+	if err != nil {
+		t.Fatalf("throwcoin success: %v", err)
+	}
+	if data != nil || retcode != 0 || errmsg != "已投币成功" {
+		t.Fatalf("unexpected success data=%#v retcode=%d errmsg=%q", data, retcode, errmsg)
+	}
+	if store.throwCoin.UID != 7 || store.throwCoin.AuthorUID != 7 || store.throwCoin.VODID != 9 || store.throwCoin.CoinNum != 6 || store.throwCoin.Now != 1700000000 {
+		t.Fatalf("throwcoin input = %#v", store.throwCoin)
+	}
+}
+
+func TestThrowCoinEdgeStoreFailure(t *testing.T) {
+	store := &fakeStore{settings: map[string]string{"mincoin": "5", "maxcoin": "10"}, throwRet: -1, throwMsg: "用户可用金币不足"}
+	service := NewService(store, fakeProcessor{}, "https://res.test").WithAuth(fakeAuth{user: map[string]interface{}{"uid": "7", "sid": "s"}})
+
+	_, retcode, errmsg, err := service.ThrowCoinEdge(context.Background(), ThrowCoinRequest{Token: "token", VODID: 9, Method: "POST", Coin: 6})
+	if err != nil {
+		t.Fatalf("throwcoin failure: %v", err)
+	}
+	if retcode != -1 || errmsg != "用户可用金币不足" {
+		t.Fatalf("unexpected store failure %d %q", retcode, errmsg)
 	}
 }

@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -18,6 +19,11 @@ type Repository struct {
 
 type RedisHashStore interface {
 	HExists(ctx context.Context, key string, field string) (bool, error)
+	HSet(ctx context.Context, key string, field string, value interface{}) error
+}
+
+type RedisHashDeleteStore interface {
+	HDel(ctx context.Context, key string, field string) error
 }
 
 func NewRepository(db *sql.DB) *Repository {
@@ -98,6 +104,16 @@ func (r *Repository) UpdateUserProfile(ctx context.Context, uid int, gender int,
 	}
 	if _, err := r.db.ExecContext(ctx, "UPDATE users SET gender=? WHERE uid=?", gender, uid); err != nil {
 		return fmt.Errorf("update user profile gender: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ResetPassword(ctx context.Context, uid int, passwordHash string, salt string) error {
+	if r.db == nil || uid <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE users SET password=?, salt=? WHERE uid=?", passwordHash, salt, uid); err != nil {
+		return fmt.Errorf("reset user password: %w", err)
 	}
 	return nil
 }
@@ -183,6 +199,117 @@ func (r *Repository) AccountDeletionExists(ctx context.Context, uid int) (bool, 
 	return exists, nil
 }
 
+func (r *Repository) RequestAccountDeletion(ctx context.Context, uid int, sid string, now int64) error {
+	if uid <= 0 {
+		return nil
+	}
+	if r.deletionList != nil {
+		if err := r.deletionList.HSet(ctx, "delAccountList", strconv.Itoa(uid), now); err != nil {
+			return fmt.Errorf("write account deletion list: %w", err)
+		}
+	}
+	return r.Logout(ctx, sid)
+}
+
+func (r *Repository) ChangePhone(ctx context.Context, uid int, mobi string) (bool, string, error) {
+	if r.db == nil || uid <= 0 || strings.TrimSpace(mobi) == "" {
+		return true, "", nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, "", fmt.Errorf("begin change phone: %w", err)
+	}
+	defer tx.Rollback()
+	row, err := queryOneTx(ctx, tx, "SELECT uid FROM users WHERE mobi=? FOR UPDATE", mobi)
+	if err != nil {
+		return false, "", fmt.Errorf("lock user by mobi: %w", err)
+	}
+	if len(row) > 0 {
+		return false, "手机号已经存在", nil
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE users SET mobi=? WHERE uid=?", mobi, uid)
+	if err != nil {
+		return false, "", fmt.Errorf("update user mobi: %w", err)
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return false, "手机号更换失败,请重试", nil
+	}
+	if err := tx.Commit(); err != nil {
+		return false, "", fmt.Errorf("commit change phone: %w", err)
+	}
+	return true, "", nil
+}
+
+func (r *Repository) CreateLoginSession(ctx context.Context, uid int, passwordHash string, salt string, now int64) (string, error) {
+	if r.db == nil || uid <= 0 {
+		return "", nil
+	}
+	sid, err := randomSID()
+	if err != nil {
+		return "", err
+	}
+	token := md5Hex(passwordHash + "_" + salt)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin login session: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "REPLACE INTO sessions(sid, token, uid, type, timestamp) VALUES(?, ?, ?, ?, ?)", sid, token, uid, 0, now)
+	if err != nil {
+		return "", fmt.Errorf("replace login session: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return "", nil
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE uid=? AND type=0 AND sid<>?", uid, sid); err != nil {
+		return "", fmt.Errorf("delete old sessions: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit login session: %w", err)
+	}
+	return sid, nil
+}
+
+func (r *Repository) Quota(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users_quota WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query user quota: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) Goldbean(ctx context.Context, uid int) (map[string]interface{}, error) {
+	if r.db == nil || uid <= 0 {
+		return map[string]interface{}{}, nil
+	}
+	row, err := r.queryOne(ctx, "SELECT * FROM users_goldbean WHERE uid=?", uid)
+	if err != nil {
+		return nil, fmt.Errorf("query user goldbean: %w", err)
+	}
+	if row == nil {
+		return map[string]interface{}{}, nil
+	}
+	return row, nil
+}
+
+func (r *Repository) ClearAccountDeletion(ctx context.Context, uid int) error {
+	if r.deletionList == nil || uid <= 0 {
+		return nil
+	}
+	deleter, ok := r.deletionList.(RedisHashDeleteStore)
+	if !ok || deleter == nil {
+		return nil
+	}
+	return deleter.HDel(ctx, "delAccountList", strconv.Itoa(uid))
+}
+
 func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface{}, error) {
 	if r.db == nil || uid <= 0 {
 		return map[string]interface{}{}, nil
@@ -195,6 +322,22 @@ func (r *Repository) BotByID(ctx context.Context, uid int) (map[string]interface
 		return map[string]interface{}{}, nil
 	}
 	return row, nil
+}
+
+func queryOneTx(ctx context.Context, tx *sql.Tx, query string, args ...interface{}) (map[string]interface{}, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items, err := scanRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	return items[0], nil
 }
 
 func (r *Repository) CountRecommended(ctx context.Context, uid int) (int, error) {
@@ -266,6 +409,14 @@ func validSID(sid string) bool {
 func md5Hex(value string) string {
 	sum := md5.Sum([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func randomSID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func scanRows(rows *sql.Rows) ([]map[string]interface{}, error) {

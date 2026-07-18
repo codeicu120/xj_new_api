@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"xj_comp/internal/domain"
 	"xj_comp/internal/legacyjson"
 	minivodRepo "xj_comp/internal/repository/minivod"
 	minivodService "xj_comp/internal/service/minivod"
@@ -107,6 +108,9 @@ func (s miniVODHandlerStore) RecordMiniMedia(context.Context, int, string, int, 
 }
 func (s miniVODHandlerStore) ReqTaskCoin(context.Context, int, string, int, int64) (int, string, error) {
 	return 0, "", nil
+}
+func (s miniVODHandlerStore) ThrowCoin(context.Context, domain.MiniVODThrowCoinInput) (int, string, error) {
+	return 0, "已投币成功", nil
 }
 func (s miniVODHandlerStore) LongToShortMapByLongID(context.Context, int) (map[string]interface{}, error) {
 	if s.l2sMap != nil {

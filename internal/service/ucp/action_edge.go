@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"xj_comp/internal/domain"
 )
 
 const (
@@ -421,7 +423,19 @@ func (s *Service) UserSendEmailEdge(ctx context.Context, token string, email str
 	if err := json.Unmarshal([]byte(str(setting["mailconf"])), &conf); err != nil || len(conf) == 0 {
 		return -1, "邮箱功能暂未开启，请稍后重试", nil
 	}
-	return -1, "邮箱验证码发送成功分支暂未迁移", nil
+	emailCode := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	if err := s.emailSender.Send(ctx, conf, email, "您的绑定邮箱信息", "验证码为："+emailCode+"，1小时内有效，感谢您的使用！"); err != nil {
+		return -1, "发送失败，请重试", err
+	}
+	now := s.now().Unix()
+	keyid := "bindemail." + email + "." + s.now().Format("20060102")
+	if err := s.store.SetKeylimit(ctx, keyid, 1, "", now); err != nil {
+		return -1, "邮箱验证码发送失败", err
+	}
+	if err := s.store.SetKeylimit(ctx, "email."+email+"."+emailCode, 1, fmt.Sprintf("%d.%s", atoi(user["uid"]), email), now); err != nil {
+		return -1, "邮箱验证码发送失败", err
+	}
+	return 0, "验证码已发送至您的邮箱，请1小时内验证并确认", nil
 }
 
 func (s *Service) UserVerifyEmailEdge(ctx context.Context, token string, email string, emailCode string) (int, string, error) {
@@ -737,16 +751,19 @@ func (s *Service) VODOrderCreateEdge(ctx context.Context, token string, vodseria
 	if err != nil {
 		return -9999, "您还没有登录", err
 	}
-	if atoi(user["uid"]) == 0 {
+	uid := atoi(user["uid"])
+	if uid == 0 {
 		return -9999, "您还没有登录", nil
 	}
-	if strings.TrimSpace(vodserial) == "" && strings.TrimSpace(vodname) == "" {
+	vodserial = strings.TrimSpace(vodserial)
+	vodname = strings.TrimSpace(vodname)
+	if vodserial == "" && vodname == "" {
 		return -1, "请填写视频番号或者视频名称", nil
 	}
 	if coins < 100 {
 		return -1, "求片金币不能低于100", nil
 	}
-	quota, err := s.store.Quota(ctx, atoi(user["uid"]))
+	quota, err := s.store.Quota(ctx, uid)
 	if err != nil {
 		return -1, "求片创建失败", err
 	}
@@ -757,7 +774,35 @@ func (s *Service) VODOrderCreateEdge(ctx context.Context, token string, vodseria
 	if len(quota) == 0 || atoi(goldcoin) < coins {
 		return -1, "金币不足:" + goldcoin, nil
 	}
-	return -1, "求片创建成功分支暂未迁移", nil
+	settingRow, err := s.store.SettingByUUID(ctx, "setting")
+	if err != nil {
+		return -1, "求片创建失败", err
+	}
+	setting := parseTaskPHPSerializedMap(str(settingRow["value"]))
+	period := atoi(setting["vod_order_period"])
+	if period <= 0 {
+		return -1, "求片创建失败", nil
+	}
+	supportTime := atoi(setting["vod_order_support_time"])
+	today := dayStartUnix(s.now())
+	issue, err := s.store.EnsureVODIssue(ctx, today, period)
+	if err != nil {
+		return -1, "求片创建失败", err
+	}
+	input := domain.VODOrderCreateInput{
+		UID:       uid,
+		Serial:    vodserial,
+		Name:      vodname,
+		Coins:     coins,
+		Issue:     atoi64(issue["issue"]),
+		Period:    period,
+		Support:   supportTime,
+		CreatedAt: s.now().Unix(),
+	}
+	if err := s.store.CreateVODOrder(ctx, input); err != nil {
+		return -1, "求片请求失败[0]", err
+	}
+	return 0, "操作成功", nil
 }
 
 func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID int, coins int) (int, string, error) {
@@ -765,7 +810,8 @@ func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID
 	if err != nil {
 		return -9999, "您还没有登录", err
 	}
-	if atoi(user["uid"]) == 0 {
+	uid := atoi(user["uid"])
+	if uid == 0 {
 		return -9999, "您还没有登录", nil
 	}
 	if orderID <= 0 {
@@ -779,7 +825,7 @@ func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID
 		return -1, "您助力的求片记录不存在", nil
 	}
 	now := s.now().Unix()
-	if atoi(order["uid"]) == atoi(user["uid"]) {
+	if atoi(order["uid"]) == uid {
 		if now > int64(atoi(order["stop_time"])) {
 			return -1, "该求片已停止助力", nil
 		}
@@ -789,7 +835,7 @@ func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID
 	if coins < 1 {
 		return -1, "助力求片金币不能低于1", nil
 	}
-	quota, err := s.store.Quota(ctx, atoi(user["uid"]))
+	quota, err := s.store.Quota(ctx, uid)
 	if err != nil {
 		return -1, "求片助力失败", err
 	}
@@ -800,7 +846,16 @@ func (s *Service) VODOrderSupportEdge(ctx context.Context, token string, orderID
 	if len(quota) == 0 || atoi(goldcoin) < coins {
 		return -1, "金币不足:" + goldcoin, nil
 	}
-	return -1, "求片助力成功分支暂未迁移", nil
+	if err := s.store.SupportVODOrder(ctx, domain.VODOrderSupportInput{
+		UID:       uid,
+		OrderID:   orderID,
+		OrderUID:  atoi(order["uid"]),
+		Coins:     coins,
+		CreatedAt: now,
+	}); err != nil {
+		return -1, "助力求片请求失败[00]", err
+	}
+	return 0, "操作成功", nil
 }
 
 func formatUnixTime(ts int) string {

@@ -3,6 +3,8 @@ package aiundress
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -44,8 +46,25 @@ func (f fakeStore) ByUIDImage(context.Context, int, string) (map[string]interfac
 	return map[string]interface{}{}, nil
 }
 
+func (f fakeStore) MarkDeleted(context.Context, int, int64) error {
+	return nil
+}
+
 func (f fakeStore) SettingByUUID(context.Context, string) (string, error) {
 	return f.setting, nil
+}
+
+type fakeDeleteStore struct {
+	fakeStore
+	markedID   int
+	updateTime int64
+	markErr    error
+}
+
+func (f *fakeDeleteStore) MarkDeleted(_ context.Context, id int, updateTime int64) error {
+	f.markedID = id
+	f.updateTime = updateTime
+	return f.markErr
 }
 
 type fakeExternalClient struct {
@@ -125,18 +144,61 @@ func TestDeleteEdgeMissingRowReturnsOK(t *testing.T) {
 	}
 }
 
-func TestDeleteEdgeExistingRowStopsBeforeWrite(t *testing.T) {
+func TestDeleteEdgeExistingRowMarksDeletedAndRemovesFiles(t *testing.T) {
+	dir := t.TempDir()
+	image := filepath.Join(dir, "ai_undress", "a.jpg")
+	output := filepath.Join(dir, "ai_undress", "b.jpg")
+	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(image, []byte("image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(output, []byte("output"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeDeleteStore{fakeStore: fakeStore{row: map[string]interface{}{"id": "99", "image": "ai_undress/a.jpg", "output": "ai_undress/b.jpg"}}}
 	service := NewService(
 		fakeAuth{user: map[string]interface{}{"uid": "7"}},
-		fakeStore{row: map[string]interface{}{"id": "99", "image": "a.jpg", "output": "b.jpg"}},
+		store,
 		"https://res.example",
-	)
+	).WithUploadPath(dir)
+	service.now = func() time.Time { return time.Unix(12345, 0) }
 
 	retcode, errmsg, err := service.DeleteEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", 99)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "AI 删除成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if store.markedID != 99 || store.updateTime != 12345 {
+		t.Fatalf("marked id=%d updateTime=%d", store.markedID, store.updateTime)
+	}
+	if _, err := os.Stat(image); !os.IsNotExist(err) {
+		t.Fatalf("image should be removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("output should be removed, stat err=%v", err)
+	}
+}
+
+func TestDeleteEdgeMarkFailure(t *testing.T) {
+	store := &fakeDeleteStore{
+		fakeStore: fakeStore{row: map[string]interface{}{"id": "99", "image": "missing.jpg", "output": ""}},
+		markErr:   errors.New("db down"),
+	}
+	service := NewService(
+		fakeAuth{user: map[string]interface{}{"uid": "7"}},
+		store,
+		"https://res.example",
+	).WithUploadPath(t.TempDir())
+
+	retcode, errmsg, err := service.DeleteEdge(context.Background(), "250f790ba71ec2b9d3855f424db2259e", 99)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if retcode != -1 || errmsg != "AI 删除失败" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
 	}
 }

@@ -15,6 +15,20 @@ type fakeAuthEdgeStore struct {
 	settings  map[string]map[string]interface{}
 	keyCounts map[string]int
 	delExists map[int]bool
+	resetUID  int
+	resetHash string
+	resetSalt string
+	deleteUID int
+	deleteSID string
+	phoneUID  int
+	phoneMobi string
+	phoneOK   bool
+	phoneMsg  string
+	loginSID  string
+	loginUID  int
+	quota     map[string]interface{}
+	goldbean  map[string]interface{}
+	clearUID  int
 }
 
 func (s fakeAuthEdgeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
@@ -56,6 +70,52 @@ func (s fakeAuthEdgeStore) AccountDeletionExists(_ context.Context, uid int) (bo
 		return s.delExists[uid], nil
 	}
 	return false, nil
+}
+
+func (s *fakeAuthEdgeStore) RequestAccountDeletion(_ context.Context, uid int, sid string, _ int64) error {
+	s.deleteUID = uid
+	s.deleteSID = sid
+	return nil
+}
+
+func (s *fakeAuthEdgeStore) ResetPassword(_ context.Context, uid int, passwordHash string, salt string) error {
+	s.resetUID = uid
+	s.resetHash = passwordHash
+	s.resetSalt = salt
+	return nil
+}
+
+func (s *fakeAuthEdgeStore) ChangePhone(_ context.Context, uid int, mobi string) (bool, string, error) {
+	s.phoneUID = uid
+	s.phoneMobi = mobi
+	return s.phoneOK, s.phoneMsg, nil
+}
+
+func (s *fakeAuthEdgeStore) CreateLoginSession(_ context.Context, uid int, _ string, _ string, _ int64) (string, error) {
+	s.loginUID = uid
+	if s.loginSID != "" {
+		return s.loginSID, nil
+	}
+	return "0123456789abcdef0123456789abcdef", nil
+}
+
+func (s *fakeAuthEdgeStore) Quota(context.Context, int) (map[string]interface{}, error) {
+	if s.quota != nil {
+		return s.quota, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeAuthEdgeStore) Goldbean(context.Context, int) (map[string]interface{}, error) {
+	if s.goldbean != nil {
+		return s.goldbean, nil
+	}
+	return map[string]interface{}{}, nil
+}
+
+func (s *fakeAuthEdgeStore) ClearAccountDeletion(_ context.Context, uid int) error {
+	s.clearUID = uid
+	return nil
 }
 
 func TestRegisterEdgeBranches(t *testing.T) {
@@ -186,7 +246,7 @@ func TestLoginPasswordClosed(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{settings: map[string]map[string]interface{}{
 		"setting": {"value": `a:1:{s:15:"pswdLoginStatus";i:0;}`},
 	}})
-	retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{}, false)
+	_, retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{}, false)
 	if err != nil {
 		t.Fatalf("login closed: %v", err)
 	}
@@ -198,7 +258,7 @@ func TestLoginPasswordClosed(t *testing.T) {
 func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{})
 
-	retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{}, true)
+	_, retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{}, true)
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
@@ -206,7 +266,7 @@ func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 		t.Fatalf("unexpected response %d %q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Mobi: "13800138000"}, true)
+	_, retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Mobi: "13800138000"}, true)
 	if err != nil {
 		t.Fatalf("login mobi: %v", err)
 	}
@@ -214,7 +274,7 @@ func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 		t.Fatalf("unexpected mobi response %d %q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Email: "nobody@example.com"}, true)
+	_, retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Email: "nobody@example.com"}, true)
 	if err != nil {
 		t.Fatalf("login email: %v", err)
 	}
@@ -223,12 +283,89 @@ func TestV2LoginEmptyUsernameBranch(t *testing.T) {
 	}
 
 	service = NewAuthEdgeService(fakeAuthEdgeStore{byMobi: map[string]interface{}{"uid": "9"}})
-	retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Mobi: "13800138000"}, true)
+	_, retcode, errmsg, err = service.Login(context.Background(), AuthEdgeRequest{Mobi: "13800138000"}, true)
 	if err != nil {
 		t.Fatalf("login password: %v", err)
 	}
 	if retcode != -1 || errmsg != "密码不能为空" {
 		t.Fatalf("unexpected password response %d %q", retcode, errmsg)
+	}
+}
+
+func TestLoginPasswordSuccessReturnsPHPData(t *testing.T) {
+	salt := "salt1234"
+	passwordHash := phpPassword("secret123" + salt)
+	store := &fakeAuthEdgeStore{
+		byUser: map[string]interface{}{
+			"uid":             "9",
+			"uniqkey":         "35",
+			"username":        "tester",
+			"password":        passwordHash,
+			"salt":            salt,
+			"nickname":        "Nick",
+			"mobi":            "86.13800138000",
+			"email":           "t@example.com",
+			"sysgid":          "6",
+			"sysgid_exptime":  "1893456000",
+			"gid":             "1",
+			"regtime":         "1700000000",
+			"gender":          "1",
+			"avatar":          "1",
+			"newmsg":          "2",
+			"recommend_total": "3",
+			"locktype":        "0",
+		},
+		quota:    map[string]interface{}{"goldcoin": "88"},
+		goldbean: map[string]interface{}{"gold_bean": "9"},
+	}
+	service := NewAuthEdgeService(store)
+	service.now = func() time.Time { return time.Unix(1700000000, 0) }
+
+	data, retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{Username: "tester", Password: "secret123"}, false)
+	if err != nil {
+		t.Fatalf("login success: %v", err)
+	}
+	if retcode != 0 || errmsg != "登录成功" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
+	}
+	if data["xxx_api_auth"] != "3031323334353637383961626364656630313233343536373839616263646566" {
+		t.Fatalf("auth token = %#v", data["xxx_api_auth"])
+	}
+	user := data["user"].(map[string]interface{})
+	if user["goldcoin"] != 88 || user["gold_bean"] != 9 || user["isvip"] != 1 {
+		t.Fatalf("user data = %#v", user)
+	}
+	if store.loginUID != 9 || store.clearUID != 9 {
+		t.Fatalf("loginUID=%d clearUID=%d", store.loginUID, store.clearUID)
+	}
+}
+
+func TestV2LoginEmailCodeSuccessUsesStoredHash(t *testing.T) {
+	salt := "salt1234"
+	passwordHash := phpPassword("secret123" + salt)
+	store := &fakeAuthEdgeStore{
+		byEmail: map[string]interface{}{
+			"uid":            "9",
+			"uniqkey":        "1",
+			"username":       "tester",
+			"password":       passwordHash,
+			"salt":           salt,
+			"email":          "t@example.com",
+			"sysgid":         "0",
+			"gid":            "0",
+			"regtime":        "1700000000",
+			"sysgid_exptime": "0",
+		},
+		keyCounts: map[string]int{"email.t@example.com.1234": 1},
+	}
+	service := NewAuthEdgeService(store)
+
+	_, retcode, errmsg, err := service.Login(context.Background(), AuthEdgeRequest{Email: "t@example.com", SMSCode: "1234", LoginType: 1}, true)
+	if err != nil {
+		t.Fatalf("v2 email code login: %v", err)
+	}
+	if retcode != 0 || errmsg != "登录成功" {
+		t.Fatalf("unexpected response %d %q", retcode, errmsg)
 	}
 }
 
@@ -343,6 +480,54 @@ func TestForgotStep2VerificationCodeBranches(t *testing.T) {
 	}
 }
 
+func TestForgotStep3ResetsPassword(t *testing.T) {
+	store := &fakeAuthEdgeStore{
+		byMobi:    map[string]interface{}{"uid": "9"},
+		keyCounts: map[string]int{"sms.86.13800138000.ok": 1},
+	}
+	service := NewAuthEdgeService(store)
+
+	retcode, errmsg, err := service.Forgot(context.Background(), AuthEdgeRequest{
+		Mobi:     "13800138000",
+		Step:     "step3",
+		SMSCode:  "ok",
+		Password: "newpass",
+	}, false)
+	if err != nil {
+		t.Fatalf("forgot step3: %v", err)
+	}
+	if retcode != 0 || errmsg != "密码已成功设置" {
+		t.Fatalf("unexpected step3 response %d %q", retcode, errmsg)
+	}
+	if store.resetUID != 9 || len(store.resetSalt) != 8 || len(store.resetHash) != 40 {
+		t.Fatalf("reset fields uid=%d salt=%q hash=%q", store.resetUID, store.resetSalt, store.resetHash)
+	}
+
+	store = &fakeAuthEdgeStore{
+		byEmail:   map[string]interface{}{"uid": "10"},
+		keyCounts: map[string]int{"email.ok@example.com.emailok": 1},
+	}
+	service = NewAuthEdgeService(store)
+	retcode, errmsg, err = service.Forgot(context.Background(), AuthEdgeRequest{
+		Email:     "ok@example.com",
+		Step:      "step3",
+		EmailCode: "emailok",
+		Password:  "newpass",
+	}, true)
+	if err != nil {
+		t.Fatalf("v2 forgot email step3: %v", err)
+	}
+	if retcode != 0 || errmsg != "密码已成功设置" || store.resetUID != 10 {
+		t.Fatalf("unexpected email step3 response %d %q uid=%d", retcode, errmsg, store.resetUID)
+	}
+}
+
+func TestPHPPasswordMatchesLegacyHelper(t *testing.T) {
+	if got := phpPassword("newpass123"); got != "f98fb8c039f078b778e57601b3c28ae5e8e5a370" {
+		t.Fatalf("phpPassword = %q", got)
+	}
+}
+
 func TestDeleteAndChangePhoneRequireLogin(t *testing.T) {
 	service := NewAuthEdgeService(fakeAuthEdgeStore{})
 
@@ -411,11 +596,12 @@ func TestDeleteVerificationCodeBranches(t *testing.T) {
 		t.Fatalf("unexpected sms code response %d %q", retcode, errmsg)
 	}
 
-	service = NewAuthEdgeService(fakeAuthEdgeStore{
+	store := &fakeAuthEdgeStore{
 		user:      map[string]interface{}{"uid": "7"},
 		byID:      map[string]interface{}{"uid": "7", "mobi": "~mobi", "email": "person@example.com"},
 		keyCounts: map[string]int{"email.person@example.com.ok": 1},
-	})
+	}
+	service = NewAuthEdgeService(store)
 	retcode, errmsg, err = service.Delete(context.Background(), AuthEdgeRequest{
 		Token:     "250f790ba71ec2b9d3855f424db2259e",
 		EmailCode: "bad",
@@ -434,8 +620,11 @@ func TestDeleteVerificationCodeBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete valid email code: %v", err)
 	}
-	if retcode != -1 || errmsg != "账号注销成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "注销后保持180天不登录，系统才会删除您的数据" {
 		t.Fatalf("unexpected valid email code response %d %q", retcode, errmsg)
+	}
+	if store.deleteUID != 7 || store.deleteSID != "" {
+		t.Fatalf("delete request uid=%d sid=%q", store.deleteUID, store.deleteSID)
 	}
 }
 
@@ -484,10 +673,12 @@ func TestChangePhoneStep2VerificationCodeBranch(t *testing.T) {
 		t.Fatalf("unexpected step2 sms code response %d %q", retcode, errmsg)
 	}
 
-	service = NewAuthEdgeService(fakeAuthEdgeStore{
+	phoneStore := &fakeAuthEdgeStore{
 		user:      map[string]interface{}{"uid": "7", "mobi": "86.13800138000"},
 		keyCounts: map[string]int{"sms.86.13900139000.ok": 1},
-	})
+		phoneOK:   true,
+	}
+	service = NewAuthEdgeService(phoneStore)
 	retcode, errmsg, err = service.ChangePhone(context.Background(), AuthEdgeRequest{
 		Token:   "250f790ba71ec2b9d3855f424db2259e",
 		Mobi:    "13900139000",
@@ -497,7 +688,10 @@ func TestChangePhoneStep2VerificationCodeBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("step2 valid sms code: %v", err)
 	}
-	if retcode != -1 || errmsg != "手机号更换成功分支暂未迁移" {
+	if retcode != 0 || errmsg != "手机号更换成功" {
 		t.Fatalf("unexpected step2 valid sms code response %d %q", retcode, errmsg)
+	}
+	if phoneStore.phoneUID != 7 || phoneStore.phoneMobi != "86.13900139000" {
+		t.Fatalf("change phone input uid=%d mobi=%q", phoneStore.phoneUID, phoneStore.phoneMobi)
 	}
 }

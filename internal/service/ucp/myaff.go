@@ -83,6 +83,7 @@ type UserStore interface {
 	CountWithdrawsSince(ctx context.Context, uid int, since int64) (int, error)
 	Withdraws(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	SumWithdrawAmount(ctx context.Context, uid int) (int, error)
+	CreateWithdraw(ctx context.Context, input domain.WithdrawCreateInput) (int64, error)
 	CoinLogs(ctx context.Context, uid int, page int, pageSize int) ([]map[string]interface{}, error)
 	CountCoinLogsByTypes(ctx context.Context, uid int, coinTypes []int) (int, error)
 	CoinLogsByTypes(ctx context.Context, uid int, coinTypes []int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
@@ -95,11 +96,15 @@ type UserStore interface {
 	SetKeylimit(ctx context.Context, key string, keynum int, keydata string, now int64) error
 	PackageRows(ctx context.Context, kind string) ([]map[string]interface{}, error)
 	PackageByID(ctx context.Context, kind string, pkgID int) (map[string]interface{}, error)
+	CreatePackagePayment(ctx context.Context, input domain.PackagePaymentInput) (int64, error)
 	PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error)
 	CountVODOrders(ctx context.Context, uid int, status *int) (int, error)
 	VODOrders(ctx context.Context, uid int, status *int, page int, pageSize int, orderBy string) ([]map[string]interface{}, error)
 	VODOrderByID(ctx context.Context, orderID int) (map[string]interface{}, error)
 	LatestVODIssue(ctx context.Context) (map[string]interface{}, error)
+	EnsureVODIssue(ctx context.Context, today int64, periodDays int) (map[string]interface{}, error)
+	CreateVODOrder(ctx context.Context, input domain.VODOrderCreateInput) error
+	SupportVODOrder(ctx context.Context, input domain.VODOrderSupportInput) error
 	CountVODOrdersByCreateTime(ctx context.Context, start int64, end int64) (int, error)
 	VODOrdersByCreateTime(ctx context.Context, start int64, end int64, page int, pageSize int) ([]map[string]interface{}, error)
 	SumVODOrderCoins(ctx context.Context, uid int, status int) (int, error)
@@ -124,6 +129,8 @@ type Service struct {
 	resourceBaseURL string
 	now             func() time.Time
 	qrRenderer      QRCodeRenderer
+	emailSender     EmailSender
+	notifier        TelegramNotifier
 }
 
 func NewService(store UserStore, resourceBaseURL string) *Service {
@@ -132,12 +139,28 @@ func NewService(store UserStore, resourceBaseURL string) *Service {
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		now:             time.Now,
 		qrRenderer:      goQRCodeRenderer{},
+		emailSender:     smtpEmailSender{},
+		notifier:        httpTelegramNotifier{},
 	}
 }
 
 func (s *Service) WithQRCodeRenderer(renderer QRCodeRenderer) *Service {
 	if renderer != nil {
 		s.qrRenderer = renderer
+	}
+	return s
+}
+
+func (s *Service) WithEmailSender(sender EmailSender) *Service {
+	if sender != nil {
+		s.emailSender = sender
+	}
+	return s
+}
+
+func (s *Service) WithTelegramNotifier(notifier TelegramNotifier) *Service {
+	if notifier != nil {
+		s.notifier = notifier
 	}
 	return s
 }

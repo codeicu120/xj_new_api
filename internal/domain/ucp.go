@@ -50,6 +50,54 @@ type FeedbackCreateInput struct {
 	ShortIDs   string
 }
 
+type PackagePaymentInput struct {
+	PayID     int64
+	PayType   int
+	Payway    string
+	Paycode   string
+	NoCheck   int
+	ItemName  string
+	Amount    int
+	UID       int
+	PID       string
+	CreatedAt int64
+	Params    map[string]interface{}
+}
+
+type VODOrderCreateInput struct {
+	UID       int
+	Serial    string
+	Name      string
+	Coins     int
+	Issue     int64
+	Period    int
+	Support   int
+	CreatedAt int64
+}
+
+type VODOrderSupportInput struct {
+	UID       int
+	OrderID   int
+	OrderUID  int
+	Coins     int
+	CreatedAt int64
+}
+
+type WithdrawCreateInput struct {
+	UID            int
+	Username       string
+	WDType         int
+	WithdrawAmount int
+	CoinNum        int
+	ConvertAmount  int
+	CardName       string
+	CardNum        string
+	BankName       string
+	CardType       int
+	GameRate       float64
+	CreatedAt      int64
+}
+
 type UCPMsgListingData struct {
 	Rows     []map[string]interface{} `json:"rows"`
 	PageInfo map[string]interface{}   `json:"pageinfo"`

@@ -74,5 +74,5 @@ xxx_api_auth=3235306637393062613731656332623964333835356634323464623232353965
 | 接口 | 原因 |
 | --- | --- |
 | `/ucp/task/:action?`（除已列 action） | PHP `ucp/task.php` 仅定义 `index/sign/sharepic/share/qrcode/qrlink/qrcodeSave/invitecodeInput/adviewClick/invite`，均已覆盖；后续只保留二维码视觉合成兼容增强。 |
-| `/ucp/vippkg/*`、`/ucp/coinpkg/*`、`/ucp/beanpkg/*` 其他 action、`/ucp/payment/*` 其他 action、`/ucp/withdraw/create`、`/payment/reqpay` 和 `/respond/*` | 会员、金币、金豆、支付和提现写入相关，涉及资产和交易；套餐 `index`、`/ucp/payment/listing`、`/ucp/payment/safepaylog`、`/ucp/withdraw/index`、`/ucp/withdraw/listing`、`/ucp/coinlog/index`、`/ucp/coinlog/bonuslog`、`/ucp/coinlog/invitelog`、`/ucp/coinlog/exchange`、`/payment/payways` 和 `/payment/chpayway` 已迁移。 |
+| `/ucp/payment/*` 其他 action、`/payment/reqpay` 和 `/respond/*` | 支付和回调写入相关，涉及 provider 配置、验签、入账幂等和外部网关；UCP 套餐下单、提现创建、金币兑换、套餐金币兑换和支付/提现只读接口已迁移。 |
 | `/game/wali/topup`、`/game/wali/withdraw`、`/game/lottery/topup`、`/game/lottery/withdraw` | 游戏资产或外部转账调用；`/game/wali/enter`、`/game/lottery/enter` 已接管外部进入游戏成功/失败分支，`/game/lottery/balance` 已接管外部只读余额查询，仍需灰度观察平台配置。 |

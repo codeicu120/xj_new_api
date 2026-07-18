@@ -41,13 +41,13 @@ func (h *UserHandler) Register(c *gin.Context) {
 }
 
 func (h *UserHandler) Login(c *gin.Context) {
-	retcode, errmsg, err := h.authEdgeService.Login(c.Request.Context(), authEdgeRequest(c), false)
-	respondUserEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.authEdgeService.Login(c.Request.Context(), authEdgeRequest(c), false)
+	respondUserEdgeData(c, data, retcode, errmsg, err)
 }
 
 func (h *UserHandler) LoginV2(c *gin.Context) {
-	retcode, errmsg, err := h.authEdgeService.Login(c.Request.Context(), authEdgeRequest(c), true)
-	respondUserEdge(c, retcode, errmsg, err)
+	data, retcode, errmsg, err := h.authEdgeService.Login(c.Request.Context(), authEdgeRequest(c), true)
+	respondUserEdgeData(c, data, retcode, errmsg, err)
 }
 
 func (h *UserHandler) Forgot(c *gin.Context) {
@@ -92,9 +92,17 @@ func authEdgeRequest(c *gin.Context) userService.AuthEdgeRequest {
 }
 
 func respondUserEdge(c *gin.Context, retcode int, errmsg string, err error) {
+	respondUserEdgeData(c, nil, retcode, errmsg, err)
+}
+
+func respondUserEdgeData(c *gin.Context, data interface{}, retcode int, errmsg string, err error) {
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
+		return
+	}
+	if retcode == 0 && data != nil {
+		c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg, Data: data})
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.Response{RetCode: retcode, ErrMsg: errmsg})

@@ -204,13 +204,16 @@ func (s *Service) WithdrawCreateEdge(ctx context.Context, token string, cardID i
 		if withdrawAmount > atoi(account["game_available_balance"]) {
 			return -1, "余额不足", nil
 		}
-	} else if withdrawAmount > atoi(account["available_balance"]) {
+	}
+	coinNum := 0
+	convertAmount := 0
+	if wdType != 1 && withdrawAmount > atoi(account["available_balance"]) {
 		exrate := atoi(setting["exrate"])
 		if exrate == 0 {
 			return -1, "系统已关闭兑换功能", nil
 		}
-		amount := withdrawAmount - atoi(account["available_balance"])
-		coinNum := int(math.Ceil((float64(amount) / 100) * float64(exrate)))
+		convertAmount = withdrawAmount - atoi(account["available_balance"])
+		coinNum = int(math.Ceil((float64(convertAmount) / 100) * float64(exrate)))
 		if coinNum == 0 {
 			return -1, "兑换金币数量为0", nil
 		}
@@ -218,7 +221,31 @@ func (s *Service) WithdrawCreateEdge(ctx context.Context, token string, cardID i
 			return -1, "兑换数量100万以上请分次兑换", nil
 		}
 	}
-	return -1, "提现申请成功分支暂未迁移", nil
+	cardType := atoi(cardrow["type"])
+	if cardType == 0 {
+		cardType = 1
+	}
+	gameRate, _ := strconv.ParseFloat(str(gameSetting["withdrawrate"]), 64)
+	wdid, err := s.store.CreateWithdraw(ctx, domain.WithdrawCreateInput{
+		UID:            uid,
+		Username:       str(user["username"]),
+		WDType:         wdType,
+		WithdrawAmount: withdrawAmount,
+		CoinNum:        coinNum,
+		ConvertAmount:  convertAmount,
+		CardName:       str(cardrow["name"]),
+		CardNum:        str(cardrow["cardnum"]),
+		BankName:       str(cardrow["bankname"]),
+		CardType:       cardType,
+		GameRate:       gameRate,
+		CreatedAt:      s.now().Unix(),
+	})
+	if err != nil || wdid == 0 {
+		return -1, "操作失败，请重试", err
+	}
+	text := fmt.Sprintf("提现通知(XJ)\n用户：%s\n金额：%s\n姓名：%s\n卡号：%s\n请及时处理", str(user["username"]), formatRMB(withdrawAmount), str(cardrow["name"]), str(cardrow["cardnum"]))
+	_ = s.notifier.Send(ctx, str(setting["bot_api_key"]), str(setting["notify_chat_id"]), text)
+	return 0, "提现申请已提交", nil
 }
 
 func processWithdrawRows(rows []map[string]interface{}) []map[string]interface{} {

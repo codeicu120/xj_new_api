@@ -93,6 +93,19 @@ func (r *Repository) ByUIDImage(ctx context.Context, uid int, image string) (map
 	return result[0], nil
 }
 
+func (r *Repository) MarkDeleted(ctx context.Context, id int, updateTime int64) error {
+	if r.db == nil || id <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE ai_undress SET status=5, update_time=? WHERE id=?", updateTime, id); err != nil {
+		if isMissingTable(err) {
+			return nil
+		}
+		return fmt.Errorf("mark ai undress row deleted: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) SettingByUUID(ctx context.Context, uuid string) (string, error) {
 	if r.db == nil || uuid == "" {
 		return "", nil

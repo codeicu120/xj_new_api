@@ -466,21 +466,67 @@ func dailyInviteURLGroups(raw string) [][]string {
 
 func parseTaskPHPSerializedMap(value string) map[string]interface{} {
 	out := map[string]interface{}{}
-	re := regexp.MustCompile(`s:\d+:"([^"]+)";(?:s:\d+:"([^"]*)"|i:(-?\d+)|d:([0-9.]+)|N;)`)
-	for _, match := range re.FindAllStringSubmatch(value, -1) {
-		key := match[1]
+	for i := 0; i < len(value); {
+		key, next, ok := parsePHPSerializedString(value, i)
+		if !ok {
+			i++
+			continue
+		}
+		i = next
 		switch {
-		case match[2] != "":
-			out[key] = match[2]
-		case match[3] != "":
-			out[key] = atoi(match[3])
-		case match[4] != "":
-			out[key] = match[4]
-		default:
+		case strings.HasPrefix(value[i:], "s:"):
+			val, n, ok := parsePHPSerializedString(value, i)
+			if !ok {
+				continue
+			}
+			out[key] = val
+			i = n
+		case strings.HasPrefix(value[i:], "i:"):
+			end := strings.IndexByte(value[i:], ';')
+			if end < 0 {
+				continue
+			}
+			out[key] = atoi(value[i+2 : i+end])
+			i += end + 1
+		case strings.HasPrefix(value[i:], "d:"):
+			end := strings.IndexByte(value[i:], ';')
+			if end < 0 {
+				continue
+			}
+			out[key] = value[i+2 : i+end]
+			i += end + 1
+		case strings.HasPrefix(value[i:], "N;"):
 			out[key] = nil
+			i += 2
 		}
 	}
 	return out
+}
+
+func parsePHPSerializedString(value string, start int) (string, int, bool) {
+	if start < 0 || start >= len(value) || !strings.HasPrefix(value[start:], "s:") {
+		return "", start, false
+	}
+	lengthStart := start + 2
+	lengthEnd := strings.IndexByte(value[lengthStart:], ':')
+	if lengthEnd < 0 {
+		return "", start, false
+	}
+	lengthEnd += lengthStart
+	size := atoi(value[lengthStart:lengthEnd])
+	dataStart := lengthEnd + 2
+	if lengthEnd+1 >= len(value) || value[lengthEnd+1] != '"' || dataStart+size > len(value) {
+		return "", start, false
+	}
+	dataEnd := dataStart + size
+	if dataEnd+1 >= len(value) || value[dataEnd] != '"' || value[dataEnd+1] != ';' {
+		end := strings.Index(value[dataStart:], `";`)
+		if end < 0 {
+			return "", start, false
+		}
+		dataEnd = dataStart + end
+	}
+	return value[dataStart:dataEnd], dataEnd + 2, true
 }
 
 func taskBase36(value int) string {

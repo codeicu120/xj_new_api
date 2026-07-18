@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"xj_comp/internal/domain"
 )
 
 type fakeStore struct {
@@ -24,6 +26,9 @@ type fakeStore struct {
 	user           map[string]interface{}
 	bot            map[string]interface{}
 	quota          map[string]interface{}
+	betResult      domain.OneGoBetResult
+	betRet         int
+	betMsg         string
 	err            error
 }
 
@@ -97,6 +102,13 @@ func (s fakeStore) BotByID(context.Context, int) (map[string]interface{}, error)
 
 func (s fakeStore) Quota(context.Context, int) (map[string]interface{}, error) {
 	return s.quota, s.err
+}
+
+func (s fakeStore) Bet(context.Context, domain.OneGoBetInput) (domain.OneGoBetResult, int, string, error) {
+	if s.betRet != 0 || s.betMsg != "" || len(s.betResult.BetNo) > 0 || len(s.betResult.TotalBetNo) > 0 {
+		return s.betResult, s.betRet, s.betMsg, s.err
+	}
+	return domain.OneGoBetResult{BetNo: []int{0}, TotalBetNo: []int{0}}, 0, "", s.err
 }
 
 func TestRulesReturnsData(t *testing.T) {
@@ -309,7 +321,7 @@ func TestHistoryRequiresLogin(t *testing.T) {
 func TestBetEdgePrechecks(t *testing.T) {
 	service := NewService(fakeStore{})
 
-	retcode, errmsg, err := service.BetEdge(context.Background(), "", "", 0, 0)
+	_, retcode, errmsg, err := service.BetEdge(context.Background(), "", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +330,7 @@ func TestBetEdgePrechecks(t *testing.T) {
 	}
 
 	service = NewService(fakeStore{}, fakeAuth{user: map[string]interface{}{"uid": "5"}})
-	retcode, errmsg, err = service.BetEdge(context.Background(), "token", "", 0, 0)
+	_, retcode, errmsg, err = service.BetEdge(context.Background(), "token", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,18 +351,41 @@ func TestBetEdgePrechecks(t *testing.T) {
 		{name: "ended", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "999"}}, retcode: -1, errmsg: "活动已结束"},
 		{name: "unknownUser", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}}, retcode: -1, errmsg: "未知用户"},
 		{name: "balance", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}, quota: map[string]interface{}{"goldcoin": "9"}}, retcode: -1, errmsg: "余额不足"},
-		{name: "pending", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}, quota: map[string]interface{}{"goldcoin": "20"}}, retcode: -1, errmsg: "一元购投注成功分支暂未迁移"},
+		{name: "success", store: fakeStore{room: map[string]interface{}{"id": "1", "coins": "10"}, record: map[string]interface{}{"start_time": "1", "end_time": "2000"}, quota: map[string]interface{}{"goldcoin": "20"}}, retcode: 0, errmsg: ""},
 	}
 	for _, tt := range tests {
 		service = NewService(tt.store, fakeAuth{user: map[string]interface{}{"uid": "5"}})
 		service.now = func() time.Time { return now }
-		retcode, errmsg, err = service.BetEdge(context.Background(), "token", "2026071501", 1, 1)
+		_, retcode, errmsg, err = service.BetEdge(context.Background(), "token", "2026071501", 1, 1)
 		if err != nil {
 			t.Fatalf("%s: %v", tt.name, err)
 		}
 		if retcode != tt.retcode || errmsg != tt.errmsg {
 			t.Fatalf("%s retcode=%d errmsg=%q", tt.name, retcode, errmsg)
 		}
+	}
+}
+
+func TestBetEdgeReturnsBetData(t *testing.T) {
+	store := fakeStore{
+		room:      map[string]interface{}{"id": "1", "coins": "10"},
+		record:    map[string]interface{}{"start_time": "1", "end_time": "2000"},
+		quota:     map[string]interface{}{"goldcoin": "20"},
+		betResult: domain.OneGoBetResult{BetNo: []int{3}, TotalBetNo: []int{1, 2, 3}},
+	}
+	service := NewService(store, fakeAuth{user: map[string]interface{}{"uid": "5"}})
+	service.now = func() time.Time { return time.Unix(1000, 0) }
+
+	data, retcode, errmsg, err := service.BetEdge(context.Background(), "token", "2026071501", 1, 1)
+	if err != nil {
+		t.Fatalf("bet: %v", err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	row, ok := data["data"].(domain.OneGoBetResult)
+	if !ok || len(row.BetNo) != 1 || row.BetNo[0] != 3 || len(row.TotalBetNo) != 3 {
+		t.Fatalf("data=%#v", data)
 	}
 }
 

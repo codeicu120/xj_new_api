@@ -1868,3 +1868,75 @@
 - DB: `extype=1` 金币转余额时，在事务内扣 `users_quota.goldcoin`，写 `user_coinlogs(cointype=104, remark=兑换支出)`，再增加 `users_account.balance` 并写 `user_balancelogs(paytype=9, trxin=amount, remark=兑换收入)`；`extype=2` 余额转金币时先扣 `users_account.balance` 并写 `user_balancelogs(paytype=10, trxout=amount, remark=兑换支出)`，再增加 `users_quota.goldcoin` 并写 `user_coinlogs(cointype=8, remark=兑换收入)`。
 - 文档修正：`docs/ucp-migration-progress.md` 从 62/8 更新为 63/7；`/ucp/coinlog` 可达 action 均已覆盖。
 - 测试：`go test ./internal/service/ucp ./internal/server ./internal/repository/ucp` 通过。
+
+### UCP 剩余 7 个 action 收口迁移
+
+- 已迁移：`/ucp/user/sendemail`、`/ucp/vippkg/placeorder`、`/ucp/coinpkg/placeorder`、`/ucp/beanpkg/placeorder`、`/ucp/vodorder/create`、`/ucp/vodorder/support`、`/ucp/withdraw/create` 成功分支。
+- PHP: `src/c/api/ucp/user.php::sendemail`、`vippkg.php::placeorder`、`coinpkg.php::placeorder`、`beanpkg.php::placeorder`、`vodorder.php::create/support`、`withdraw.php::create`。
+- Go: `internal/service/ucp` 新增 SMTP `EmailSender`、Telegram `Notifier`、套餐下单、求片/助力和提现事务；`internal/repository/ucp` 新增 `CreatePackagePayment`、`CreateVODOrder`、`SupportVODOrder`、`CreateWithdraw`。
+- DB/外部依赖：`sendemail` 成功发送后写 `keylimits`；套餐下单写 `trade_payments` 并保留 `paytype/payway/paycode/pid/params`；求片/助力事务扣 `users_quota.goldcoin`、写 `user_coinlogs` 并写 `user_vod_order/user_vod_support`；提现事务支持金币转余额、写提现单、冻结普通/游戏余额、写冻结日志并扣减免费提现额度，Telegram 通知通过可替换 notifier 隔离。
+- 文档修正：`docs/ucp-migration-progress.md` 从 63/7 更新为 70/0；`MIGRATION_ENDPOINTS.md` 的 UCP 个人中心未重构项已清零。
+- 测试：`go test ./internal/service/ucp ./internal/repository/ucp ./internal/server` 通过。
+
+### Invite 绑定成功与 Forgot 改密成功分支
+
+- 已迁移：`/invite/bind` 成功分支、`/forgot` 和 `/v2/forgot` step3 改密成功分支。
+- PHP: `src/c/api/invite.php::bind`、`src/c/api/user.php::forgot`、`src/c/apiv2/user.php::forgot`。
+- Go: `internal/handler.InviteHandler.Bind`、`internal/service/invite.Service.Bind`、`internal/repository/invite.Repository.BindInvite`；`internal/service/user.AuthEdgeService.Forgot`、`internal/repository/user.Repository.ResetPassword`。
+- DB/事务：`invite/bind` 成功事务写 `user_recommend`，更新邀请人 `recommend_total/gid`，按 `promotion.bonus invite1/2/3` 赠送邀请人 VIP 天数并写 `user_coinlogs(cointype=201)`，按 `reg1/2/3` 锁定 `users_quota` 发放三级邀请金币并写 `user_coinlogs(cointype=32)`，最后给当前用户 3 天 VIP。`getDelTag(mobi)` 已抽成 `DeletedUserTag`，当前 DB repository 默认 false，后续可接 Redis 实现。
+- 兼容规则：`invite/bind` 保留未登录、已绑定、缺邀请码、无效邀请码和无法绑定自己错误文案；成功返回 `retcode=0 errmsg="" data.data=原始 invitecode`。`forgot` step3 复用 step2 验证码校验，密码长度 6-16，使用 PHP `password()` 兼容 40 位 hash 更新 `users.password/salt`，返回 `密码已成功设置`。
+- Subagent：`Dirac` 只读核对 invite 成功路径，确认必须覆盖 `user_recommend/users/users_quota/user_coinlogs`、`VIP_GID=6`、`COINTYPE_INVITE=32`、`COINTYPE_INIV_DAYS=201` 和 `myGroups` 分组算法。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 移除 `/forgot`、`/v2/forgot` 和 `/invite/:action?` 未重构项；`docs/public-endpoints.md` 同步更新剩余成功路径说明。
+- 测试：`go test ./internal/service/user ./internal/repository/user ./internal/service/invite ./internal/repository/invite ./internal/handler ./internal/server` 通过；新增 PHP-Go 密码 hash 样例钉扎 `password("newpass123")`。
+
+### Delete 注销申请与 ChangePhone 换绑成功分支
+
+- 已迁移：`/delete` 成功注销申请分支、`/changePhone` step2 换绑成功分支。
+- PHP: `src/c/api/user2.php::delAccount/changePhone`。
+- Go: `internal/service/user.AuthEdgeService.Delete/ChangePhone`、`internal/repository/user.Repository.RequestAccountDeletion/ChangePhone`。
+- DB/Redis: `/delete` 在验证码通过后写 Redis hash `delAccountList[uid]=now`，随后删除当前 `sessions.sid`；不物理删除用户，保留 PHP 注释掉的删除逻辑。`/changePhone` 在事务内 `SELECT users WHERE mobi=? FOR UPDATE`，若手机号仍不存在则更新当前用户 `users.mobi`。
+- 兼容规则：`/delete` 成功返回 `注销后保持180天不登录，系统才会删除您的数据`；`/changePhone` 成功返回 `手机号更换成功`，事务内发现手机号被抢占返回 `手机号已经存在`，更新 0 行按 PHP 返回 OK 壳和 `手机号更换失败,请重试`。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 移除 `/delete`、`/changePhone` 未重构项；`docs/public-endpoints.md` 同步更新账号剩余成功路径，仅保留注册/登录成功分支。
+- 测试：`go test ./internal/service/user ./internal/repository/user ./internal/handler ./internal/server` 通过。
+
+### MiniVOD 投币成功分支
+
+- 已迁移：`/minivod/throwcoin/:vodid` POST 投币成功分支。
+- PHP: `src/c/api/minivod.php::throwcoin`。
+- Go: `internal/handler.MiniVODHandler.ThrowCoin`、`internal/service/minivod.Service.ThrowCoinEdge`、`internal/repository/minivod.Repository.ThrowCoin`。
+- DB: 成功分支在事务内锁定作者和投币用户 `users_quota`；投币用户写 `user_coinlogs(cointype=106, coinnum=-coinnum, remark=vodid:author_uid)` 并扣金币，作者写 `user_coinlogs(cointype=21, coinnum=coinnum, remark=vodid:user_uid)` 并加金币；最后写 `minivod_coinlogs(uid/vodid/coinnum/addtime)`。
+- 兼容规则：保留 PHP 的 `coinnum<=0` 返回错误壳但文案 `已投币成功`；成功 POST 返回 `retcode=0 errmsg=已投币成功`，不带业务 `data`。
+- Subagent：`Newton` 只读核对 PHP 成功路径，确认常量 `COINTYPE_MINIVOD_THROWCOIN_DEC=106`、`COINTYPE_MINIVOD_THROWCOIN_INC=21`、两条金币日志和 `minivod_coinlogs` 统计写入。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 移除 `/minivod/throwcoin/:vodid` 未重构项；`docs/public-endpoints.md` 同步更新小视频剩余范围。
+- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/handler ./internal/server` 通过。
+
+### OneGo 投注成功分支
+
+- 已迁移：`/onego/bet` 投注成功分支。
+- PHP: `src/c/api/onego.php::bet`。
+- Go: `internal/handler.OneGoHandler.Bet`、`internal/service/onego.Service.BetEdge`、`internal/repository/onego.Repository.Bet`。
+- DB: 成功分支锁定 `users_quota` 扣 `quantity * room.coins`，写 `user_coinlogs(cointype=112)`；锁定 `one_go_records(period, room_id)`，以旧 `total_bets` 生成投注号码，更新 `total_bets/total_coins`；写 `one_go_orders(uid/period/room_id/bet_coins/bet_no/bet_time)`，再读取当前用户该期订单汇总 `total_bet_no`。
+- 兼容规则：保留未登录、数量为 0、无效场次、无效期号、未开始、已结束、未知用户和余额不足文案；成功返回 `data.bet_no/total_bet_no`。Go 将 PHP 的分段提交改为单事务，避免扣金币成功但订单写入失败导致不一致。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 移除 `/onego/bet` 未重构项；`docs/public-endpoints.md` 同步更新 OneGo 剩余范围。
+- 测试：`go test ./internal/service/onego ./internal/repository/onego ./internal/handler ./internal/server` 通过。
+
+### AI 脱衣删除成功分支
+
+- 已迁移：`/aiundress/delete` 登录后存在记录的删除成功分支。
+- PHP: `src/c/api/aiundress.php::delete`。
+- Go: `internal/handler.AIUndressHandler.Delete`、`internal/service/aiundress.Service.DeleteEdge`、`internal/repository/aiundress.Repository.MarkDeleted`。
+- IO/DB: 成功分支按 PHP 使用 upload path 拼接 `image/output` 做本地文件尽力删除，然后更新 `ai_undress.status=5, update_time=now`；记录不存在仍返回空 OK。
+- 兼容规则：保留未登录 `retcode=-1 errmsg=请先登录`、记录不存在 `retcode=0 errmsg=""`；文件不存在不阻断，数据库标记失败返回 `AI 删除失败`。本切口不迁移 upload 本地保存/R2 上传、undress Redis 锁、第三方 AI 生成和金豆扣减。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 与 `docs/public-endpoints.md` 将 AI 未完成范围缩小到 `/aiundress/upload`、`/aiundress/undress` 成功写入/外部调用分支。
+- 测试：`go test ./internal/service/aiundress ./internal/repository/aiundress ./internal/server` 通过。
+
+### 登录成功最小闭环
+
+- 已迁移：`/login` 普通用户名/手机号密码登录成功分支、`/v2/login` 手机/邮箱/用户名密码登录成功分支，以及 v2 手机/邮箱验证码登录成功分支。
+- PHP: `src/c/api/user.php::login`、`src/c/apiv2/user.php::login`、`src/m/user/user.php::checkLogin/getLogin/procRow2`。
+- Go: `internal/handler.UserHandler.Login/LoginV2`、`internal/service/user.AuthEdgeService.Login`、`internal/repository/user.Repository.CreateLoginSession/Quota/Goldbean/ClearAccountDeletion`。
+- DB/Redis: 成功登录校验 `users.password/salt` 后事务 `REPLACE INTO sessions`，再删除同 uid 其他前台 session；读取 `users_quota.goldcoin` 和 `users_goldbean.gold_bean` 拼入返回用户；若 Redis store 支持 `HDel`，清理 `delAccountList[uid]` 注销标记。
+- 兼容规则：保留已登录、密码登录关闭、账号不存在、空密码、密码错误和锁定用户错误；成功返回 `retcode=0 errmsg=登录成功 data.user data.xxx_api_auth`。本切口暂缓 v1 短信登录中“用户不存在则自动注册”的大链路，也不迁移注册成功邀请/奖励/欢迎消息/渠道写入。
+- Subagent：`Locke` 只读核对注册/登录成功路径，确认登录成功的低风险最小闭环是 session、quota/goldbean 返回和 Redis 注销标记清理；完整注册成功路径涉及 `users/users_account/users_quota/user_coinlogs/keylimits/msgs/user_recommend/user_channel/sessions`，继续作为独立高风险切口。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 和 `docs/public-endpoints.md` 将登录剩余范围缩小到 v1 短信自动注册和注册成功大链路。
+- 测试：`go test ./internal/service/user ./internal/repository/user ./internal/handler ./internal/server` 通过。

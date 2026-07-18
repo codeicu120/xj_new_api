@@ -3,6 +3,7 @@ package ucp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,14 +59,20 @@ type fakeUserStore struct {
 	calldata            map[string]map[string]interface{}
 	packages            []map[string]interface{}
 	packageRow          map[string]interface{}
+	createdPackagePay   *domain.PackagePaymentInput
+	createPackagePayErr error
 	payments            []map[string]interface{}
 	vodPlayCount        *int
 	withdraws           []map[string]interface{}
 	withdrawTotal       int
 	withdrawSinceCount  *int
+	createdWithdraw     *domain.WithdrawCreateInput
 	exrate              *int
 	vodOrders           []map[string]interface{}
 	vodOrderRow         map[string]interface{}
+	vodIssue            map[string]interface{}
+	createdVODOrder     *domain.VODOrderCreateInput
+	supportedVODOrder   *domain.VODOrderSupportInput
 	vodSupports         []map[string]interface{}
 	latestVODIssue      map[string]interface{}
 	maxVODSupport       map[string]interface{}
@@ -82,6 +89,7 @@ type fakeUserStore struct {
 	keylimitTotalCounts map[string]int
 	keylimitData        map[string]string
 	setKeylimit         *map[string]interface{}
+	setKeylimits        *[]map[string]interface{}
 	botByID             map[string]interface{}
 	sentMessage         map[string]interface{}
 }
@@ -90,6 +98,36 @@ type fakeQRCodeRenderer struct {
 	content string
 	body    []byte
 	err     error
+}
+
+type fakeEmailSender struct {
+	conf    map[string]interface{}
+	to      string
+	subject string
+	body    string
+	err     error
+}
+
+func (s *fakeEmailSender) Send(_ context.Context, conf map[string]interface{}, to string, subject string, body string) error {
+	s.conf = conf
+	s.to = to
+	s.subject = subject
+	s.body = body
+	return s.err
+}
+
+type fakeTelegramNotifier struct {
+	botAPIKey string
+	chatID    string
+	text      string
+	err       error
+}
+
+func (n *fakeTelegramNotifier) Send(_ context.Context, botAPIKey string, chatID string, text string) error {
+	n.botAPIKey = botAPIKey
+	n.chatID = chatID
+	n.text = text
+	return n.err
 }
 
 func (r *fakeQRCodeRenderer) PNG(content string) ([]byte, error) {
@@ -839,6 +877,13 @@ func (s fakeUserStore) SumWithdrawAmount(context.Context, int) (int, error) {
 	return 12345, nil
 }
 
+func (s fakeUserStore) CreateWithdraw(_ context.Context, input domain.WithdrawCreateInput) (int64, error) {
+	if s.createdWithdraw != nil {
+		*s.createdWithdraw = input
+	}
+	return 9, nil
+}
+
 func (s fakeUserStore) SettingExRate(context.Context) (int, error) {
 	if s.exrate != nil {
 		return *s.exrate, nil
@@ -882,13 +927,17 @@ func (s fakeUserStore) KeylimitDataSince(_ context.Context, key string, _ int64)
 }
 
 func (s fakeUserStore) SetKeylimit(_ context.Context, key string, keynum int, keydata string, now int64) error {
+	row := map[string]interface{}{
+		"key":     key,
+		"keynum":  keynum,
+		"keydata": keydata,
+		"now":     now,
+	}
 	if s.setKeylimit != nil {
-		*s.setKeylimit = map[string]interface{}{
-			"key":     key,
-			"keynum":  keynum,
-			"keydata": keydata,
-			"now":     now,
-		}
+		*s.setKeylimit = row
+	}
+	if s.setKeylimits != nil {
+		*s.setKeylimits = append(*s.setKeylimits, row)
 	}
 	return nil
 }
@@ -899,6 +948,16 @@ func (s fakeUserStore) PackageRows(context.Context, string) ([]map[string]interf
 
 func (s fakeUserStore) PackageByID(context.Context, string, int) (map[string]interface{}, error) {
 	return s.packageRow, nil
+}
+
+func (s fakeUserStore) CreatePackagePayment(_ context.Context, input domain.PackagePaymentInput) (int64, error) {
+	if s.createdPackagePay != nil {
+		*s.createdPackagePay = input
+	}
+	if s.createPackagePayErr != nil {
+		return 0, s.createPackagePayErr
+	}
+	return input.PayID, nil
 }
 
 func (s fakeUserStore) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
@@ -922,6 +981,27 @@ func (s fakeUserStore) LatestVODIssue(context.Context) (map[string]interface{}, 
 		return s.latestVODIssue, nil
 	}
 	return map[string]interface{}{}, nil
+}
+
+func (s fakeUserStore) EnsureVODIssue(_ context.Context, today int64, _ int) (map[string]interface{}, error) {
+	if s.latestVODIssue != nil {
+		return s.latestVODIssue, nil
+	}
+	return map[string]interface{}{"issue": today}, nil
+}
+
+func (s fakeUserStore) CreateVODOrder(_ context.Context, input domain.VODOrderCreateInput) error {
+	if s.createdVODOrder != nil {
+		*s.createdVODOrder = input
+	}
+	return nil
+}
+
+func (s fakeUserStore) SupportVODOrder(_ context.Context, input domain.VODOrderSupportInput) error {
+	if s.supportedVODOrder != nil {
+		*s.supportedVODOrder = input
+	}
+	return nil
 }
 
 func (s fakeUserStore) CountVODOrdersByCreateTime(context.Context, int64, int64) (int, error) {
@@ -1634,13 +1714,48 @@ func TestUserEmailEdges(t *testing.T) {
 		})
 	}
 
-	verifiedEmail := map[string]interface{}{}
+	keylimits := []map[string]interface{}{}
+	sender := &fakeEmailSender{}
 	service := NewService(fakeUserStore{
+		user:         map[string]interface{}{"uid": "5"},
+		setKeylimits: &keylimits,
+		settings: map[string]map[string]interface{}{
+			"setting": {"value": `a:1:{s:8:"mailconf";s:104:"{"server":"smtp.example.com","port":465,"username":"u","password":"p","mail_from":"noreply@example.com"}";}`},
+		},
+	}, "https://res.example.test").WithEmailSender(sender)
+	now := time.Date(2026, 7, 16, 8, 9, 10, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	retcode, errmsg, err := service.UserSendEmailEdge(ctx, "token", "me@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "验证码已发送至您的邮箱，请1小时内验证并确认" {
+		t.Fatalf("sendemail success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if sender.to != "me@example.com" || sender.subject != "您的绑定邮箱信息" || !strings.Contains(sender.body, "验证码为：") {
+		t.Fatalf("sent email=%#v", sender)
+	}
+	if len(keylimits) != 2 {
+		t.Fatalf("keylimits=%#v", keylimits)
+	}
+	if keylimits[0]["key"] != "bindemail.me@example.com.20260716" || keylimits[0]["keynum"] != 1 || keylimits[0]["keydata"] != "" || keylimits[0]["now"] != now.Unix() {
+		t.Fatalf("sendemail rate key=%#v", keylimits[0])
+	}
+	emailKey, _ := keylimits[1]["key"].(string)
+	if !strings.HasPrefix(emailKey, "email.me@example.com.") || len(strings.TrimPrefix(emailKey, "email.me@example.com.")) != 6 || keylimits[1]["keydata"] != "5.me@example.com" {
+		t.Fatalf("sendemail code key=%#v body=%q", keylimits[1], sender.body)
+	}
+	if !strings.Contains(sender.body, strings.TrimPrefix(emailKey, "email.me@example.com.")) {
+		t.Fatalf("email body=%q key=%q", sender.body, emailKey)
+	}
+
+	verifiedEmail := map[string]interface{}{}
+	service = NewService(fakeUserStore{
 		user:          map[string]interface{}{"uid": "5"},
 		keylimitData:  map[string]string{"email.me@example.com.123456": "5.me@example.com"},
 		verifiedEmail: &verifiedEmail,
 	}, "https://res.example.test")
-	retcode, errmsg, err := service.UserVerifyEmailEdge(ctx, "token", "me@example.com", "123456")
+	retcode, errmsg, err = service.UserVerifyEmailEdge(ctx, "token", "me@example.com", "123456")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1743,6 +1858,27 @@ func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 		t.Fatalf("vodorder create balance retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	createdOrder := domain.VODOrderCreateInput{}
+	createNow := time.Date(2026, 7, 16, 10, 11, 12, 0, time.UTC)
+	service = NewService(fakeUserStore{
+		user:            map[string]interface{}{"uid": "5"},
+		quota:           map[string]interface{}{"goldcoin": "250"},
+		createdVODOrder: &createdOrder,
+		latestVODIssue:  map[string]interface{}{"issue": time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Unix()},
+		settings:        map[string]map[string]interface{}{"setting": {"value": `a:2:{s:16:"vod_order_period";i:3;s:22:"vod_order_support_time";i:1;}`}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return createNow }
+	retcode, errmsg, err = service.VODOrderCreateEdge(context.Background(), "token", " ABC-001 ", " 名称 ", 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("vodorder create success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if createdOrder.UID != 5 || createdOrder.Serial != "ABC-001" || createdOrder.Name != "名称" || createdOrder.Coins != 200 || createdOrder.Period != 3 || createdOrder.Support != 1 || createdOrder.CreatedAt != createNow.Unix() {
+		t.Fatalf("created vod order=%#v", createdOrder)
+	}
+
 	retcode, errmsg, err = service.VODOrderSupportEdge(context.Background(), "token", 0, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -1778,6 +1914,26 @@ func TestUCPWriteActionPrecheckEdges(t *testing.T) {
 	}
 	if retcode != -1 || errmsg != "金币不足:1" {
 		t.Fatalf("vodorder support balance retcode=%d errmsg=%q", retcode, errmsg)
+	}
+
+	supportedOrder := domain.VODOrderSupportInput{}
+	supportNow := time.Unix(1000, 0)
+	support = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5"},
+		quota:             map[string]interface{}{"goldcoin": "10"},
+		vodOrderRow:       map[string]interface{}{"id": "7", "uid": "8", "start_time": "900", "stop_time": "1300"},
+		supportedVODOrder: &supportedOrder,
+	}, "https://res.example.test")
+	support.now = func() time.Time { return supportNow }
+	retcode, errmsg, err = support.VODOrderSupportEdge(context.Background(), "token", 7, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "操作成功" {
+		t.Fatalf("vodorder support success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if supportedOrder.UID != 5 || supportedOrder.OrderID != 7 || supportedOrder.OrderUID != 8 || supportedOrder.Coins != 2 || supportedOrder.CreatedAt != supportNow.Unix() {
+		t.Fatalf("supported vod order=%#v", supportedOrder)
 	}
 }
 
@@ -2500,12 +2656,97 @@ func TestPackageOrderEdges(t *testing.T) {
 		t.Fatalf("coin placeorder paycode retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
-	retcode, errmsg, err = service.CoinPkgPlaceOrderEdge(context.Background(), "token", 3, "wappay3.1")
+	createdPay := domain.PackagePaymentInput{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5"},
+		packageRow:        map[string]interface{}{"pkgid": "3", "pkgname": "金币包", "showtype": "0", "rmbprice": "1200", "bonus_vip_days": "2", "bonus_coins": "3", "recommend": "1"},
+		createdPackagePay: &createdPay,
+		settings:          map[string]map[string]interface{}{"setting": {"value": `a:1:{s:6:"exrate";i:10;}`}},
+		payments: []map[string]interface{}{{
+			"disabled": "0",
+			"payways": []map[string]interface{}{{
+				"paycode":        "wappay3.1",
+				"trxamount_min":  "1000",
+				"trxamount_max":  "2000",
+				"allow_paytypes": map[int][]string{2: []string{"ALL"}},
+			}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Unix(1700001200, 123000000) }
+	data, retcode, errmsg, err = service.CoinPkgPlaceOrder(context.Background(), "token", 3, "wappay3.1", "A1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "支付下单成功分支暂未迁移" {
-		t.Fatalf("coin placeorder pending retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "" || data["payid"] == nil {
+		t.Fatalf("coin placeorder success retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if createdPay.PayType != 7 || createdPay.Payway != "wappay3" || createdPay.Paycode != "1" || createdPay.ItemName != "金币包" || createdPay.Amount != 1200 || createdPay.UID != 5 || createdPay.PID != "A1" {
+		t.Fatalf("coin payment=%#v", createdPay)
+	}
+	if createdPay.Params["pkgid"] != 3 || createdPay.Params["coinnum"] != 120 || createdPay.Params["bonus_vip_days"] != 2 || createdPay.Params["bonus_coins"] != 3 || createdPay.Params["recommend"] != 1 {
+		t.Fatalf("coin params=%#v", createdPay.Params)
+	}
+
+	createdPay = domain.PackagePaymentInput{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5", "regtime": "1"},
+		packageRow:        map[string]interface{}{"pkgid": "4", "pkgname": "VIP包", "showtype": "0", "rmbprice": "1200", "daylen": "30", "bonus_vip_days": "7", "recommend": "1"},
+		createdPackagePay: &createdPay,
+		settings:          map[string]map[string]interface{}{"setting": {"value": `a:8:{s:7:"ordercd";i:0;s:12:"unpaidorders";i:0;s:13:"successorders";i:0;s:7:"regdays";i:0;s:8:"viewvods";i:0;s:13:"orderdaylimit";i:0;s:18:"randomPaywayStatus";i:0;s:6:"exrate";i:10;}`}},
+		payments: []map[string]interface{}{{
+			"disabled": "0",
+			"payways": []map[string]interface{}{{
+				"paycode":        "wappay3.1",
+				"trxamount_min":  "1000",
+				"trxamount_max":  "2000",
+				"allow_paytypes": map[int][]string{1: []string{"ALL"}},
+			}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Unix(1700001300, 0) }
+	data, retcode, errmsg, err = service.VIPPkgPlaceOrder(context.Background(), "token", 4, "wappay3.1", "bad!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" || data["payid"] == nil {
+		t.Fatalf("vip placeorder success retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if createdPay.PayType != 8 || createdPay.Payway != "wappay3" || createdPay.Paycode != "1" || createdPay.ItemName != "VIP包" || createdPay.Amount != 1200 || createdPay.UID != 5 || createdPay.PID != "" {
+		t.Fatalf("vip payment=%#v", createdPay)
+	}
+	if createdPay.Params["pkgid"] != 4 || createdPay.Params["daylen"] != 30 || createdPay.Params["bonus_vip_days"] != 7 || createdPay.Params["recommend"] != 1 {
+		t.Fatalf("vip params=%#v", createdPay.Params)
+	}
+
+	createdPay = domain.PackagePaymentInput{}
+	service = NewService(fakeUserStore{
+		user:              map[string]interface{}{"uid": "5", "regtime": "1"},
+		packageRow:        map[string]interface{}{"pkgid": "5", "pkgname": "金豆包", "showtype": "0", "rmbprice": "1200", "bonus_vip_days": "1", "bonus_coins": "2", "recommend": "0"},
+		createdPackagePay: &createdPay,
+		settings:          map[string]map[string]interface{}{"setting": {"value": `a:8:{s:7:"ordercd";i:0;s:12:"unpaidorders";i:0;s:13:"successorders";i:0;s:7:"regdays";i:0;s:8:"viewvods";i:0;s:13:"orderdaylimit";i:0;s:18:"randomPaywayStatus";i:1;s:6:"exrate";i:10;}`}},
+		payments: []map[string]interface{}{{
+			"disabled": "0",
+			"payways": []map[string]interface{}{{
+				"paycode":        "foo.alipay",
+				"trxamount_min":  "1000",
+				"trxamount_max":  "2000",
+				"allow_paytypes": map[int][]string{3: []string{"ALL"}},
+			}},
+		}},
+	}, "https://res.example.test")
+	service.now = func() time.Time { return time.Unix(1700001400, 0) }
+	data, retcode, errmsg, err = service.BeanPkgPlaceOrder(context.Background(), "token", 5, "all.alipay", "B2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" || data["payid"] == nil {
+		t.Fatalf("bean placeorder success retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if createdPay.PayType != 21 || createdPay.Payway != "foo" || createdPay.Paycode != "alipay" || createdPay.ItemName != "金豆包" || createdPay.Amount != 1200 || createdPay.UID != 5 || createdPay.PID != "B2" {
+		t.Fatalf("bean payment=%#v", createdPay)
+	}
+	if createdPay.Params["pkgid"] != 5 || createdPay.Params["coinnum"] != 120 || createdPay.Params["bonus_vip_days"] != 1 || createdPay.Params["bonus_coins"] != 2 || createdPay.Params["recommend"] != 0 {
+		t.Fatalf("bean params=%#v", createdPay.Params)
 	}
 
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
@@ -3728,18 +3969,37 @@ func TestWithdrawCreateEdgePrechecks(t *testing.T) {
 		t.Fatalf("exchange too large retcode=%d errmsg=%q", retcode, errmsg)
 	}
 
+	createdWithdraw := domain.WithdrawCreateInput{}
+	notifier := &fakeTelegramNotifier{}
+	successSettings := map[string]map[string]interface{}{
+		"setting": {
+			"value": `a:9:{s:8:"topupmin";i:5000;s:14:"withdraw_limit";i:2;s:19:"alipay_withdraw_min";i:1000;s:19:"alipay_withdraw_max";i:200000;s:21:"bankcard_withdraw_min";i:3000;s:21:"bankcard_withdraw_max";i:500000;s:11:"bot_api_key";s:3:"bot";s:14:"notify_chat_id";s:4:"chat";}`,
+		},
+		"game.setting": {
+			"value": `a:2:{s:11:"withdrawmin";i:6000;s:12:"withdrawrate";d:0.05;}`,
+		},
+	}
 	service = NewService(fakeUserStore{
-		user:        map[string]interface{}{"uid": "5", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
-		settings:    baseSettings,
-		bankcardRow: map[string]interface{}{"cardid": "7", "type": "1"},
-		account:     map[string]interface{}{"uid": "5", "available_balance": "5000"},
-	}, "https://res.example.test")
+		user:            map[string]interface{}{"uid": "5", "username": "tester", "recommend_total": "2", "perms": `{"min.withdraw.recommend.num":"2"}`},
+		settings:        successSettings,
+		bankcardRow:     map[string]interface{}{"cardid": "7", "type": "1", "name": "张三", "cardnum": "abc", "bankname": "支付宝"},
+		account:         map[string]interface{}{"uid": "5", "available_balance": "5000"},
+		createdWithdraw: &createdWithdraw,
+	}, "https://res.example.test").WithTelegramNotifier(notifier)
+	withdrawNow := time.Unix(1700001700, 0)
+	service.now = func() time.Time { return withdrawNow }
 	retcode, errmsg, err = service.WithdrawCreateEdge(context.Background(), "token", 7, 0, 5000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retcode != -1 || errmsg != "提现申请成功分支暂未迁移" {
-		t.Fatalf("pending retcode=%d errmsg=%q", retcode, errmsg)
+	if retcode != 0 || errmsg != "提现申请已提交" {
+		t.Fatalf("withdraw success retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if createdWithdraw.UID != 5 || createdWithdraw.Username != "tester" || createdWithdraw.WDType != 0 || createdWithdraw.WithdrawAmount != 5000 || createdWithdraw.CardName != "张三" || createdWithdraw.CardNum != "abc" || createdWithdraw.BankName != "支付宝" || createdWithdraw.CardType != 1 || createdWithdraw.CreatedAt != withdrawNow.Unix() {
+		t.Fatalf("created withdraw=%#v", createdWithdraw)
+	}
+	if notifier.botAPIKey != "bot" || notifier.chatID != "chat" || !strings.Contains(notifier.text, "提现通知(XJ)") || !strings.Contains(notifier.text, "金额：50.00") {
+		t.Fatalf("notifier=%#v", notifier)
 	}
 }
 
