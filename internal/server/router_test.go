@@ -54,6 +54,42 @@ func TestReadyz(t *testing.T) {
 	}
 }
 
+func TestCORSPreflight(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/login", nil)
+	req.Header.Set("Origin", "https://app.example.test")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.test" {
+		t.Fatalf("unexpected allow origin %q", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("unexpected allow credentials %q", got)
+	}
+}
+
+func TestCORSHeadersOnNormalRequest(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("Origin", "https://app.example.test")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.test" {
+		t.Fatalf("unexpected allow origin %q", got)
+	}
+}
+
 func TestLegacyPlaceholder(t *testing.T) {
 	router := newTestRouter()
 

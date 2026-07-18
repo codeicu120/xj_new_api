@@ -95,6 +95,7 @@ func NewRouter(opts Options) *gin.Engine {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(corsMiddleware(cfg.CORSOrigins))
 	router.Use(requestLogger(logger))
 
 	db := openMySQL(cfg.MySQLDSN, logger)

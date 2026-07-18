@@ -19,6 +19,7 @@ const (
 	defaultIPDBPath        = "/Users/canavs/xjProj/XJBackend/api/data/ipipfree.ipdb"
 	defaultMySQLDSN        = "xj_app:xj_app_123456@tcp(127.0.0.1:3306)/xj_comp?charset=utf8mb4&parseTime=true&loc=Local"
 	defaultRedisAddr       = ""
+	defaultCORSOrigins     = "*"
 	defaultGameResourceURL = "https://image.xjdev.one"
 	defaultUploadPath      = "/Users/canavs/xjProj/XJBackend/api/res"
 )
@@ -37,6 +38,7 @@ type Config struct {
 	RedisAddr        string
 	RedisPassword    string
 	RedisDB          int
+	CORSOrigins      []string
 	GameResourceURL  string
 	VIPDiscount      int
 	UploadPath       string
@@ -75,6 +77,7 @@ func FromEnv() Config {
 		RedisAddr:        envString("REDIS_ADDR", defaultRedisAddr),
 		RedisPassword:    envString("REDIS_PASSWORD", ""),
 		RedisDB:          envInt("REDIS_DB", 0),
+		CORSOrigins:      envCSV("CORS_ORIGINS", defaultCORSOrigins),
 		GameResourceURL:  envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
 		VIPDiscount:      envInt("VIP_DISCOUNT", 50),
 		UploadPath:       envString("UPLOAD_PATH", defaultUploadPath),
@@ -94,6 +97,19 @@ func envString(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envCSV(key string, fallback string) []string {
+	raw := envString(key, fallback)
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {
