@@ -19,6 +19,7 @@
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | 本轮完成 | 验证码发送入口；手机号/邮箱/未登录错误分支 live 对比通过，成功发送由 sender/captcha/limiter fake 覆盖，默认不直连真实平台。 |
 | `/captcha/req` | `c.api.captcha->req` | 本轮完成 | `picurl` secret 动态生成，对比稳定结构、前缀和 `smscaptcha`。 |
 | `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | 本轮完成 | 图片验证码输出；无效 secret 404 JSON 对比一致，有效 PHP/Go secret 均返回 `image/png`、100x34 PNG。 |
+| `/captcha/verify` | `c.api.captcha->verify` | 本轮完成 | v1 图形验证码校验入口；错误分支返回 `retcode=-1 errmsg=验证失败`，避免前端调用 `/captcha/verify` 404。 |
 | `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | 本轮完成 | 附件空入口和系统头像更新；空响应、未登录、登录非法参数对比通过，成功更新由 service fake 覆盖。 |
 | `/:size/:uri` | `c.api.pic->index` | 本轮完成 | 图片裁剪/缩略/原图输出入口；不存在和非法文件 404 对比通过，图片生成由 service 测试覆盖。 |
 | `/test` | `c.api.test->test` | 本轮完成 | 动态 PNG 二进制输出，按 HTTP status、`image/png` 和 100x34 PNG 形态对比。 |

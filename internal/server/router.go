@@ -188,6 +188,7 @@ func NewRouter(opts Options) *gin.Engine {
 	router.Any("/captcha/req", captchaHandler.Req)
 	router.Any("/captcha/pic", captchaHandler.Pic)
 	router.Any("/captcha/picx", captchaHandler.PicX)
+	router.Any("/captcha/verify", captchaHandler.Verify)
 	router.Any("/test", testHandler.Test)
 	router.Any("/iploc/:ip", ipLocHandler.Find)
 	router.Any("/game/platforms", gameHandler.Platforms)

@@ -561,6 +561,26 @@ func TestV2CaptchaVerify(t *testing.T) {
 	}
 }
 
+func TestCaptchaVerifyRoute(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/captcha/verify", strings.NewReader("captcha_key=bad&captcha_code=wrong"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	var body legacyjson.Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.RetCode != -1 || body.ErrMsg != "验证失败" {
+		t.Fatalf("unexpected response %#v", body)
+	}
+}
+
 func TestCaptchaPicFromReqSecret(t *testing.T) {
 	router := newTestRouter()
 

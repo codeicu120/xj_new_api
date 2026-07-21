@@ -1940,3 +1940,12 @@
 - Subagent：`Locke` 只读核对注册/登录成功路径，确认登录成功的低风险最小闭环是 session、quota/goldbean 返回和 Redis 注销标记清理；完整注册成功路径涉及 `users/users_account/users_quota/user_coinlogs/keylimits/msgs/user_recommend/user_channel/sessions`，继续作为独立高风险切口。
 - 文档修正：`MIGRATION_ENDPOINTS.md` 和 `docs/public-endpoints.md` 将登录剩余范围缩小到 v1 短信自动注册和注册成功大链路。
 - 测试：`go test ./internal/service/user ./internal/repository/user ./internal/handler ./internal/server` 通过。
+
+### v1 验证码校验路由补齐
+
+- 已迁移：`/captcha/verify` v1 图形验证码校验路由。
+- PHP: `src/c/api/captcha.php::verify`。
+- Go: `internal/server/router.go` 注册到 `CaptchaHandler.Verify`，复用已有验证码校验逻辑。
+- 兼容规则：前端调用 `/captcha/verify` 不再 404；无效 `captcha_key/captcha_code` 返回 `retcode=-1 errmsg=验证失败`。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 与 `docs/public-endpoints.md` 增加 v1 verify 路由记录。
+- 测试：`go test ./internal/server` 覆盖 `/captcha/verify` POST 错误分支。

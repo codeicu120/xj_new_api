@@ -34,6 +34,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | ANY | `VerificationHandler` |
 | `/captcha/req` | ANY | `CaptchaHandler.Req` |
 | `/captcha/pic`、`/captcha/picx` | ANY | `CaptchaHandler.Pic/PicX` |
+| `/captcha/verify` | ANY | `CaptchaHandler.Verify` |
 | `/test` | ANY | `TestHandler.Test` |
 | `/iploc/:ip` | ANY | `IPLocHandler.Find` |
 | `/game/platforms` | ANY | `GameHandler.Platforms` |
@@ -225,6 +226,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/sms/sendv`、`/sms/sendu`、`/email/send` | `c.api.sms/email->send*` | `VerificationHandler` | 已重构；手机号/邮箱/未登录错误分支 live 对比通过，成功发送通过 sender/captcha/limiter fake 覆盖，默认不直连真实短信/邮件平台 |
 | `/captcha/req` | `c.api.captcha->req` | `CaptchaHandler.Req` | 已重构，动态 secret 按 shape 对比通过 |
 | `/captcha/pic`、`/captcha/picx` | `c.api.captcha->pic/picx` | `CaptchaHandler.Pic/PicX` | 已重构；无效 secret 404 JSON 对比通过，有效 PHP secret 和 Go req secret 均输出 100x34 PNG |
+| `/captcha/verify` | `c.api.captcha->verify` | `CaptchaHandler.Verify` | 已重构；v1 图形验证码校验路由已接管，错误分支返回 `验证失败` |
 | `/test` | `c.api.test->test` | `TestHandler.Test` | 已重构，动态 PNG 按 status/content-type/PNG 尺寸对比通过 |
 | `/attach`、`/attach/index`、`/attach/upavatar` | `c.api.attach->index/upavatar` | `AttachHandler.Index/UpAvatar` | 已重构；空响应、未登录和登录非法头像分支对比通过，成功更新分支由 service fake 覆盖 |
 | `/:size/:uri`（`C*`/`T*`/`R*`/`M`/`N`） | `c.api.pic->index` | `PicHandler.Index` | 已重构；无效/不存在文件 404 分支对比通过，图片生成由 service 测试覆盖 |
