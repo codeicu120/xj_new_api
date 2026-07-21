@@ -532,6 +532,8 @@ func NewRouter(opts Options) *gin.Engine {
 		})
 	})
 
+	registerAPIDocs(router)
+
 	return router
 }
 

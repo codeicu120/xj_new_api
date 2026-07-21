@@ -90,6 +90,95 @@ func TestCORSHeadersOnNormalRequest(t *testing.T) {
 	}
 }
 
+func TestAPIDocsIndex(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("expected html content type, got %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "/docs/openapi.json") {
+		t.Fatalf("expected docs page to link openapi json")
+	}
+}
+
+func TestAPIDocsOpenAPIJSON(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.json", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var body struct {
+		OpenAPI string                            `json:"openapi"`
+		Paths   map[string]map[string]interface{} `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode openapi json: %v", err)
+	}
+	if body.OpenAPI != "3.0.3" {
+		t.Fatalf("expected openapi 3.0.3, got %q", body.OpenAPI)
+	}
+	vodShow, ok := body.Paths["/vod/show/{vodid}"]
+	if !ok {
+		t.Fatalf("expected /vod/show/{vodid} in openapi paths")
+	}
+	if getOp, ok := vodShow["get"].(map[string]interface{}); ok {
+		if getOp["summary"] == "" || getOp["description"] == "" {
+			t.Fatalf("expected /vod/show/{vodid} get operation to include summary and description")
+		}
+	} else {
+		t.Fatalf("expected /vod/show/{vodid} get operation")
+	}
+	if _, ok := body.Paths["/v2/captcha/req"]; !ok {
+		t.Fatalf("expected /v2/captcha/req in openapi paths")
+	}
+}
+
+func TestAPIDocsRoutesJSON(t *testing.T) {
+	router := newTestRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/routes.json", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var body struct {
+		Service string     `json:"service"`
+		Routes  []routeDoc `json:"routes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode routes json: %v", err)
+	}
+	if body.Service != "xj-comp-api" {
+		t.Fatalf("expected service xj-comp-api, got %q", body.Service)
+	}
+	for _, route := range body.Routes {
+		if route.Summary == "" || route.Description == "" {
+			t.Fatalf("expected route %s %s to include summary and description", route.Method, route.Path)
+		}
+	}
+	for _, route := range body.Routes {
+		if route.Method == http.MethodGet && route.Path == "/captcha/verify" {
+			return
+		}
+	}
+	t.Fatalf("expected GET /captcha/verify in route docs")
+}
+
 func TestLegacyPlaceholder(t *testing.T) {
 	router := newTestRouter()
 
