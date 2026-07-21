@@ -617,7 +617,7 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 	now := s.now().Unix()
 	price := atoi(str(row["view_price"]))
 	isLimitFree := atoi64(str(row["free_sdate"])) < now && now < atoi64(str(row["free_edate"]))
-	if play && atoi(str(row["isvip"])) == 2 && price > 0 && !isLimitFree {
+	if play && atoi(str(row["isvip"])) == 2 && price > 0 && !isLimitFree && !hasVODVIPPerm(user) {
 		count, err := s.store.BoughtCount(ctx, atoi(str(user["uid"])), vodID)
 		if err != nil {
 			return nil, -1, vodMediaFailMessage(play), err
@@ -897,6 +897,10 @@ func checkVODPerm(row map[string]interface{}, user map[string]interface{}) (int,
 		return 6, "此内容仅提供给高级别用户，请升级或做任务推广吧"
 	}
 	return 0, ""
+}
+
+func hasVODVIPPerm(user map[string]interface{}) bool {
+	return getVODPermInt(user["perms"], "allow.vod.vip") == 1
 }
 
 func vodMediaFailMessage(play bool) string {

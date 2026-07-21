@@ -759,6 +759,42 @@ func TestReqPlayIsVIPTwoFreeVODDoesNotRequirePurchase(t *testing.T) {
 	}
 }
 
+func TestReqPlayIsVIPTwoPaidVODAllowsVIPWithoutPurchase(t *testing.T) {
+	store := &fakeListingStore{
+		vodByID: map[string]interface{}{
+			"vodid":      "100",
+			"showtype":   "0",
+			"play_url":   "p/index.m3u8",
+			"play_srvid": "9",
+			"view_price": "30",
+			"isvip":      "2",
+		},
+		boughtCount: 0,
+	}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{
+		"uid": "5",
+		"sid": "s",
+		"perms": map[string]interface{}{
+			"allow.vod.vip":           "1",
+			"max.vod.play.daynum":     "1000",
+			"max.vod.down.daynum":     "1000",
+			"max.comment.post.daynum": "50",
+		},
+	}})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "用户权限范围内免费播放" || data["httpurl"] != "https://cover.example.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.boughtCountCalls != 0 {
+		t.Fatalf("vip isvip=2 vod should not query purchase count, calls=%d", store.boughtCountCalls)
+	}
+}
+
 func TestReqDownFreeVOD(t *testing.T) {
 	store := &fakeListingStore{vodByID: map[string]interface{}{
 		"vodid":      "100",
