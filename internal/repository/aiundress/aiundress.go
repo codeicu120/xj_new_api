@@ -93,6 +93,37 @@ func (r *Repository) ByUIDImage(ctx context.Context, uid int, image string) (map
 	return result[0], nil
 }
 
+func (r *Repository) CreateUpload(ctx context.Context, uid int, image string, now int64) (int, error) {
+	if r.db == nil || uid <= 0 || image == "" {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, "INSERT INTO ai_undress(uid, image, status, create_time, update_time) VALUES(?, ?, 0, ?, ?)", uid, image, now, now)
+	if err != nil {
+		if isMissingTable(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("insert ai undress upload: %w", err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("insert ai undress upload id: %w", err)
+	}
+	return int(id), nil
+}
+
+func (r *Repository) RefreshUpload(ctx context.Context, id int, now int64) error {
+	if r.db == nil || id <= 0 {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx, "UPDATE ai_undress SET create_time=?, update_time=? WHERE id=?", now, now, id); err != nil {
+		if isMissingTable(err) {
+			return nil
+		}
+		return fmt.Errorf("refresh ai undress upload: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) MarkDeleted(ctx context.Context, id int, updateTime int64) error {
 	if r.db == nil || id <= 0 {
 		return nil

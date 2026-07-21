@@ -192,27 +192,39 @@ POST /comment/post
 }
 ```
 
-## 本次未直接修复但已定位项
+## 后续补充修复项
 
 ### 6. `/aiundress/upload` AI 脱衣上传接口失败
 
 当前结论：
 
-- 该接口不是小 bug，而是上传成功链路尚未完整迁移。
-- 旧 PHP 链路包含：登录校验、本地上传、R2 上传、`ai_undress` 表新增或更新、返回 `data.file`。
-- 当前 Go 仍返回：
+- 已迁移上传成功链路：登录校验、本地上传、可配置 R2 上传、`ai_undress` 表新增或更新时间、返回 `data.file`。
+- 上传字段名保持 `image`，允许 `jpg/jpeg/gif/png`，最大 5120K，返回 `uri/filesize/filename/suffix/ispic`。
+- R2 密钥不写入仓库，生产需通过 `.env` 或环境变量配置 `AIUNDRESS_R2_ACCOUNT_ID/AIUNDRESS_R2_ACCESS_KEY/AIUNDRESS_R2_SECRET_KEY/AIUNDRESS_R2_BUCKET`。
+
+期望响应：
 
 ```json
 {
-  "retcode": -1,
-  "errmsg": "AI 上传成功分支暂未迁移"
+  "retcode": 0,
+  "errmsg": "",
+  "data": {
+    "file": {
+      "uri": "ai_undress/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.jpg",
+      "filesize": 12,
+      "filename": "xxx.jpg",
+      "suffix": "jpg",
+      "ispic": 1
+    }
+  }
 }
 ```
 
 复测结论：
 
-- 本轮不作为已修复项复测。
-- 需要单独迁移 AI 上传链路。
+- 本项可进入复测。
+- 未登录仍应返回 `retcode=-1 errmsg=请先登录`。
+- 缺少 `image` 文件仍应返回 `retcode=-1 errmsg=请选择上传图片`。
 
 ### 7. `/aiundress/resourceTypeList?module=1` 获取模板失败
 

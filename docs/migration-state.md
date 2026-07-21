@@ -1568,7 +1568,7 @@
 - 已迁移小视频投币未登录分支：`/minivod/throwcoin/:vodid`，返回 `retcode=-9999 errmsg=需登录后方可使用投币功能`；投币事务和作者收益暂未接管。
 - 已迁移 StarLive raw JSON 安全失败分支：`/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain`。游客长 `memberId` 返回 `游客用户请先登录`，未知用户返回 `未知用户`，`tryAgain` 未知业务类型返回 `未知业务类型`；下注、结算、翻译扣款和外部幂等回调暂未接管。
 - 已迁移 Respond token 失败分支：`/respond/chan1`，`md5(mobi+"|"+secret)` 校验失败返回 `retcode=1 errmsg=校验失败`；成功短信/通知处理暂未接管。
-- 已迁移 AI 脱衣未登录分支：`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete`，返回 `retcode=-1 errmsg=请先登录`；图片上传、第三方 AI、Redis 并发锁、删除外部资源和金豆扣减暂未接管。
+- 已迁移 AI 脱衣安全边界分支：`/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` 未登录返回 `retcode=-1 errmsg=请先登录`；`upload` 成功写入链路已在后续迁移中补齐，`undress` 第三方 AI、Redis 并发锁和金豆扣减暂未接管。
 - Subagent：`Confucius` 梳理 payment/respond/starlive/game 安全候选；`Halley` 梳理 media/AI/UCP/account 安全候选。主线按确定、低副作用分支落地，未采纳需要事务、支付、资产或外部 provider 的成功路径。
 - 测试：`go test ./internal/service/aiundress ./internal/service/ucp ./internal/service/minivod ./internal/service/starlive ./internal/server` 通过。
 
@@ -1949,3 +1949,13 @@
 - 兼容规则：前端调用 `/captcha/verify` 不再 404；无效 `captcha_key/captcha_code` 返回 `retcode=-1 errmsg=验证失败`。
 - 文档修正：`MIGRATION_ENDPOINTS.md` 与 `docs/public-endpoints.md` 增加 v1 verify 路由记录。
 - 测试：`go test ./internal/server` 覆盖 `/captcha/verify` POST 错误分支。
+
+### AI 脱衣上传成功分支
+
+- 已迁移：`/aiundress/upload` 登录上传成功链路。
+- PHP: `src/c/api/aiundress.php::upload`、`src/m/aiundress.php::getByUid`、`conf/upload.php` 的 `allows_ai_undress`。
+- Go: `internal/handler.AIUndressHandler.Upload`、`internal/service/aiundress.Service.Upload`、`internal/repository/aiundress.Repository.CreateUpload/RefreshUpload`，并新增可配置 `R2Uploader`。
+- IO/DB: multipart 字段名保持 `image`；上传路径保持 `UPLOAD_PATH/ai_undress/{md5(uid+time)}.{ext}`，业务返回 `ai_undress/...`；允许 `jpg/jpeg/gif/png`，最大 5120K；R2 配置完整时先 PUT 到 Cloudflare R2，成功后再查 `ai_undress(uid,image)`，不存在则写 `uid/image/status=0/create_time/update_time`，存在则只刷新时间。
+- 兼容规则：未登录优先返回 `retcode=-1 errmsg=请先登录`；无文件返回 `请选择上传图片`；成功返回 `data.file.uri/filesize/filename/suffix/ispic`，`filesize` 为 PHP 兼容 KB 四舍五入。R2 密钥不硬编码，需通过 `AIUNDRESS_R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` 配置注入；本地未配置时保留 no-op uploader 便于开发模拟。
+- 文档修正：`MIGRATION_ENDPOINTS.md` 与 `docs/public-endpoints.md` 将 AI 剩余范围缩小到 `/aiundress/undress` 的 Redis 锁、第三方 AI 生成和金豆扣减。
+- 测试：`go test ./internal/service/aiundress ./internal/repository/aiundress ./internal/handler ./internal/server` 通过。

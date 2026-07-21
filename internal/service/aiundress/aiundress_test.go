@@ -1,11 +1,14 @@
 package aiundress
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,9 +22,18 @@ func (f fakeAuth) UserBySession(context.Context, string) (map[string]interface{}
 }
 
 type fakeStore struct {
-	setting string
-	rows    []map[string]interface{}
-	row     map[string]interface{}
+	setting         string
+	rows            []map[string]interface{}
+	row             map[string]interface{}
+	createdUpload   *uploadRecord
+	refreshedUpload *uploadRecord
+}
+
+type uploadRecord struct {
+	uid   int
+	id    int
+	image string
+	now   int64
 }
 
 func (f fakeStore) Count(context.Context, int, int) (int, error) {
@@ -44,6 +56,20 @@ func (f fakeStore) ByUIDImage(context.Context, int, string) (map[string]interfac
 		return f.row, nil
 	}
 	return map[string]interface{}{}, nil
+}
+
+func (f fakeStore) CreateUpload(_ context.Context, uid int, image string, now int64) (int, error) {
+	if f.createdUpload != nil {
+		*f.createdUpload = uploadRecord{uid: uid, image: image, now: now}
+	}
+	return 99, nil
+}
+
+func (f fakeStore) RefreshUpload(_ context.Context, id int, now int64) error {
+	if f.refreshedUpload != nil {
+		*f.refreshedUpload = uploadRecord{id: id, now: now}
+	}
+	return nil
 }
 
 func (f fakeStore) MarkDeleted(context.Context, int, int64) error {
@@ -80,6 +106,34 @@ func (c *fakeExternalClient) PostJSON(_ context.Context, path string, payload ma
 	return c.resp, c.err
 }
 
+type fakeUploader struct {
+	localPath string
+	objectKey string
+	err       error
+}
+
+func (u *fakeUploader) Upload(_ context.Context, localPath string, objectKey string) error {
+	u.localPath = localPath
+	u.objectKey = objectKey
+	return u.err
+}
+
+type memoryMultipartFile struct {
+	*bytes.Reader
+}
+
+func (memoryMultipartFile) Close() error {
+	return nil
+}
+
+func newUploadFile(content string, filename string) (multipart.File, *multipart.FileHeader) {
+	reader := bytes.NewReader([]byte(content))
+	return memoryMultipartFile{Reader: reader}, &multipart.FileHeader{
+		Filename: filename,
+		Size:     int64(len(content)),
+	}
+}
+
 func TestListingRequiresLoginWithPHPErrorCode(t *testing.T) {
 	service := NewService(fakeAuth{}, fakeStore{}, "https://res.example")
 
@@ -92,15 +146,124 @@ func TestListingRequiresLoginWithPHPErrorCode(t *testing.T) {
 	}
 }
 
-func TestRequireLoginEdge(t *testing.T) {
+func TestUploadRequiresLogin(t *testing.T) {
 	service := NewService(fakeAuth{}, fakeStore{}, "https://res.example")
+	file, header := newUploadFile("image", "face.jpg")
 
-	retcode, errmsg, err := service.RequireLoginEdge(context.Background(), "", "pending")
+	_, retcode, errmsg, err := service.Upload(context.Background(), "", file, header)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if retcode != -1 || errmsg != "请先登录" {
 		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUploadCreatesFileAndDBRow(t *testing.T) {
+	created := uploadRecord{}
+	uploader := &fakeUploader{}
+	store := fakeStore{createdUpload: &created}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.example").
+		WithUploadPath(t.TempDir()).
+		WithObjectUploader(uploader)
+	service.now = func() time.Time { return time.Unix(123456, 0) }
+	file, header := newUploadFile("image-bytes", "换脸模版.jpg")
+
+	data, retcode, errmsg, err := service.Upload(context.Background(), "250f790ba71ec2b9d3855f424db2259e", file, header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	fileData := data["file"].(map[string]interface{})
+	uri := fileData["uri"].(string)
+	if !strings.HasPrefix(uri, "ai_undress/") || !strings.HasSuffix(uri, ".jpg") || strings.Count(uri, "/") != 1 {
+		t.Fatalf("unexpected uri %q", uri)
+	}
+	if fileData["filename"] != "换脸模版.jpg" || fileData["suffix"] != "jpg" || fileData["filesize"] != int64(0) || fileData["ispic"] != 1 {
+		t.Fatalf("unexpected file data %#v", fileData)
+	}
+	if created.uid != 7 || created.image != uri || created.now != 123456 {
+		t.Fatalf("created upload=%#v", created)
+	}
+	if uploader.objectKey != uri {
+		t.Fatalf("uploader object key=%q uri=%q", uploader.objectKey, uri)
+	}
+	if _, err := os.Stat(uploader.localPath); err != nil {
+		t.Fatalf("expected local file to exist: %v", err)
+	}
+}
+
+func TestUploadRefreshesExistingRow(t *testing.T) {
+	refreshed := uploadRecord{}
+	store := fakeStore{
+		row:             map[string]interface{}{"id": "10", "image": "ai_undress/existing.jpg"},
+		refreshedUpload: &refreshed,
+	}
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, store, "https://res.example").
+		WithUploadPath(t.TempDir())
+	service.now = func() time.Time { return time.Unix(123456, 0) }
+	file, header := newUploadFile("image-bytes", "face.png")
+
+	_, retcode, errmsg, err := service.Upload(context.Background(), "token", file, header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	if refreshed.id != 10 || refreshed.now != 123456 {
+		t.Fatalf("refreshed upload=%#v", refreshed)
+	}
+}
+
+func TestUploadRejectsUploaderFailure(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, fakeStore{}, "https://res.example").
+		WithUploadPath(t.TempDir()).
+		WithObjectUploader(&fakeUploader{err: errors.New("r2 down")})
+	file, header := newUploadFile("image-bytes", "face.jpg")
+
+	_, retcode, errmsg, err := service.Upload(context.Background(), "token", file, header)
+	if err == nil {
+		t.Fatal("expected uploader error")
+	}
+	if retcode != -1 || errmsg != "上传失败，请稍后再试" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUploadRejectsUnsupportedSuffix(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, fakeStore{}, "https://res.example").
+		WithUploadPath(t.TempDir())
+	file, header := newUploadFile("image-bytes", "face.webp")
+
+	_, retcode, errmsg, err := service.Upload(context.Background(), "token", file, header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != -1 || errmsg != "face.webp:系统只允许上传[jpg, jpeg, gif, png]格式的文件" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+}
+
+func TestUploadKeepsJPEGSuffix(t *testing.T) {
+	service := NewService(fakeAuth{user: map[string]interface{}{"uid": "7"}}, fakeStore{}, "https://res.example").
+		WithUploadPath(t.TempDir())
+	service.now = func() time.Time { return time.Unix(123456, 0) }
+	file, header := newUploadFile("image-bytes", "face.jpeg")
+
+	data, retcode, errmsg, err := service.Upload(context.Background(), "token", file, header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retcode != 0 || errmsg != "" {
+		t.Fatalf("retcode=%d errmsg=%q", retcode, errmsg)
+	}
+	fileData := data["file"].(map[string]interface{})
+	uri := fileData["uri"].(string)
+	if !strings.HasSuffix(uri, ".jpeg") || fileData["suffix"] != "jpeg" || fileData["ispic"] != 1 {
+		t.Fatalf("unexpected file data %#v", fileData)
 	}
 }
 

@@ -44,7 +44,16 @@ type Config struct {
 	UploadPath       string
 	AIUndressHost    string
 	AIUndressKey     string
+	AIUndressR2      R2Config
 	RespondProviders []RespondProviderConfig
+}
+
+type R2Config struct {
+	AccountID string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Timeout   time.Duration
 }
 
 type RespondProviderConfig struct {
@@ -64,25 +73,32 @@ type RespondProviderConfig struct {
 
 func FromEnv() Config {
 	return Config{
-		Env:              envString("APP_ENV", defaultEnv),
-		Host:             envString("HTTP_HOST", defaultHost),
-		Port:             envString("HTTP_PORT", defaultPort),
-		LogLevel:         envLogLevel("LOG_LEVEL", slog.LevelInfo),
-		ShutdownTimeout:  envDuration("SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
-		ResourceBaseURL:  envString("RESOURCE_BASE_URL", defaultResourceBaseURL(time.Now())),
-		SMSCaptcha:       envInt("SMS_CAPTCHA", 1),
-		CaptchaStyle:     envInt("CAPTCHA_STYLE", 0),
-		IPDBPath:         envString("IPDB_PATH", defaultIPDBPath),
-		MySQLDSN:         envString("MYSQL_DSN", defaultMySQLDSN),
-		RedisAddr:        envString("REDIS_ADDR", defaultRedisAddr),
-		RedisPassword:    envString("REDIS_PASSWORD", ""),
-		RedisDB:          envInt("REDIS_DB", 0),
-		CORSOrigins:      envCSV("CORS_ORIGINS", defaultCORSOrigins),
-		GameResourceURL:  envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
-		VIPDiscount:      envInt("VIP_DISCOUNT", 50),
-		UploadPath:       envString("UPLOAD_PATH", defaultUploadPath),
-		AIUndressHost:    envString("AIUNDRESS_THIRD_HOST", ""),
-		AIUndressKey:     envString("AIUNDRESS_THIRD_KEY", ""),
+		Env:             envString("APP_ENV", defaultEnv),
+		Host:            envString("HTTP_HOST", defaultHost),
+		Port:            envString("HTTP_PORT", defaultPort),
+		LogLevel:        envLogLevel("LOG_LEVEL", slog.LevelInfo),
+		ShutdownTimeout: envDuration("SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
+		ResourceBaseURL: envString("RESOURCE_BASE_URL", defaultResourceBaseURL(time.Now())),
+		SMSCaptcha:      envInt("SMS_CAPTCHA", 1),
+		CaptchaStyle:    envInt("CAPTCHA_STYLE", 0),
+		IPDBPath:        envString("IPDB_PATH", defaultIPDBPath),
+		MySQLDSN:        envString("MYSQL_DSN", defaultMySQLDSN),
+		RedisAddr:       envString("REDIS_ADDR", defaultRedisAddr),
+		RedisPassword:   envString("REDIS_PASSWORD", ""),
+		RedisDB:         envInt("REDIS_DB", 0),
+		CORSOrigins:     envCSV("CORS_ORIGINS", defaultCORSOrigins),
+		GameResourceURL: envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
+		VIPDiscount:     envInt("VIP_DISCOUNT", 50),
+		UploadPath:      envString("UPLOAD_PATH", defaultUploadPath),
+		AIUndressHost:   envString("AIUNDRESS_THIRD_HOST", ""),
+		AIUndressKey:    envString("AIUNDRESS_THIRD_KEY", ""),
+		AIUndressR2: R2Config{
+			AccountID: envString("AIUNDRESS_R2_ACCOUNT_ID", ""),
+			AccessKey: envString("AIUNDRESS_R2_ACCESS_KEY", ""),
+			SecretKey: envString("AIUNDRESS_R2_SECRET_KEY", ""),
+			Bucket:    envString("AIUNDRESS_R2_BUCKET", ""),
+			Timeout:   envDuration("AIUNDRESS_R2_TIMEOUT", 60*time.Second),
+		},
 		RespondProviders: respondProvidersFromEnv(),
 	}
 }

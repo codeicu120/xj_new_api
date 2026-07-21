@@ -3,9 +3,12 @@ package aiundress
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +30,8 @@ type Store interface {
 	List(ctx context.Context, uid int, module int, total int, page int, pageSize int) ([]map[string]interface{}, error)
 	ByID(ctx context.Context, id int) (map[string]interface{}, error)
 	ByUIDImage(ctx context.Context, uid int, image string) (map[string]interface{}, error)
+	CreateUpload(ctx context.Context, uid int, image string, now int64) (int, error)
+	RefreshUpload(ctx context.Context, id int, now int64) error
 	MarkDeleted(ctx context.Context, id int, updateTime int64) error
 	SettingByUUID(ctx context.Context, uuid string) (string, error)
 }
@@ -39,6 +44,10 @@ type FileDeleter interface {
 	Delete(path string) error
 }
 
+type ObjectUploader interface {
+	Upload(ctx context.Context, localPath string, objectKey string) error
+}
+
 type osFileDeleter struct{}
 
 func (osFileDeleter) Delete(path string) error {
@@ -48,6 +57,12 @@ func (osFileDeleter) Delete(path string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	return nil
+}
+
+type noopObjectUploader struct{}
+
+func (noopObjectUploader) Upload(context.Context, string, string) error {
 	return nil
 }
 
@@ -120,6 +135,7 @@ type Service struct {
 	env             string
 	externalClient  ExternalClient
 	fileDeleter     FileDeleter
+	uploader        ObjectUploader
 	now             func() time.Time
 }
 
@@ -134,6 +150,7 @@ func NewService(auth AuthStore, store Store, resourceBaseURL string, env ...stri
 		resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"),
 		env:             strings.ToLower(strings.TrimSpace(envValue)),
 		fileDeleter:     osFileDeleter{},
+		uploader:        noopObjectUploader{},
 		now:             time.Now,
 	}
 }
@@ -151,6 +168,13 @@ func (s *Service) WithUploadPath(uploadPath string) *Service {
 func (s *Service) WithFileDeleter(deleter FileDeleter) *Service {
 	if deleter != nil {
 		s.fileDeleter = deleter
+	}
+	return s
+}
+
+func (s *Service) WithObjectUploader(uploader ObjectUploader) *Service {
+	if uploader != nil {
+		s.uploader = uploader
 	}
 	return s
 }
@@ -187,18 +211,47 @@ func (s *Service) Listing(ctx context.Context, token string, page int, module in
 	}, 0, "", nil
 }
 
-func (s *Service) RequireLoginEdge(ctx context.Context, token string, pendingMessage string) (int, string, error) {
+func (s *Service) Upload(ctx context.Context, token string, file multipart.File, header *multipart.FileHeader) (map[string]interface{}, int, string, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
-		return -1, "请先登录", err
+		return nil, -1, "请先登录", err
 	}
-	if atoi(user["uid"]) == 0 {
-		return -1, "请先登录", nil
+	uid := atoi(user["uid"])
+	if uid == 0 {
+		return nil, -1, "请先登录", nil
 	}
-	if pendingMessage == "" {
-		pendingMessage = "AI 成功分支暂未迁移"
+	if file == nil || header == nil {
+		return nil, -1, "请选择上传图片", nil
 	}
-	return -1, pendingMessage, nil
+	if s.store == nil {
+		return nil, -1, "上传失败，请稍后再试", nil
+	}
+
+	fileInfo, localPath, image, retcode, errmsg, err := s.saveUploadFile(uid, file, header)
+	if err != nil || retcode != 0 {
+		return nil, retcode, errmsg, err
+	}
+	if s.uploader != nil {
+		if err := s.uploader.Upload(ctx, localPath, image); err != nil {
+			return nil, -1, "上传失败，请稍后再试", err
+		}
+	}
+
+	now := s.now().Unix()
+	row, err := s.store.ByUIDImage(ctx, uid, image)
+	if err != nil {
+		return nil, -1, "上传失败，请稍后再试", err
+	}
+	if len(row) == 0 {
+		if _, err := s.store.CreateUpload(ctx, uid, image, now); err != nil {
+			return nil, -1, "上传失败，请稍后再试", err
+		}
+	} else if err := s.store.RefreshUpload(ctx, atoi(row["id"]), now); err != nil {
+		return nil, -1, "上传失败，请稍后再试", err
+	}
+
+	fileInfo["uri"] = image
+	return map[string]interface{}{"file": fileInfo}, 0, "", nil
 }
 
 func (s *Service) UndressEdge(ctx context.Context, token string, uri string, module int) (int, string, error) {
@@ -250,6 +303,73 @@ func (s *Service) DeleteEdge(ctx context.Context, token string, id int) (int, st
 		return -1, "AI 删除失败", err
 	}
 	return 0, "", nil
+}
+
+func (s *Service) saveUploadFile(uid int, file multipart.File, header *multipart.FileHeader) (map[string]interface{}, string, string, int, string, error) {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+	if !allowedUploadSuffix(ext) {
+		return nil, "", "", -1, fmt.Sprintf("%s:系统只允许上传[jpg, jpeg, gif, png]格式的文件", header.Filename), nil
+	}
+	if header.Size <= 0 {
+		return nil, "", "", -1, "请选择上传图片", nil
+	}
+	if header.Size > 5*1024*1024 {
+		return nil, "", "", -1, fmt.Sprintf("%s:系统限定上传文件不能大于[5120K]", header.Filename), nil
+	}
+	uploadRoot := strings.TrimSpace(s.uploadPath)
+	if uploadRoot == "" {
+		return nil, "", "", -1, "上传失败，请稍后再试", nil
+	}
+
+	relative := uploadFileName(uid, s.now().Unix(), ext)
+	image := "ai_undress/" + relative
+	localPath := filepath.Join(uploadRoot, filepath.FromSlash(image))
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return nil, "", "", -1, "上传失败，请稍后再试", err
+	}
+	out, err := os.Create(localPath)
+	if err != nil {
+		return nil, "", "", -1, "上传失败，请稍后再试", err
+	}
+	defer out.Close()
+	written, err := io.Copy(out, file)
+	if err != nil {
+		return nil, "", "", -1, "上传失败，请稍后再试", err
+	}
+	if written == 0 {
+		_ = os.Remove(localPath)
+		return nil, "", "", -1, "请选择上传图片", nil
+	}
+
+	fileInfo := map[string]interface{}{
+		"filename": header.Filename,
+		"filesize": int64(float64(written)/1024 + 0.5),
+		"suffix":   ext,
+		"ispic":    imageSuffix(ext),
+		"uri":      relative,
+	}
+	return fileInfo, localPath, image, 0, "", nil
+}
+
+func uploadFileName(uid int, now int64, ext string) string {
+	sum := md5.Sum([]byte(fmt.Sprintf("%d%d", uid, now)))
+	return hex.EncodeToString(sum[:]) + "." + ext
+}
+
+func allowedUploadSuffix(ext string) bool {
+	switch ext {
+	case "jpg", "jpeg", "gif", "png":
+		return true
+	default:
+		return false
+	}
+}
+
+func imageSuffix(ext string) int {
+	if allowedUploadSuffix(ext) {
+		return 1
+	}
+	return 0
 }
 
 func (s *Service) ModuleList(ctx context.Context) (domain.AIUndressExternalData, int, string, error) {

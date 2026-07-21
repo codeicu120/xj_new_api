@@ -146,7 +146,7 @@
 | `/aiundress`、`/aiundress/listing` | `c.api.aiundress->listing` | 本轮完成 | 登录只读 AI 任务历史；未登录错误、`module/page` 分页、字段集合和 test 环境 R2 资源域名 live 对比通过。 |
 | `/aiundress/index` | `c.api.aiundress->index` | 本轮完成 | 按本地旧 PHP 运行时行为返回 `200 text/html` 空 body；AI 上传/生成/查询 action 未接管。 |
 | `/aiundress/moduleList`、`/aiundress/resourceTypeList`、`/aiundress/resourceList` | `c.api.aiundress->moduleList/resourceTypeList/resourceList` | 本轮完成 | 只读第三方资源查询；`channel_key` 不硬编码，需通过 `AIUNDRESS_THIRD_KEY` 注入，缺配置按旧 PHP 外部请求失败返回 `retcode=-1 errmsg=请求失败`。 |
-| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->upload/undress/delete` | 本轮完成 | 接管未登录失败分支，`undress` 无效图片路径和 `delete` 空记录/成功软删除分支；图片上传、AI 生成、R2 上传和金豆扣减未接管。 |
+| `/aiundress/upload`、`/aiundress/undress`、`/aiundress/delete` | `c.api.aiundress->upload/undress/delete` | 本轮完成 | `upload` 已接管登录校验、本地保存、可配置 R2 上传、`ai_undress` 新增/刷新和 `data.file` 响应；`undress` 无效图片路径和 `delete` 空记录/成功软删除分支已迁移，AI 生成、Redis 锁和金豆扣减未接管。 |
 | `/starLive/index` | `c.api.starlive->index` | 本轮完成 | 直播初始化；支持登录用户或游客 sid，读取 `starlive_info`，兼容 PHP AES-128-CBC/base64 的 `encryptUid` 和 `md5(appId_userId_secKey)` token。 |
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | 本轮完成 | 直播余额查询；返回 raw JSON `{code,data}`，游客长 memberId 余额为 0，用户余额按 `users_quota.goldcoin*10`。 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | 本轮完成 | 接管 raw JSON 安全失败分支：游客长 `memberId`、未知用户和 `tryAgain` 未知业务类型；资产变更、下注结算、翻译扣款和外部回调未接管。 |
@@ -172,4 +172,4 @@
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` 成功路径 | 部分 raw JSON 安全失败分支已迁；剩余直播平台下注、结算、翻译扣款或外部回调涉及资产写入和平台幂等。 |
 | `/minivod/reqplay/reqdown` 的扣费奖励分支 | 小视频列表、排行榜、详情、播放记录、作者页、赞踩、请求列表读取/推荐/广告、播放/下载可控路径、非扣费 viewlog/计数、任务金币领取、投币成功分支、长视频地址转换和 parselong m3u8 裁剪已完成；剩余涉及播放/下载扣费、任务奖励和推荐奖励。 |
 | `/vod/reqplay/reqdown`、`/v2/vod/reqplay/reqdown` 的扣费奖励分支 | 长视频详情、赞踩、购买、播放/下载可控路径已完成；非扣费成功路径的播放/下载日志与 `vods` 计数已迁移；剩余涉及超限扣金币、扣费日志和奖励。 |
-| `/aiundress/upload`、`/aiundress/undress` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询、未登录失败、`undress` 无效图片路径和 `delete` 空记录/成功软删除分支已完成；剩余涉及图片上传、第三方 AI 生成、Redis 并发锁、R2 上传和金豆扣减。 |
+| `/aiundress/undress` 成功路径及其他剩余 action | `/aiundress/listing`、只读资源查询、`upload` 成功写入、未登录失败、`undress` 无效图片路径和 `delete` 空记录/成功软删除分支已完成；剩余涉及第三方 AI 生成、Redis 并发锁和金豆扣减。 |

@@ -26,8 +26,12 @@ func (h *AIUndressHandler) Listing(c *gin.Context) {
 }
 
 func (h *AIUndressHandler) Upload(c *gin.Context) {
-	retcode, errmsg, err := h.service.RequireLoginEdge(c.Request.Context(), authToken(c), "AI 上传成功分支暂未迁移")
-	respondLegacy(c, nil, retcode, errmsg, err)
+	file, header, _ := c.Request.FormFile("image")
+	if file != nil {
+		defer file.Close()
+	}
+	data, retcode, errmsg, err := h.service.Upload(c.Request.Context(), authToken(c), file, header)
+	respondLegacy(c, data, retcode, errmsg, err)
 }
 
 func (h *AIUndressHandler) Undress(c *gin.Context) {
