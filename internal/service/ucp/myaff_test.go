@@ -3218,6 +3218,18 @@ func TestIndexFormatsLoggedInUser(t *testing.T) {
 	}
 }
 
+func TestFormatRemainUsesSingleSuffix(t *testing.T) {
+	if got := formatRemain(59*86400 + 22*3600 + 41); got != "59天22小时0分钟41秒后" {
+		t.Fatalf("formatRemain days = %q", got)
+	}
+	if got := formatRemain(22*3600 + 41); got != "22小时0分钟41秒后" {
+		t.Fatalf("formatRemain hours = %q", got)
+	}
+	if got := formatRemain(61); got != "1分钟1秒后" {
+		t.Fatalf("formatRemain minutes = %q", got)
+	}
+}
+
 func TestIndexFormatsGuest(t *testing.T) {
 	service := NewService(fakeUserStore{}, "https://res.example.test")
 	service.now = func() time.Time { return time.Unix(1770000000, 0) }

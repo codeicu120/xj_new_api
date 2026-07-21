@@ -1248,13 +1248,13 @@ func formatRemain(seconds int64) string {
 	minutes := seconds / 60
 	seconds %= 60
 	if days > 0 {
-		return fmt.Sprintf("%d天后%d小时后%d分钟后%d秒后", days, hours, minutes, seconds)
+		return fmt.Sprintf("%d天%d小时%d分钟%d秒后", days, hours, minutes, seconds)
 	}
 	if hours > 0 {
-		return fmt.Sprintf("%d小时后%d分钟后%d秒后", hours, minutes, seconds)
+		return fmt.Sprintf("%d小时%d分钟%d秒后", hours, minutes, seconds)
 	}
 	if minutes > 0 {
-		return fmt.Sprintf("%d分钟后%d秒后", minutes, seconds)
+		return fmt.Sprintf("%d分钟%d秒后", minutes, seconds)
 	}
 	return fmt.Sprintf("%d秒后", seconds)
 }

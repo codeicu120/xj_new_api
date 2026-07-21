@@ -35,7 +35,7 @@ func (r *Repository) UserGroups(ctx context.Context) ([]map[string]interface{}, 
 	if r.db == nil {
 		return []map[string]interface{}{}, nil
 	}
-	return r.queryRows(ctx, "SELECT gid,gicon FROM user_groups ORDER BY gid ASC")
+	return r.queryRows(ctx, "SELECT gid,gicon,perms,weight,scope FROM user_groups ORDER BY gid ASC")
 }
 
 func (r *Repository) CountRoots(ctx context.Context, vodID int) (int, error) {

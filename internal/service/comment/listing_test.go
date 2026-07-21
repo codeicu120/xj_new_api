@@ -16,6 +16,7 @@ type fakeStore struct {
 	created        *CommentCreateInput
 	commentCounter int
 	voted          []string
+	groups         []map[string]interface{}
 }
 
 func (s *fakeStore) VODByID(context.Context, int) (map[string]interface{}, error) {
@@ -26,6 +27,9 @@ func (s *fakeStore) VODByID(context.Context, int) (map[string]interface{}, error
 }
 
 func (s *fakeStore) UserGroups(context.Context) ([]map[string]interface{}, error) {
+	if s.groups != nil {
+		return s.groups, nil
+	}
 	return []map[string]interface{}{{"gid": "1", "gicon": "V1"}, {"gid": "6", "gicon": "V6"}}, nil
 }
 
@@ -256,5 +260,27 @@ func TestPostCreatesPendingComment(t *testing.T) {
 	}
 	if store.commentCounter != 1 {
 		t.Fatalf("comment counter = %d", store.commentCounter)
+	}
+}
+
+func TestPostUsesUserGroupPermsWhenUserPermsMissing(t *testing.T) {
+	store := &fakeStore{groups: []map[string]interface{}{
+		{"gid": "6", "gicon": "V6", "perms": `{"max.comment.post.daynum":"10"}`, "weight": "6", "scope": "0"},
+	}}
+	service := NewService(store, "https://res.example.test", fakeAuth{user: map[string]interface{}{
+		"uid":      "5",
+		"nickname": "nick",
+	}})
+	service.now = func() time.Time { return time.Unix(2000, 0) }
+
+	_, retcode, errmsg, err := service.Post(context.Background(), "3235306637393062613731656332623964333835356634323464623232353965", 61494, 0, "不错", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if retcode != 0 || errmsg != "发表成功" {
+		t.Fatalf("response = %d %q", retcode, errmsg)
+	}
+	if store.created == nil {
+		t.Fatalf("expected comment to be created")
 	}
 }

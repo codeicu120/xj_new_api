@@ -74,6 +74,10 @@ type AuthStore interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
 }
 
+type AuthGroupStore interface {
+	Groups(ctx context.Context) ([]map[string]interface{}, error)
+}
+
 type VoteLimiter interface {
 	Seen(ctx context.Context, key string) (bool, error)
 	Mark(ctx context.Context, key string) error
@@ -610,7 +614,10 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 	if err != nil {
 		return nil, -1, vodMediaFailMessage(play), err
 	}
-	if play && atoi(str(row["isvip"])) == 2 {
+	now := s.now().Unix()
+	price := atoi(str(row["view_price"]))
+	isLimitFree := atoi64(str(row["free_sdate"])) < now && now < atoi64(str(row["free_edate"]))
+	if play && atoi(str(row["isvip"])) == 2 && price > 0 && !isLimitFree {
 		count, err := s.store.BoughtCount(ctx, atoi(str(user["uid"])), vodID)
 		if err != nil {
 			return nil, -1, vodMediaFailMessage(play), err
@@ -661,7 +668,6 @@ func (s *ListingService) reqMedia(ctx context.Context, token string, vodID int, 
 		}
 		data["encurl"] = 0
 	}
-	now := s.now().Unix()
 	if price == 0 || (atoi64(str(row["free_sdate"])) < now && now < atoi64(str(row["free_edate"]))) {
 		data["httpurl"] = httpURL
 		if err := s.recordVODMedia(ctx, user, vodID, playIndex, play, false, now); err != nil {
@@ -867,6 +873,15 @@ func (s *ListingService) userByToken(ctx context.Context, token string) (map[str
 	if user == nil {
 		return map[string]interface{}{"uid": "0", "sid": sid}, nil
 	}
+	if atoi(str(user["uid"])) > 0 && user["perms"] == nil {
+		if groupStore, ok := s.auth.(AuthGroupStore); ok {
+			groups, err := groupStore.Groups(ctx)
+			if err != nil {
+				return nil, err
+			}
+			user["perms"] = initVODPerm(initVODGids(user, s.now), groups)
+		}
+	}
 	return user, nil
 }
 
@@ -1001,6 +1016,162 @@ func getVODPermInt(perms interface{}, key string) int {
 		}
 	}
 	return 0
+}
+
+func initVODGids(user map[string]interface{}, now func() time.Time) []int {
+	mainGID := atoi(str(user["gid"]))
+	if atoi(str(user["sysgid"])) > 0 {
+		mainGID = atoi(str(user["sysgid"]))
+	}
+	gids := []int{mainGID}
+	var extra map[string]interface{}
+	switch typed := user["gids"].(type) {
+	case map[string]interface{}:
+		extra = typed
+	case string:
+		if typed != "" {
+			_ = json.Unmarshal([]byte(typed), &extra)
+		}
+	}
+	ts := now().Unix()
+	for gid, exptime := range extra {
+		if atoi(str(exptime)) == 0 || atoi64(str(exptime)) > ts {
+			gids = append(gids, atoi(str(gid)))
+		}
+	}
+	return uniqueVODInts(gids)
+}
+
+func initVODPerm(gids []int, groups []map[string]interface{}) map[string]interface{} {
+	selected := make([]map[string]interface{}, 0, len(gids))
+	for _, gid := range gids {
+		for _, group := range groups {
+			if atoi(str(group["scope"])) > 0 || atoi(str(group["gid"])) != gid {
+				continue
+			}
+			selected = append(selected, group)
+			break
+		}
+	}
+	sort.SliceStable(selected, func(i, j int) bool {
+		return atoi(str(selected[i]["weight"])) > atoi(str(selected[j]["weight"]))
+	})
+	multiPerms := make([]map[string]interface{}, 0, len(selected))
+	for _, group := range selected {
+		multiPerms = append(multiPerms, parseVODPermMap(group["perms"]))
+	}
+	return computeVODPerm(multiPerms)
+}
+
+func parseVODPermMap(value interface{}) map[string]interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return typed
+	case string:
+		if typed == "" {
+			return map[string]interface{}{}
+		}
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(typed), &parsed); err != nil {
+			return map[string]interface{}{}
+		}
+		return parsed
+	default:
+		return map[string]interface{}{}
+	}
+}
+
+func computeVODPerm(multiPerms []map[string]interface{}) map[string]interface{} {
+	keys := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, perms := range multiPerms {
+		for key := range perms {
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
+	}
+
+	result := make(map[string]interface{}, len(keys))
+	for _, key := range keys {
+		switch strings.SplitN(key, ".", 2)[0] {
+		case "allow", "deny":
+			value := 0
+			for _, perms := range multiPerms {
+				if atoi(str(perms[key])) == 1 {
+					value = 1
+					break
+				}
+			}
+			result[key] = value
+		case "min":
+			value := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; ok {
+					value = minVODInt(value, atoi(str(perms[key])))
+				}
+			}
+			result[key] = value
+		case "max":
+			value := 0
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; ok {
+					value = maxVODInt(value, atoi(str(perms[key])))
+				}
+			}
+			result[key] = value
+		case "list":
+			value := ""
+			for _, perms := range multiPerms {
+				if str(perms[key]) == "" {
+					continue
+				}
+				if value == "" {
+					value = str(perms[key])
+				} else {
+					value += "," + str(perms[key])
+				}
+			}
+			result[key] = value
+		default:
+			for _, perms := range multiPerms {
+				if _, ok := perms[key]; ok {
+					result[key] = perms[key]
+					break
+				}
+			}
+		}
+	}
+	return result
+}
+
+func uniqueVODInts(values []int) []int {
+	out := make([]int, 0, len(values))
+	seen := map[int]struct{}{}
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func minVODInt(a int, b int) int {
+	if a == 0 || b < a {
+		return b
+	}
+	return a
+}
+
+func maxVODInt(a int, b int) int {
+	if b > a {
+		return b
+	}
+	return a
 }
 
 func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {

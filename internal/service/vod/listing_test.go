@@ -33,6 +33,7 @@ type fakeListingStore struct {
 	counters            []string
 	favoriteCount       int
 	boughtCount         int
+	boughtCountCalls    int
 	playLogCount        int
 	downLogCount        int
 	recordedPlay        *vodMediaRecord
@@ -259,6 +260,7 @@ func (s *fakeListingStore) FavoriteCount(context.Context, int, int) (int, error)
 }
 
 func (s *fakeListingStore) BoughtCount(context.Context, int, int) (int, error) {
+	s.boughtCountCalls++
 	return s.boughtCount, nil
 }
 
@@ -694,6 +696,69 @@ func TestReqPlayRejectsVIPWithoutPerm(t *testing.T) {
 	}
 }
 
+func TestReqPlayInitializesVIPPermsFromGroups(t *testing.T) {
+	store := &fakeListingStore{
+		vodByID: map[string]interface{}{
+			"vodid":          "100",
+			"showtype":       "0",
+			"play_url":       "p/index.m3u8",
+			"play_srvid":     "9",
+			"view_price":     "0",
+			"isvip":          "1",
+			"sysgid_exptime": "0",
+		},
+	}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{
+		user: map[string]interface{}{
+			"uid":            "5",
+			"sid":            "s",
+			"gid":            "4",
+			"sysgid":         "6",
+			"sysgid_exptime": "2000000000",
+		},
+		groups: []map[string]interface{}{
+			{"gid": "4", "scope": "0", "weight": "4", "perms": `{"allow.vod.vip":"0","max.vod.play.daynum":"40"}`},
+			{"gid": "6", "scope": "0", "weight": "6", "perms": `{"allow.vod.vip":"1","max.vod.play.daynum":"1000"}`},
+		},
+	})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看" || data["httpurl"] != "https://cover.example.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+}
+
+func TestReqPlayIsVIPTwoFreeVODDoesNotRequirePurchase(t *testing.T) {
+	store := &fakeListingStore{
+		vodByID: map[string]interface{}{
+			"vodid":      "100",
+			"showtype":   "0",
+			"play_url":   "p/index.m3u8",
+			"play_srvid": "9",
+			"view_price": "0",
+			"isvip":      "2",
+		},
+		boughtCount: 0,
+	}
+	service := NewListingService(store, "https://res.example.test", 50).WithAuth(fakeVODAuth{user: map[string]interface{}{"uid": "5", "sid": "s", "perms": map[string]interface{}{}}})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	data, retcode, errmsg, err := service.ReqPlay(context.Background(), "token", 100, 0)
+	if err != nil {
+		t.Fatalf("reqplay: %v", err)
+	}
+	if retcode != 0 || errmsg != "免费观看" || data["httpurl"] != "https://cover.example.test/p/index.m3u8" {
+		t.Fatalf("retcode=%d errmsg=%q data=%#v", retcode, errmsg, data)
+	}
+	if store.boughtCountCalls != 0 {
+		t.Fatalf("free isvip=2 vod should not query purchase count, calls=%d", store.boughtCountCalls)
+	}
+}
+
 func TestReqDownFreeVOD(t *testing.T) {
 	store := &fakeListingStore{vodByID: map[string]interface{}{
 		"vodid":      "100",
@@ -849,11 +914,16 @@ func validErrorReportRequest() ErrorReportRequest {
 }
 
 type fakeVODAuth struct {
-	user map[string]interface{}
+	user   map[string]interface{}
+	groups []map[string]interface{}
 }
 
 func (a fakeVODAuth) UserBySession(context.Context, string) (map[string]interface{}, error) {
 	return a.user, nil
+}
+
+func (a fakeVODAuth) Groups(context.Context) ([]map[string]interface{}, error) {
+	return a.groups, nil
 }
 
 func fixtureVODRows() []map[string]interface{} {

@@ -1523,9 +1523,9 @@ func (r *Repository) CreateFeedback(ctx context.Context, input domain.FeedbackCr
 		return 0, nil
 	}
 	result, err := r.db.ExecContext(ctx, `INSERT INTO feedbacks
-		(uid, cid, content, payid, payname, payaccount, aids, ctimestamp, ip, device, longids, shortids)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		input.UID, input.CID, input.Content, input.PayID, input.PayName, input.PayAccount, input.AIDs, input.CreatedAt, input.IP, input.Device, input.LongIDs, input.ShortIDs,
+		(uid, cid, content, url, contact, payid, payname, payaccount, aids, ctimestamp, ip, device, replytext, longids, shortids)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		input.UID, input.CID, input.Content, "", "", input.PayID, input.PayName, input.PayAccount, input.AIDs, input.CreatedAt, input.IP, input.Device, "", input.LongIDs, input.ShortIDs,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert feedback: %w", err)
