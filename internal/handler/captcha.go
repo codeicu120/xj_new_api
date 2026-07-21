@@ -72,7 +72,7 @@ func (h *CaptchaHandler) image(c *gin.Context) {
 	body, err := h.service.PNG(c.Request.URL.RawQuery)
 	c.Header("X-Served-By", "newbie")
 	if errors.Is(err, captchaService.ErrInvalidSecret) {
-		c.JSON(http.StatusNotFound, legacyjson.Response{RetCode: -4, ErrMsg: "验证码无效", Data: map[string]interface{}{}})
+		c.JSON(http.StatusNotFound, legacyjson.NotFound("验证码无效"))
 		return
 	}
 	if err != nil {

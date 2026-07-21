@@ -1,9 +1,15 @@
 package captcha
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
+	"image/png"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type staticSecretGenerator struct {
@@ -66,6 +72,17 @@ func TestServiceReqV2ReturnsBase64ImageAndKey(t *testing.T) {
 	if !strings.HasPrefix(decoded, "data:image/png;base64,") {
 		t.Fatalf("unexpected picurl prefix %q", decoded[:min(len(decoded), 32)])
 	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(decoded, "data:image/png;base64,"))
+	if err != nil {
+		t.Fatalf("decode png base64: %v", err)
+	}
+	img, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("decode png: %v", err)
+	}
+	if img.Bounds().Dx() != 100 || img.Bounds().Dy() != 34 {
+		t.Fatalf("unexpected captcha image size %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
 }
 
 func TestServicePNGRejectsInvalidSecret(t *testing.T) {
@@ -121,4 +138,31 @@ func TestServiceReqSecretCanRenderPNG(t *testing.T) {
 	if len(body) < 24 || string(body[:8]) != "\x89PNG\r\n\x1a\n" {
 		t.Fatalf("expected PNG body, got %q", body[:min(len(body), 8)])
 	}
+}
+
+func TestServicePNGUsesSecretCode(t *testing.T) {
+	service := NewService(1, 0, nil)
+	left := secretForTestCode(t, "1111")
+	right := secretForTestCode(t, "2222")
+
+	leftBody, err := service.PNG(left)
+	if err != nil {
+		t.Fatalf("render left png: %v", err)
+	}
+	rightBody, err := service.PNG(right)
+	if err != nil {
+		t.Fatalf("render right png: %v", err)
+	}
+	if bytes.Equal(leftBody, rightBody) {
+		t.Fatal("expected different captcha images for different codes")
+	}
+}
+
+func secretForTestCode(t *testing.T, code string) string {
+	t.Helper()
+	encrypted, err := phpEncrypt(code+"."+strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10), "28ea4")
+	if err != nil {
+		t.Fatalf("encrypt secret: %v", err)
+	}
+	return hex.EncodeToString([]byte(encrypted))
 }

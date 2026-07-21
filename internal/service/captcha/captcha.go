@@ -28,7 +28,7 @@ func (RandomSecretGenerator) Generate(style int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("generate captcha secret: %w", err)
 	}
-	plain := code + "." + strconv.FormatInt(time.Now().Add(5*time.Minute).Unix(), 10)
+	plain := code + "." + strconv.FormatInt(time.Now().Add(10*time.Minute).Unix(), 10)
 	encrypted, err := phpEncrypt(plain, "28ea4")
 	if err != nil {
 		return "", fmt.Errorf("encrypt captcha secret: %w", err)
@@ -87,10 +87,11 @@ func (s *Service) ReqV2() (domain.CaptchaReqV2Data, error) {
 }
 
 func (s *Service) PNG(secret string) ([]byte, error) {
-	if _, err := unpackSecret(secret); err != nil {
+	code, err := unpackSecret(secret)
+	if err != nil {
 		return nil, err
 	}
-	return NewTestImageService().PNG()
+	return NewTestImageService().PNGForCode(code)
 }
 
 func (s *Service) Verify(secret, code string) bool {
