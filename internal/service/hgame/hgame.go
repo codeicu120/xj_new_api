@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"xj_comp/internal/domain"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type Store interface {
@@ -17,13 +18,19 @@ type Store interface {
 type Service struct {
 	store           Store
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 func NewService(store Store, resourceBaseURL string) *Service {
 	return &Service{store: store, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/")}
 }
 
 func (s *Service) Index(ctx context.Context, page int) (domain.HGameIndexData, int, string, error) {
+	return s.IndexForRequest(ctx, page, resourceurl.Request{})
+}
+func (s *Service) IndexForRequest(ctx context.Context, page int, req resourceurl.Request) (domain.HGameIndexData, int, string, error) {
 	const pageSize = 20
 	total, err := s.store.Count(ctx, false, 0)
 	if err != nil {
@@ -48,22 +55,29 @@ func (s *Service) Index(ctx context.Context, page int) (domain.HGameIndexData, i
 	if err != nil {
 		return domain.HGameIndexData{}, -1, "获取游戏列表失败", err
 	}
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	if s.resources != nil {
+		resolved, err = s.resources.Resolve(ctx, req)
+		if err != nil {
+			return domain.HGameIndexData{}, -1, "获取游戏列表失败", err
+		}
+	}
 	return domain.HGameIndexData{
 		Data: map[string]interface{}{
-			"list":  s.processRows(listRows),
-			"slide": s.processRows(slideRows),
+			"list":  s.processRows(listRows, resolved),
+			"slide": s.processRows(slideRows, resolved),
 		},
 	}, 0, "", nil
 }
 
-func (s *Service) processRows(rows []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processRows(rows []map[string]interface{}, resources resourceurl.Resolved) []map[string]interface{} {
 	result := []map[string]interface{}{}
 	for _, row := range rows {
 		result = append(result, map[string]interface{}{
 			"id":               atoi(row["id"]),
 			"name":             str(row["name"]),
-			"image":            resourceURL(s.resourceBaseURL, str(row["image"])),
-			"logo":             resourceURL(s.resourceBaseURL, str(row["logo"])),
+			"image":            resources.GetRes(str(row["image"]), ""),
+			"logo":             resources.GetRes(str(row["logo"]), ""),
 			"link":             str(row["link"]),
 			"download_ios":     str(row["download_ios"]),
 			"download_android": str(row["download_android"]),

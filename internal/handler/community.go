@@ -28,7 +28,7 @@ func (h *CommunityHandler) Listing(c *gin.Context) {
 		Action:      action,
 		PathParams:  params,
 		QueryPage:   inputValue(c, "page"),
-		IsH5Request: c.GetHeader("x-cookie-auth") != "",
+		IsH5Request: hasHeader(c, "x-cookie-auth"),
 		Token:       authToken(c),
 	})
 	c.Header("X-Served-By", "newbie")

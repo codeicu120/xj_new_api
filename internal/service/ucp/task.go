@@ -94,7 +94,7 @@ func (s *Service) TaskIndex(ctx context.Context, token string) (map[string]inter
 	}
 
 	return map[string]interface{}{
-		"user":        singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		"user":        singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups)),
 		"share":       share,
 		"comment":     comment,
 		"favorite":    favorite,
@@ -365,7 +365,7 @@ func (s *Service) TaskboxIndex(ctx context.Context, token string) (map[string]in
 	}
 	return map[string]interface{}{
 		"taskrows": processedTasks,
-		"logrows":  s.processTaskboxLogRows(logRows),
+		"logrows":  s.processTaskboxLogRows(ctx, logRows),
 	}, nil
 }
 
@@ -567,7 +567,7 @@ func (s *Service) TaskboxLogListing(ctx context.Context, token string, page int)
 		return nil, -1, "获取任务宝箱日志失败", err
 	}
 	return map[string]interface{}{
-		"logrows":  s.processTaskboxLogRows(rows),
+		"logrows":  s.processTaskboxLogRows(ctx, rows),
 		"pageinfo": pageInfo(total, pageSize, page, "/ucp/taskbox/taskboxlog?page=[?]"),
 	}, 0, "", nil
 }
@@ -586,14 +586,14 @@ func (s *Service) processTaskboxRows(rows []map[string]interface{}) []map[string
 	return result
 }
 
-func (s *Service) processTaskboxLogRows(rows []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processTaskboxLogRows(ctx context.Context, rows []map[string]interface{}) []map[string]interface{} {
 	result := []map[string]interface{}{}
 	for _, row := range rows {
 		result = append(result, map[string]interface{}{
 			"logid":      str(row["logid"]),
 			"username":   nullableValue(row["username"]),
 			"nickname":   nullableValue(row["nickname"]),
-			"avatar_url": s.avatarURL(str(row["avatar"])),
+			"avatar_url": s.avatarURL(ctx, str(row["avatar"])),
 			"addtime":    formatUnix(atoi64(row["addtime"])),
 			"tasktype":   taskboxType(atoi(row["taskid"])),
 			"addcoin":    str(row["addcoin"]),

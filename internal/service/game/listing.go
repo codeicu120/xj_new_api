@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"xj_comp/internal/domain"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type GameStore interface {
@@ -21,6 +22,12 @@ type BroadcastStore interface {
 type ListingService struct {
 	store           GameStore
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
+}
+
+func (s *ListingService) WithResourceResolver(r *resourceurl.Resolver) *ListingService {
+	s.resources = r
+	return s
 }
 
 func NewListingService(store GameStore, resourceBaseURL string) *ListingService {
@@ -31,14 +38,25 @@ func NewListingService(store GameStore, resourceBaseURL string) *ListingService 
 }
 
 func (s *ListingService) List(ctx context.Context, platformID int, categoryID int) (domain.GamesData, error) {
+	return s.ListForRequest(ctx, platformID, categoryID, resourceurl.Request{})
+}
+
+func (s *ListingService) ListForRequest(ctx context.Context, platformID int, categoryID int, req resourceurl.Request) (domain.GamesData, error) {
 	rows, err := s.store.ListActive(ctx, platformID, categoryID)
 	if err != nil {
 		return domain.GamesData{}, fmt.Errorf("list games: %w", err)
 	}
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	if s.resources != nil {
+		resolved, err = s.resources.Resolve(ctx, req)
+		if err != nil {
+			return domain.GamesData{}, err
+		}
+	}
 	for _, row := range rows {
-		prefixResource(row, "icon", s.resourceBaseURL)
-		prefixResource(row, "image", s.resourceBaseURL)
-		prefixResource(row, "cover", s.resourceBaseURL)
+		for _, key := range []string{"icon", "image", "cover"} {
+			row[key] = resolved.GetRes(strings.TrimLeft(fmt.Sprint(row[key]), "/"), "")
+		}
 	}
 	return domain.GamesData{Data: rows}, nil
 }

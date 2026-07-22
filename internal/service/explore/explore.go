@@ -11,6 +11,7 @@ import (
 
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type AuthStore interface {
@@ -35,9 +36,12 @@ type Service struct {
 	auth            AuthStore
 	store           Store
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 	now             func() time.Time
 	randIntn        func(int) int
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 func NewService(auth AuthStore, store Store, resourceBaseURL string) *Service {
 	return &Service{
@@ -50,6 +54,17 @@ func NewService(auth AuthStore, store Store, resourceBaseURL string) *Service {
 }
 
 func (s *Service) Index(ctx context.Context, token string) (domain.ExploreIndexData, error) {
+	return s.IndexForRequest(ctx, token, resourceurl.Request{})
+}
+func (s *Service) IndexForRequest(ctx context.Context, token string, req resourceurl.Request) (domain.ExploreIndexData, error) {
+	resources := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	var err error
+	if s.resources != nil {
+		resources, err = s.resources.Resolve(ctx, req)
+		if err != nil {
+			return domain.ExploreIndexData{}, err
+		}
+	}
 	user, err := s.userWithPerms(ctx, token)
 	if err != nil {
 		return domain.ExploreIndexData{}, err
@@ -75,7 +90,7 @@ func (s *Service) Index(ctx context.Context, token string) (domain.ExploreIndexD
 		})
 	}
 	return domain.ExploreIndexData{
-		TabRows: processTabs(tabs, s.resourceBaseURL),
+		TabRows: processTabsResolved(tabs, resources),
 		DayRows: dayRows,
 		SignData: map[string]interface{}{
 			"signed_today":    boolInt(int64(atoi(user["signed_lasttime"])) >= today),
@@ -190,11 +205,18 @@ func (s *Service) VodTaskShow(ctx context.Context, token string, vid int) (map[s
 	if reqcoin <= 0 {
 		return nil, -1, "领取的金币不可以是0", nil
 	}
+	resources := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	if s.resources != nil {
+		resources, err = s.resources.ResolveContext(ctx)
+		if err != nil {
+			return nil, -1, "获取激励视频失败", err
+		}
+	}
 	return map[string]interface{}{
 		"logid":   logid,
 		"reqcoin": reqcoin,
 		"reqtime": reqtime,
-		"vodrow":  processVodTaskRow(vodrow, s.resourceBaseURL),
+		"vodrow":  processVodTaskRowResolved(vodrow, resources),
 	}, 0, "", nil
 }
 
@@ -232,14 +254,18 @@ func (s *Service) userWithPerms(ctx context.Context, token string) (map[string]i
 }
 
 func processTabs(rows []map[string]interface{}, resourceBaseURL string) []map[string]interface{} {
+	return processTabsResolved(rows, resourceurl.Resolved{BaseURL: resourceBaseURL})
+}
+
+func processTabsResolved(rows []map[string]interface{}, resources resourceurl.Resolved) []map[string]interface{} {
 	result := []map[string]interface{}{}
 	for _, row := range rows {
 		result = append(result, map[string]interface{}{
 			"tabkey":    str(row["tabkey"]),
 			"tabname":   str(row["tabname"]),
 			"intro":     str(row["intro"]),
-			"coverpic":  resourceURL(resourceBaseURL, str(row["coverpic"])),
-			"coverpic2": resourceURL(resourceBaseURL, str(row["coverpic2"])),
+			"coverpic":  resources.GetRes(str(row["coverpic"]), ""),
+			"coverpic2": resources.GetRes(str(row["coverpic2"]), ""),
 			"extjson":   decodeJSON(row["extjson"]),
 		})
 	}
@@ -247,6 +273,10 @@ func processTabs(rows []map[string]interface{}, resourceBaseURL string) []map[st
 }
 
 func processVodTaskRow(row map[string]interface{}, resourceBaseURL string) map[string]interface{} {
+	return processVodTaskRowResolved(row, resourceurl.Resolved{BaseURL: resourceBaseURL})
+}
+
+func processVodTaskRowResolved(row map[string]interface{}, resources resourceurl.Resolved) map[string]interface{} {
 	if len(row) == 0 {
 		return map[string]interface{}{}
 	}
@@ -254,13 +284,13 @@ func processVodTaskRow(row map[string]interface{}, resourceBaseURL string) map[s
 		"vid":       atoi(row["vid"]),
 		"title":     str(row["title"]),
 		"intro":     str(row["intro"]),
-		"coverpic":  resourceURL(resourceBaseURL, str(row["coverpic"])),
+		"coverpic":  resources.GetRes(str(row["coverpic"]), ""),
 		"playurl":   str(row["playurl"]),
 		"portrait":  atoi(row["portrait"]),
 		"countdown": atoi(row["countdown"]),
 		"pname":     str(row["pname"]),
 		"pdscr":     str(row["pdscr"]),
-		"picon":     resourceURL(resourceBaseURL, str(row["picon"])),
+		"picon":     resources.GetRes(str(row["picon"]), ""),
 		"purl":      str(row["purl"]),
 	}
 }

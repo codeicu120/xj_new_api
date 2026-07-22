@@ -10,6 +10,7 @@ import (
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
 	vodRepo "xj_comp/internal/repository/vod"
+	"xj_comp/internal/service/resourceurl"
 )
 
 const specialSampleParams = "$sptype:0-$orderby:0-$page:1"
@@ -45,18 +46,29 @@ type SpecialService struct {
 	store     SpecialStore
 	authStore SpecialAuthStore
 	processor *ListingService
+	resources *resourceurl.Resolver
 }
 
 type SpecialListingRequest struct {
-	PathParams  string
-	QueryPage   string
-	IsH5Request bool
+	PathParams    string
+	QueryPage     string
+	IsH5Request   bool
+	HasCookieAuth bool
+	ClientIP      string
 }
 
 type SpecialDetailRequest struct {
-	SPID        int
-	PathParams  string
-	IsH5Request bool
+	SPID          int
+	PathParams    string
+	IsH5Request   bool
+	HasCookieAuth bool
+	ClientIP      string
+}
+
+func (s *SpecialService) WithResourceResolver(resolver *resourceurl.Resolver) *SpecialService {
+	s.resources = resolver
+	s.processor.WithResourceResolver(resolver)
+	return s
 }
 
 func NewSpecialService(store SpecialStore, authStore SpecialAuthStore, resourceBaseURL string, vipDiscount int) *SpecialService {
@@ -68,6 +80,10 @@ func NewSpecialService(store SpecialStore, authStore SpecialAuthStore, resourceB
 }
 
 func (s *SpecialService) Listing(ctx context.Context, req SpecialListingRequest) (domain.SpecialListingData, error) {
+	resources, err := s.resolveResources(ctx, req.HasCookieAuth, req.ClientIP)
+	if err != nil {
+		return domain.SpecialListingData{}, err
+	}
 	params := parseSpecialParams(req.PathParams)
 	pageFromInput := false
 	if atoi(params["page"]) == 0 {
@@ -94,7 +110,7 @@ func (s *SpecialService) Listing(ctx context.Context, req SpecialListingRequest)
 	if err != nil {
 		return domain.SpecialListingData{}, err
 	}
-	specialRows := s.processSpecialRows(rowsWithVODs)
+	specialRows := s.processSpecialRows(rowsWithVODs, resources)
 
 	pageinfo := pageInfo(total, pageSize, page, "/special/listing-"+buildSpecialParams(params, map[string]string{"page": "[?]"}))
 	actorRows := []map[string]interface{}{}
@@ -103,7 +119,7 @@ func (s *SpecialService) Listing(ctx context.Context, req SpecialListingRequest)
 		if err != nil {
 			return domain.SpecialListingData{}, fmt.Errorf("list actor specials: %w", err)
 		}
-		actorRows = s.processSpecialRows(ensureSpecialVODRows(actors))
+		actorRows = s.processSpecialRows(ensureSpecialVODRows(actors), resources)
 	}
 	if atoi(params["orderby"]) == 3 {
 		if err := s.store.UpdateSpecialRand(ctx, minSpecialID(rows)); err != nil {
@@ -121,6 +137,10 @@ func (s *SpecialService) Listing(ctx context.Context, req SpecialListingRequest)
 }
 
 func (s *SpecialService) Detail(ctx context.Context, req SpecialDetailRequest) (domain.SpecialDetailData, error) {
+	resources, err := s.resolveResources(ctx, req.HasCookieAuth, req.ClientIP)
+	if err != nil {
+		return domain.SpecialDetailData{}, err
+	}
 	row, err := s.store.SpecialByID(ctx, req.SPID)
 	if err != nil {
 		return domain.SpecialDetailData{}, fmt.Errorf("get special: %w", err)
@@ -145,7 +165,7 @@ func (s *SpecialService) Detail(ctx context.Context, req SpecialDetailRequest) (
 
 	row = cloneMap(row)
 	return domain.SpecialDetailData{
-		Row:     s.processSpecialRows([]map[string]interface{}{row})[0],
+		Row:     s.processSpecialRows([]map[string]interface{}{row}, resources)[0],
 		VODRows: vodRows,
 	}, nil
 }
@@ -263,7 +283,13 @@ func (s *SpecialService) specialVODRows(ctx context.Context, ids []int, orderBy 
 	if err != nil {
 		return nil, fmt.Errorf("list special tags: %w", err)
 	}
-	return s.processor.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5, s.processor.now().Unix()), nil
+	env := processEnv(categories, areas, years, servers, tagRows)
+	resources, err := s.resolveResources(ctx, resourceurl.RequestFromContext(ctx).HasCookieAuth, resourceurl.RequestFromContext(ctx).ClientIP)
+	if err != nil {
+		return nil, err
+	}
+	env["resources"] = resources
+	return s.processor.processRows(rows, env, isH5, s.processor.now().Unix()), nil
 }
 
 func (s *SpecialService) listMetadata(ctx context.Context) ([]map[string]interface{}, []map[string]interface{}, []map[string]interface{}, []map[string]interface{}, error) {
@@ -286,7 +312,7 @@ func (s *SpecialService) listMetadata(ctx context.Context) ([]map[string]interfa
 	return categories, areas, years, servers, nil
 }
 
-func (s *SpecialService) processSpecialRows(rows []map[string]interface{}) []map[string]interface{} {
+func (s *SpecialService) processSpecialRows(rows []map[string]interface{}, resources resourceurl.Resolved) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]interface{}{
@@ -294,9 +320,9 @@ func (s *SpecialService) processSpecialRows(rows []map[string]interface{}) []map
 			"sptype":     fmt.Sprint(row["sptype"]),
 			"spname":     fmt.Sprint(row["spname"]),
 			"intro":      fmt.Sprint(row["intro"]),
-			"coverpic":   s.resourceURL(fmt.Sprint(row["coverpic"])),
+			"coverpic":   resources.GetRes(fmt.Sprint(row["coverpic"]), ""),
 			"coverx":     fmt.Sprint(row["coverpic"]),
-			"avatar":     s.resourceURL(fmt.Sprint(row["avatar"])),
+			"avatar":     resources.GetRes(fmt.Sprint(row["avatar"]), ""),
 			"avatarx":    fmt.Sprint(row["avatar"]),
 			"cup":        fmt.Sprint(row["cup"]),
 			"age":        fmt.Sprint(row["age"]),
@@ -311,15 +337,11 @@ func (s *SpecialService) processSpecialRows(rows []map[string]interface{}) []map
 	return out
 }
 
-func (s *SpecialService) resourceURL(uri string) string {
-	uri = strings.TrimSpace(uri)
-	if uri == "" {
-		return ""
+func (s *SpecialService) resolveResources(ctx context.Context, hasCookieAuth bool, clientIP string) (resourceurl.Resolved, error) {
+	if s.resources != nil {
+		return s.resources.Resolve(ctx, resourceurl.Request{HasCookieAuth: hasCookieAuth, ClientIP: clientIP})
 	}
-	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
-		return uri
-	}
-	return strings.TrimRight(s.processor.resourceBaseURL, "/") + "/" + strings.TrimLeft(uri, "/")
+	return resourceurl.Resolved{BaseURL: s.processor.resourceBaseURL, Timestamp: s.processor.now().Unix()}, nil
 }
 
 func parseSpecialParams(raw string) map[string]string {

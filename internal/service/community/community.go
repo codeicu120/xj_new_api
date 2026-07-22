@@ -13,6 +13,7 @@ import (
 	"xj_comp/internal/domain"
 	communityRepo "xj_comp/internal/repository/community"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -66,6 +67,22 @@ type Service struct {
 	store           Store
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
+	resolved        resourceurl.Resolved
+}
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
+
+func (s *Service) requestService(ctx context.Context) *Service {
+	clone := *s
+	clone.resolved = resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		clone.resolved = resourceurl.Resolved{Timestamp: s.now().Unix()}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			clone.resolved = value
+		}
+	}
+	return &clone
 }
 
 type ListingRequest struct {
@@ -263,7 +280,7 @@ func (s *Service) CommentListing(ctx context.Context, req CommentListingRequest)
 	if err != nil {
 		return domain.CommunityCommentListingData{}, err
 	}
-	rows = s.processComments(rows)
+	rows = s.requestService(ctx).processComments(rows)
 	uid := atoi(user["uid"])
 	if uid > 0 {
 		upIDs, err := s.store.UpCommentIDs(ctx, uid, commentIDs(rows))
@@ -318,7 +335,7 @@ func (s *Service) Show(ctx context.Context, req ShowRequest) (map[string]interfa
 	return map[string]interface{}{
 		"row":               processed[0],
 		"totalCommentCount": total,
-		"comments":          s.processComments(comments),
+		"comments":          s.requestService(ctx).processComments(comments),
 	}, nil
 }
 
@@ -607,6 +624,7 @@ func (s *Service) Post(ctx context.Context, token string, input domain.Community
 }
 
 func (s *Service) processTopics(ctx context.Context, rows []map[string]interface{}, uid int) ([]map[string]interface{}, error) {
+	s = s.requestService(ctx)
 	if len(rows) == 0 {
 		return []map[string]interface{}{}, nil
 	}
@@ -872,33 +890,36 @@ func extractMediaRows(html string) map[string][]map[string]interface{} {
 }
 
 func (s *Service) coverURL(uri string, srvid int, servers []map[string]interface{}) string {
-	if uri == "" || strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+	if uri == "" {
 		return uri
 	}
 	if srvid > 0 {
+		if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+			return uri
+		}
 		for _, server := range servers {
 			if str(server["srvtype"]) == "cover" && atoi(server["srvid"]) == srvid {
 				return strings.TrimRight(str(server["srvhost"]), "/") + "/" + strings.TrimLeft(uri, "/")
 			}
 		}
 	}
-	return s.resourceBaseURL + "/" + strings.TrimLeft(uri, "/")
+	return s.resolved.GetRes(uri, "")
 }
 
 func (s *Service) avatarURL(avatar string) string {
 	if avatar == "" {
-		return s.resourceBaseURL + "/sysavatar/noavatar.png"
+		return s.resolved.GetRes("sysavatar/noavatar.png", "")
 	}
 	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-		return avatar
+		return s.resolved.GetRes(avatar, "")
 	}
 	if isDigits(avatar) {
 		return avatar
 	}
 	if strings.HasPrefix(avatar, "avatar/") {
-		return s.resourceBaseURL + "/C1/" + strings.TrimLeft(avatar, "/")
+		return s.resolved.GetRes(avatar, "C1")
 	}
-	return s.resourceBaseURL + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+	return s.resolved.GetRes(avatar, "C1/avatar")
 }
 
 func parseParams(raw string, keys []string, defaults []string) map[string]string {

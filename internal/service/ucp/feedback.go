@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"xj_comp/internal/domain"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type FeedbackCreateRequest struct {
@@ -95,7 +96,7 @@ func (s *Service) FeedbackNewListing(ctx context.Context, token string, feedback
 	}, 0, "", nil
 }
 
-func (s *Service) FeedbackDetail(ctx context.Context, token string, id int) (domain.UCPFeedbackDetailData, int, string, error) {
+func (s *Service) FeedbackDetail(ctx context.Context, token string, id int, resourceReq ...resourceurl.Request) (domain.UCPFeedbackDetailData, int, string, error) {
 	user, err := s.authenticatedPaymentUser(ctx, token)
 	if err != nil {
 		return domain.UCPFeedbackDetailData{}, -1, "获取反馈详情失败", err
@@ -113,7 +114,11 @@ func (s *Service) FeedbackDetail(ctx context.Context, token string, id int) (dom
 		return domain.UCPFeedbackDetailData{}, -1, "记录不存在或已被删除", nil
 	}
 
-	picURLs, err := s.feedbackPicURLs(ctx, str(row["aids"]))
+	resources, err := s.resolveResources(ctx, resourceReq)
+	if err != nil {
+		return domain.UCPFeedbackDetailData{}, -1, "获取反馈详情失败", err
+	}
+	picURLs, err := s.feedbackPicURLs(ctx, str(row["aids"]), resources)
 	if err != nil {
 		return domain.UCPFeedbackDetailData{}, -1, "获取反馈详情失败", err
 	}
@@ -232,7 +237,7 @@ func feedbackPayItemName(payrow map[string]interface{}) interface{} {
 	return payrow["itemname"]
 }
 
-func (s *Service) feedbackPicURLs(ctx context.Context, aids string) ([]string, error) {
+func (s *Service) feedbackPicURLs(ctx context.Context, aids string, resources resourceurl.Resolved) ([]string, error) {
 	ids := parseIDList(aids)
 	if len(ids) == 0 {
 		return nil, nil
@@ -247,7 +252,7 @@ func (s *Service) feedbackPicURLs(ctx context.Context, aids string) ([]string, e
 		if uri == "" {
 			continue
 		}
-		urls = append(urls, s.resourceURL(uri))
+		urls = append(urls, resources.GetRes(uri, ""))
 	}
 	return urls, nil
 }

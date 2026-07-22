@@ -10,6 +10,7 @@ import (
 
 	"xj_comp/internal/domain"
 	amazingRepo "xj_comp/internal/repository/amazing"
+	"xj_comp/internal/service/resourceurl"
 )
 
 const listingSampleParams = "$category_id:0-$orderby:0-$page:1"
@@ -23,6 +24,12 @@ type ListingService struct {
 	store           SoftwareStore
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
+}
+
+func (s *ListingService) WithResourceResolver(r *resourceurl.Resolver) *ListingService {
+	s.resources = r
+	return s
 }
 
 type ListingRequest struct {
@@ -62,7 +69,14 @@ func (s *ListingService) List(ctx context.Context, req ListingRequest) (domain.A
 	if err != nil {
 		return domain.AmazingListingData{}, fmt.Errorf("list amazing listing: %w", err)
 	}
-	s.prefixResourceRows(rows)
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		resolved, err = s.resources.ResolveContext(ctx)
+		if err != nil {
+			return domain.AmazingListingData{}, err
+		}
+	}
+	s.prefixResourceRows(rows, resolved)
 	return domain.AmazingListingData{
 		Now:      s.now().Unix(),
 		Rows:     rows,
@@ -112,13 +126,11 @@ func orderBy(action string) string {
 	}
 }
 
-func (s *ListingService) prefixResourceRows(rows []map[string]interface{}) {
+func (s *ListingService) prefixResourceRows(rows []map[string]interface{}, resolved resourceurl.Resolved) {
 	for _, row := range rows {
 		for _, key := range []string{"icon", "image"} {
 			value := fmt.Sprint(row[key])
-			if value != "" && !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
-				row[key] = s.resourceBaseURL + "/" + strings.TrimLeft(value, "/")
-			}
+			row[key] = resolved.GetRes(value, "")
 		}
 	}
 }

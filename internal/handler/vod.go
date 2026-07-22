@@ -27,7 +27,7 @@ func (h *VODHandler) Listing(c *gin.Context) {
 		Action:      action,
 		PathParams:  params,
 		QueryPage:   c.Query("page"),
-		IsH5Request: c.GetHeader("x-cookie-auth") != "",
+		IsH5Request: hasHeader(c, "x-cookie-auth"),
 	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -38,7 +38,7 @@ func (h *VODHandler) Listing(c *gin.Context) {
 }
 
 func (h *VODHandler) LikeRows(c *gin.Context) {
-	data, err := h.listingService.LikeRows(c.Request.Context(), c.GetHeader("x-cookie-auth") != "")
+	data, err := h.listingService.LikeRows(c.Request.Context(), hasHeader(c, "x-cookie-auth"))
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取猜你喜欢失败"))
@@ -54,7 +54,7 @@ func (h *VODHandler) Search(c *gin.Context) {
 		c.Query("wd"),
 		c.Query("free") == "1",
 		page,
-		c.GetHeader("x-cookie-auth") != "",
+		hasHeader(c, "x-cookie-auth"),
 	)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -70,7 +70,7 @@ func (h *VODHandler) MiniSearch(c *gin.Context) {
 		c.Request.Context(),
 		miniSearchInput(c, "wd"),
 		page,
-		c.GetHeader("x-cookie-auth") != "",
+		hasHeader(c, "x-cookie-auth"),
 	)
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -89,7 +89,7 @@ func miniSearchInput(c *gin.Context, key string) string {
 
 func (h *VODHandler) Show(c *gin.Context) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
-	data, err := h.listingService.Show(c.Request.Context(), vodID, c.GetHeader("x-cookie-auth") != "")
+	data, err := h.listingService.Show(c.Request.Context(), vodID, hasHeader(c, "x-cookie-auth"))
 	c.Header("X-Served-By", "newbie")
 	if errors.Is(err, vodService.ErrVODNotFound) {
 		c.JSON(http.StatusOK, legacyjson.Error("记录不存在或已删除"))

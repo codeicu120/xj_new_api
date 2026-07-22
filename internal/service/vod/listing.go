@@ -19,6 +19,7 @@ import (
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
 	vodRepo "xj_comp/internal/repository/vod"
+	"xj_comp/internal/service/resourceurl"
 )
 
 const sampleParams = "$cateid:0-$areaid:0-$yearid:0-$definition:0-$duration:0-$freetype:0-$mosaic:0-$langvoice:0-$orderby:0-$page:1"
@@ -92,6 +93,12 @@ type ListingService struct {
 	auth            AuthStore
 	limiter         VoteLimiter
 	now             func() time.Time
+	resources       *resourceurl.Resolver
+}
+
+func (s *ListingService) WithResourceResolver(r *resourceurl.Resolver) *ListingService {
+	s.resources = r
+	return s
 }
 
 type ListingRequest struct {
@@ -250,7 +257,7 @@ func (s *ListingService) List(ctx context.Context, req ListingRequest) (domain.V
 		Action:       req.Action,
 		SampleParams: sampleParams,
 		Params:       params,
-		VODRows:      s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), req.IsH5Request, now),
+		VODRows:      s.processRows(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), req.IsH5Request, now),
 		PageInfo:     pageInfo(total, pageSize, page, "/vod/"+req.Action+"-"+buildParams(params, map[string]string{"page": "[?]"})),
 		Orders:       optionRows([][2]interface{}{{1, "最多好评"}, {2, "最多播放"}, {3, "最高评分"}}),
 		Categories:   categories,
@@ -280,7 +287,7 @@ func (s *ListingService) LikeRows(ctx context.Context, isH5Request bool) (domain
 	}
 
 	return domain.VODLikeRowsData{
-		LikeRows: s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix()),
+		LikeRows: s.processRows(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, s.now().Unix()),
 	}, nil
 }
 
@@ -370,7 +377,7 @@ func (s *ListingService) miniSearchIndex(ctx context.Context, isH5Request bool) 
 	if err != nil {
 		return domain.SearchIndexData{}, fmt.Errorf("list mini hot tags: %w", err)
 	}
-	vodRows := s.processMiniRowsWithDiscount(hotRows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100)
+	vodRows := s.processMiniRowsWithDiscount(hotRows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, s.now().Unix(), 100)
 
 	return domain.SearchIndexData{
 		HotWords:    hotWords,
@@ -502,7 +509,7 @@ func (s *ListingService) miniSearchList(ctx context.Context, keyword string, pag
 	if err != nil {
 		return domain.MiniSearchListData{}, fmt.Errorf("list mini search tags: %w", err)
 	}
-	vodRows := s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, now, 100)
+	vodRows := s.processMiniRowsWithDiscount(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, now, 100)
 
 	return domain.MiniSearchListData{
 		Rows:     wrapVODRows(vodRows),
@@ -561,7 +568,7 @@ func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) 
 
 	env := processEnv(categories, areas, years, servers, allTagRows)
 	now := s.now().Unix()
-	vodRows := s.processRows([]map[string]interface{}{row}, env, isH5Request, now)
+	vodRows := s.processRows([]map[string]interface{}{row}, s.withResources(ctx, env), isH5Request, now)
 	vodRow := map[string]interface{}{}
 	if len(vodRows) > 0 {
 		vodRow = vodRows[0]
@@ -570,8 +577,8 @@ func (s *ListingService) Show(ctx context.Context, vodID int, isH5Request bool) 
 	return domain.VODShowData{
 		VODRow:      vodRow,
 		Categories:  categoryParents(categories, atoi(str(row["cateid"]))),
-		SimilarRows: s.processRows(similarRows, env, isH5Request, now),
-		LikeRows:    s.processRows(likeRows, env, isH5Request, now),
+		SimilarRows: s.processRows(similarRows, s.withResources(ctx, env), isH5Request, now),
+		LikeRows:    s.processRows(likeRows, s.withResources(ctx, env), isH5Request, now),
 	}, nil
 }
 
@@ -1187,7 +1194,7 @@ func (s *ListingService) ProcessRows(ctx context.Context, rows []map[string]inte
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}
-	return s.processRows(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix()), nil
+	return s.processRows(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, s.now().Unix()), nil
 }
 
 func (s *ListingService) ProcessRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
@@ -1216,7 +1223,7 @@ func (s *ListingService) ProcessMiniRows(ctx context.Context, rows []map[string]
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}
-	return s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), s.vipDiscount), nil
+	return s.processMiniRowsWithDiscount(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, s.now().Unix(), s.vipDiscount), nil
 }
 
 func (s *ListingService) ProcessMiniRowsFullPrice(ctx context.Context, rows []map[string]interface{}, isH5Request bool) ([]map[string]interface{}, error) {
@@ -1228,7 +1235,7 @@ func (s *ListingService) ProcessMiniRowsFullPrice(ctx context.Context, rows []ma
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}
-	return s.processMiniRowsWithDiscount(rows, processEnv(categories, areas, years, servers, tagRows), isH5Request, s.now().Unix(), 100), nil
+	return s.processMiniRowsWithDiscount(rows, s.withResources(ctx, processEnv(categories, areas, years, servers, tagRows)), isH5Request, s.now().Unix(), 100), nil
 }
 
 func (s *ListingService) listMetadata(ctx context.Context) ([]map[string]interface{}, []map[string]interface{}, []map[string]interface{}, []map[string]interface{}, error) {
@@ -1328,6 +1335,11 @@ func (s *ListingService) processRowsWithMode(rows []map[string]interface{}, env 
 	years := env["years"].(map[string]map[string]interface{})
 	servers := env["servers"].(map[string][]map[string]interface{})
 	tags := env["tags"].(map[string]map[string]interface{})
+	resolved, _ := env["resources"].(resourceurl.Resolved)
+	if resolved.BaseURL == "" {
+		resolved.BaseURL = s.resourceBaseURL
+		resolved.Timestamp = now
+	}
 	previewBase := ""
 	if list := servers["preview"]; len(list) > 0 {
 		previewBase = fmt.Sprint(list[0]["srvhost"])
@@ -1356,7 +1368,7 @@ func (s *ListingService) processRowsWithMode(rows []map[string]interface{}, env 
 			"vodid":           vodid,
 			"title":           str(row["title"]),
 			"intro":           str(row["intro"]),
-			"coverpic":        s.coverPic(coverRaw, atoi(str(row["cover_srvid"])), servers["cover"], isH5),
+			"coverpic":        s.coverPic(coverRaw, atoi(str(row["cover_srvid"])), servers["cover"], isH5, resolved),
 			"coverx":          coverRaw,
 			"createtime":      formatTimestamp(atoi64(str(row["ctimestamp"]))),
 			"updatetime":      formatTimestamp(atoi64(str(row["utimestamp"]))),
@@ -1688,21 +1700,37 @@ func pageSelector(pageNow int, totalPage int) []int {
 	return unique
 }
 
-func (s *ListingService) coverPic(uri string, srvid int, servers []map[string]interface{}, isH5 bool) string {
+func (s *ListingService) coverPic(uri string, srvid int, servers []map[string]interface{}, isH5 bool, values ...resourceurl.Resolved) string {
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if len(values) > 0 {
+		resolved = values[0]
+	}
 	if uri == "" {
 		return ""
 	}
-	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
-		return uri
-	}
 	if !isH5 && srvid > 0 {
+		if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+			return uri
+		}
 		for _, server := range servers {
 			if atoi(str(server["srvid"])) == srvid {
 				return strings.TrimRight(str(server["srvhost"]), "/") + "/" + strings.TrimLeft(uri, "/")
 			}
 		}
 	}
-	return s.resourceBaseURL + "/" + strings.TrimLeft(uri, "/")
+	return resolved.GetRes(uri, "")
+}
+
+func (s *ListingService) withResources(ctx context.Context, env map[string]interface{}) map[string]interface{} {
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{Timestamp: s.now().Unix()}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			resolved = value
+		}
+	}
+	env["resources"] = resolved
+	return env
 }
 
 func playLists(value string) []map[string]interface{} {

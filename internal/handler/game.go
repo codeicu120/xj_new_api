@@ -8,6 +8,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	gameService "xj_comp/internal/service/game"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type GameHandler struct {
@@ -47,7 +48,7 @@ func (h *GameHandler) Platforms(c *gin.Context) {
 func (h *GameHandler) Games(c *gin.Context) {
 	platformID, _ := strconv.Atoi(c.Query("platform_id"))
 	categoryID, _ := strconv.Atoi(c.Query("category_id"))
-	data, err := h.listingService.List(c.Request.Context(), platformID, categoryID)
+	data, err := h.listingService.ListForRequest(c.Request.Context(), platformID, categoryID, resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏列表失败"))
@@ -64,7 +65,7 @@ func (h *GameHandler) WaliGames(c *gin.Context) {
 		return
 	}
 
-	data, err := h.listingService.List(c.Request.Context(), 1, categoryID)
+	data, err := h.listingService.ListForRequest(c.Request.Context(), 1, categoryID, resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏列表失败"))
 		return
@@ -80,7 +81,7 @@ func (h *GameHandler) LotteryGames(c *gin.Context) {
 		return
 	}
 
-	data, err := h.listingService.List(c.Request.Context(), 0, categoryID)
+	data, err := h.listingService.ListForRequest(c.Request.Context(), 0, categoryID, resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏列表失败"))
 		return
@@ -202,7 +203,7 @@ func (h *GameHandler) TransferWithdraw(message string) gin.HandlerFunc {
 
 func (h *GameHandler) Categories(c *gin.Context) {
 	parentID, _ := strconv.Atoi(c.Query("parent_id"))
-	data, err := h.categoryService.List(c.Request.Context(), parentID)
+	data, err := h.categoryService.ListForRequest(c.Request.Context(), parentID, resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取游戏分类失败"))

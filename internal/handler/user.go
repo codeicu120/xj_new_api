@@ -23,7 +23,7 @@ func NewUserHandler(sysAvatarService *userService.SysAvatarService, logoutServic
 
 func (h *UserHandler) SysAvatar(c *gin.Context) {
 	c.Header("X-Served-By", "newbie")
-	c.JSON(http.StatusOK, legacyjson.OK(h.sysAvatarService.List()))
+	c.JSON(http.StatusOK, legacyjson.OK(h.sysAvatarService.ListContext(c.Request.Context())))
 }
 
 func (h *UserHandler) Logout(c *gin.Context) {

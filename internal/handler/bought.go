@@ -21,7 +21,7 @@ func NewBoughtHandler(service *boughtService.Service) *BoughtHandler {
 
 func (h *BoughtHandler) Listing(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
-	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), page, c.GetHeader("x-cookie-auth") != "")
+	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), page, hasHeader(c, "x-cookie-auth"))
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

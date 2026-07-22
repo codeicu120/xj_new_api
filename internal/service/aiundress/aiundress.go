@@ -18,6 +18,7 @@ import (
 
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -137,6 +138,12 @@ type Service struct {
 	fileDeleter     FileDeleter
 	uploader        ObjectUploader
 	now             func() time.Time
+	resources       *resourceurl.Resolver
+}
+
+func (s *Service) WithResourceResolver(resolver *resourceurl.Resolver) *Service {
+	s.resources = resolver
+	return s
 }
 
 func NewService(auth AuthStore, store Store, resourceBaseURL string, env ...string) *Service {
@@ -179,7 +186,7 @@ func (s *Service) WithObjectUploader(uploader ObjectUploader) *Service {
 	return s
 }
 
-func (s *Service) Listing(ctx context.Context, token string, page int, module int) (domain.AIUndressListingData, int, string, error) {
+func (s *Service) Listing(ctx context.Context, token string, page int, module int, resourceReq ...resourceurl.Request) (domain.AIUndressListingData, int, string, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return domain.AIUndressListingData{}, -1, "获取AI记录失败", err
@@ -197,13 +204,26 @@ func (s *Service) Listing(ctx context.Context, token string, page int, module in
 	if err != nil {
 		return domain.AIUndressListingData{}, -1, "获取AI记录失败", err
 	}
-	baseURL, err := s.aiResourceBaseURL(ctx)
+	baseURL, err := s.aiResourceBaseURL(ctx, resourceReq...)
 	if err != nil {
 		return domain.AIUndressListingData{}, -1, "获取AI记录失败", err
 	}
+	resources := resourceurl.Resolved{BaseURL: baseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		resources, err = s.resources.Resolve(ctx, firstResourceRequest(resourceReq))
+		if err != nil {
+			return domain.AIUndressListingData{}, -1, "获取AI记录失败", err
+		}
+		if strings.TrimRight(resources.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
+			// PHP's dedicated resurl_h5_ai branch concatenates directly and does not
+			// pass through getRes/resurl_auth. Only the normal-resource fallback signs.
+			resources.AuthSecret = ""
+		}
+		resources.BaseURL = baseURL
+	}
 	for _, row := range rows {
-		row["image"] = s.resourceURL(baseURL, row["image"])
-		row["output"] = s.resourceURL(baseURL, row["output"])
+		row["image"] = resources.GetRes(fmt.Sprint(row["image"]), "")
+		row["output"] = resources.GetRes(fmt.Sprint(row["output"]), "")
 	}
 	return domain.AIUndressListingData{
 		Rows:     rows,
@@ -428,12 +448,12 @@ func (s *Service) userByToken(ctx context.Context, token string) (map[string]int
 	return user, nil
 }
 
-func (s *Service) aiResourceBaseURL(ctx context.Context) (string, error) {
+func (s *Service) aiResourceBaseURL(ctx context.Context, resourceReq ...resourceurl.Request) (string, error) {
 	if s.env == "test" {
 		return "https://pub-21fd0f8233a7476797cc1786f4cabea9.r2.dev", nil
 	}
 	if s.store == nil {
-		return s.resourceBaseURL, nil
+		return s.fallbackResourceBaseURL(ctx, resourceReq)
 	}
 	raw, err := s.store.SettingByUUID(ctx, "setting")
 	if err != nil {
@@ -441,7 +461,7 @@ func (s *Service) aiResourceBaseURL(ctx context.Context) (string, error) {
 	}
 	value := serializedString(raw, "resurl_h5_ai")
 	if value == "" {
-		return s.resourceBaseURL, nil
+		return s.fallbackResourceBaseURL(ctx, resourceReq)
 	}
 	now := s.now()
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
@@ -449,6 +469,28 @@ func (s *Service) aiResourceBaseURL(ctx context.Context) (string, error) {
 	}
 	value = strings.ReplaceAll(value, "{rand}", now.Format("2006010215"))
 	return strings.TrimRight(value, "/"), nil
+}
+
+func (s *Service) fallbackResourceBaseURL(ctx context.Context, requests []resourceurl.Request) (string, error) {
+	if s.resources == nil {
+		return s.resourceBaseURL, nil
+	}
+	req := resourceurl.Request{}
+	if len(requests) > 0 {
+		req = requests[0]
+	}
+	resolved, err := s.resources.Resolve(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(resolved.BaseURL, "/"), nil
+}
+
+func firstResourceRequest(requests []resourceurl.Request) resourceurl.Request {
+	if len(requests) > 0 {
+		return requests[0]
+	}
+	return resourceurl.Request{}
 }
 
 func (s *Service) resourceURL(baseURL string, value interface{}) interface{} {

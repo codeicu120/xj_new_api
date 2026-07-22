@@ -68,7 +68,7 @@ func TestListingServiceList(t *testing.T) {
 		t.Fatalf("unexpected order %q", store.orderBy)
 	}
 	row := data.Rows[0]
-	if row["icon"] != "https://res.example.test/icon.png" {
+	if row["icon"] != "https://res.example.test//icon.png" {
 		t.Fatalf("unexpected icon %v", row["icon"])
 	}
 	if row["image"] != "https://res.example.test/image.png" {

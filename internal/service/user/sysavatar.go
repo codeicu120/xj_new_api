@@ -1,13 +1,21 @@
 package user
 
 import (
+	"context"
 	"strings"
 
 	"xj_comp/internal/domain"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type SysAvatarService struct {
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
+}
+
+func (s *SysAvatarService) WithResourceResolver(r *resourceurl.Resolver) *SysAvatarService {
+	s.resources = r
+	return s
 }
 
 func NewSysAvatarService(resourceBaseURL string) *SysAvatarService {
@@ -15,11 +23,22 @@ func NewSysAvatarService(resourceBaseURL string) *SysAvatarService {
 }
 
 func (s *SysAvatarService) List() domain.SysAvatarData {
+	return s.ListContext(context.Background())
+}
+
+func (s *SysAvatarService) ListContext(ctx context.Context) domain.SysAvatarData {
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			resolved = value
+		}
+	}
 	avatars := make(map[string][]string, len(systemAvatarGroups))
 	for group, paths := range systemAvatarGroups {
 		items := make([]string, 0, len(paths))
 		for _, path := range paths {
-			items = append(items, s.resourceBaseURL+"/"+path)
+			items = append(items, resolved.GetRes(path, ""))
 		}
 		avatars[group] = items
 	}

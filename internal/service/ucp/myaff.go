@@ -12,6 +12,7 @@ import (
 
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type UserStore interface {
@@ -131,6 +132,23 @@ type Service struct {
 	qrRenderer      QRCodeRenderer
 	emailSender     EmailSender
 	notifier        TelegramNotifier
+	resources       *resourceurl.Resolver
+}
+
+func (s *Service) WithResourceResolver(resolver *resourceurl.Resolver) *Service {
+	s.resources = resolver
+	return s
+}
+
+func (s *Service) resolveResources(ctx context.Context, requests []resourceurl.Request) (resourceurl.Resolved, error) {
+	if s.resources != nil {
+		req := resourceurl.Request{}
+		if len(requests) > 0 {
+			req = requests[0]
+		}
+		return s.resources.Resolve(ctx, req)
+	}
+	return resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}, nil
 }
 
 func NewService(store UserStore, resourceBaseURL string) *Service {
@@ -165,7 +183,7 @@ func (s *Service) WithTelegramNotifier(notifier TelegramNotifier) *Service {
 	return s
 }
 
-func (s *Service) MyAff(ctx context.Context, token string, page int) (domain.UCPMyAffData, int, string, error) {
+func (s *Service) MyAff(ctx context.Context, token string, page int, resourceReq ...resourceurl.Request) (domain.UCPMyAffData, int, string, error) {
 	user, groups, err := s.authenticatedUser(ctx, token)
 	if err != nil {
 		return domain.UCPMyAffData{}, -1, "获取用户失败", err
@@ -185,8 +203,12 @@ func (s *Service) MyAff(ctx context.Context, token string, page int) (domain.UCP
 		return domain.UCPMyAffData{}, -1, "获取推广列表失败", err
 	}
 
+	resources, err := s.resolveResources(ctx, resourceReq)
+	if err != nil {
+		return domain.UCPMyAffData{}, -1, "获取推广列表失败", err
+	}
 	return domain.UCPMyAffData{
-		Rows:     s.processUsers(rows, groups),
+		Rows:     s.processUsersWithResources(rows, groups, resources),
 		PageInfo: pageInfo(total, pageSize, page, "/ucp/myaff?page=[?]"),
 	}, 0, "", nil
 }
@@ -232,7 +254,7 @@ func (s *Service) AffCenter(ctx context.Context, token string) (domain.UCPAffCen
 
 	uinfo := s.affCenterInfo(user, groups, playedNum, downedNum)
 	return domain.UCPAffCenterData{
-		User:  singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		User:  singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups)),
 		UInfo: uinfo,
 	}, 0, "", nil
 }
@@ -263,7 +285,7 @@ func (s *Service) Index(ctx context.Context, token string) (domain.UCPIndexData,
 		uinfo["curr_group"] = nil
 		uinfo["next_group"] = nil
 		return domain.UCPIndexData{
-			User:   singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+			User:   singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups)),
 			UInfo:  uinfo,
 			Signed: signedByTimestamp(s.now(), atoi64(guest["signtime"])),
 		}, 0, "", nil
@@ -286,7 +308,7 @@ func (s *Service) Index(ctx context.Context, token string) (domain.UCPIndexData,
 	if err != nil {
 		return domain.UCPIndexData{}, -1, "获取个人中心失败", err
 	}
-	userRow := singleUser(s.processUsers([]map[string]interface{}{user}, groups))
+	userRow := singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups))
 	clearTildeContact(userRow, "mobi")
 	clearTildeContact(userRow, "email")
 	return domain.UCPIndexData{
@@ -310,7 +332,7 @@ func (s *Service) UserIndex(ctx context.Context, token string) (map[string]inter
 	if err != nil {
 		return nil, -1, "获取用户资料失败", err
 	}
-	return map[string]interface{}{"user": singleUser(s.processUsers([]map[string]interface{}{user}, groups))}, 0, "", nil
+	return map[string]interface{}{"user": singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups))}, 0, "", nil
 }
 
 func (s *Service) BankcardIndex(ctx context.Context, token string) (map[string]interface{}, int, string, error) {
@@ -335,7 +357,7 @@ func (s *Service) BankcardIndex(ctx context.Context, token string) (map[string]i
 		"maxallow":  3,
 		"allowtype": 7,
 		"banknames": []string{"工商银行", "建设银行", "中国银行", "农业银行", "交通银行", "招商银行", "中信银行", "上海浦东发展银行", "兴业银行", "民生银行"},
-		"bankRows":  s.processBankRows(bankRows),
+		"bankRows":  s.processBankRows(ctx, bankRows),
 	}, 0, "", nil
 }
 
@@ -894,7 +916,12 @@ func uniqueInts(values []int) []int {
 	return out
 }
 
-func (s *Service) processUsers(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processUsers(ctx context.Context, rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+	resources, _ := s.resolveResources(ctx, []resourceurl.Request{resourceurl.RequestFromContext(ctx)})
+	return s.processUsersWithResources(rows, groups, resources)
+}
+
+func (s *Service) processUsersWithResources(rows []map[string]interface{}, groups []map[string]interface{}, resources resourceurl.Resolved) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(rows))
 	now := s.now().Unix()
 	for _, row := range rows {
@@ -924,7 +951,7 @@ func (s *Service) processUsers(rows []map[string]interface{}, groups []map[strin
 			"regtime":         formatUnix(atoi64(row["regtime"])),
 			"gender":          atoi(row["gender"]),
 			"avatar":          str(row["avatar"]),
-			"avatar_url":      s.avatarURL(str(row["avatar"])),
+			"avatar_url":      avatarURLWithResources(str(row["avatar"]), resources),
 			"newmsg":          str(row["newmsg"]),
 			"goldcoin":        atoi(row["goldcoin"]),
 			"gold_bean":       atoi(row["gold_bean"]),
@@ -936,13 +963,12 @@ func (s *Service) processUsers(rows []map[string]interface{}, groups []map[strin
 	return out
 }
 
-func (s *Service) processBankRows(rows []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processBankRows(ctx context.Context, rows []map[string]interface{}) []map[string]interface{} {
+	resources, _ := s.resolveResources(ctx, []resourceurl.Request{resourceurl.RequestFromContext(ctx)})
 	out := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
 		coverpic := str(row["coverpic"])
-		if coverpic != "" && !strings.HasPrefix(coverpic, "http://") && !strings.HasPrefix(coverpic, "https://") {
-			coverpic = s.resourceBaseURL + "/" + strings.TrimLeft(coverpic, "/")
-		}
+		coverpic = resources.GetRes(coverpic, "")
 		out = append(out, map[string]interface{}{
 			"bankid":   atoi(row["bankid"]),
 			"bankname": str(row["bankname"]),
@@ -952,17 +978,22 @@ func (s *Service) processBankRows(rows []map[string]interface{}) []map[string]in
 	return out
 }
 
-func (s *Service) avatarURL(avatar string) string {
+func (s *Service) avatarURL(ctx context.Context, avatar string) string {
+	resources, _ := s.resolveResources(ctx, []resourceurl.Request{resourceurl.RequestFromContext(ctx)})
+	return avatarURLWithResources(avatar, resources)
+}
+
+func avatarURLWithResources(avatar string, resources resourceurl.Resolved) string {
 	if avatar == "" {
-		return s.resourceBaseURL + "/sysavatar/noavatar.png"
+		return strings.TrimRight(resources.BaseURL, "/") + "/sysavatar/noavatar.png"
 	}
 	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-		return avatar
+		return resources.GetRes(avatar, "")
 	}
 	if strings.HasPrefix(avatar, "sysavatar/") {
-		return s.resourceBaseURL + "/" + strings.TrimLeft(avatar, "/")
+		return resources.GetRes(strings.TrimLeft(avatar, "/"), "")
 	}
-	return s.resourceBaseURL + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+	return resources.GetRes(avatar, "C1/avatar")
 }
 
 func pageInfo(total int, pageSize int, page int, url string) map[string]interface{} {

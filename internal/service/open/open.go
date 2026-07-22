@@ -14,6 +14,7 @@ import (
 	"time"
 
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type AuthStore interface {
@@ -30,7 +31,10 @@ type Service struct {
 	guest           GuestStore
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 type appConfig struct {
 	AESKey string
@@ -55,6 +59,13 @@ func (s *Service) ReqAuth(ctx context.Context, token string, ip string, appID st
 		return nil, -1, "获取授权失败", err
 	}
 	now := s.now().Unix()
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: now}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{Timestamp: now}
+		if value, resolveErr := s.resources.ResolveContext(ctx); resolveErr == nil {
+			resolved = value
+		}
+	}
 	iv := md5Hex(cfg.MD5Key)[:16]
 	authrow := map[string]interface{}{
 		"headUrl":     "",
@@ -69,7 +80,7 @@ func (s *Service) ReqAuth(ctx context.Context, token string, ip string, appID st
 		openidText = sid
 	} else {
 		authrow["phoneNumber"] = fmt.Sprint(user["mobi"])
-		authrow["headUrl"] = s.avatarURL(fmt.Sprint(user["avatar"]))
+		authrow["headUrl"] = avatarURL(resolved, fmt.Sprint(user["avatar"]))
 		authrow["gender"] = atoi(user["gender"])
 		nickname := fmt.Sprint(user["nickname"])
 		if nickname == "" {
@@ -120,13 +131,13 @@ func (s *Service) userOrGuest(ctx context.Context, token string, ip string) (map
 	return map[string]interface{}{"uid": "0", "sid": sid}, sid, nil
 }
 
-func (s *Service) avatarURL(avatar string) string {
+func avatarURL(resolved resourceurl.Resolved, avatar string) string {
 	if avatar == "" {
 		return ""
 	}
 	for _, ch := range avatar {
 		if ch < '0' || ch > '9' {
-			return s.resourceBaseURL + "/C1/" + strings.TrimLeft(avatar, "/")
+			return resolved.GetRes(avatar, "C1")
 		}
 	}
 	return avatar

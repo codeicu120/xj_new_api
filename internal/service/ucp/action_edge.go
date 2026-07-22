@@ -608,7 +608,7 @@ func (s *Service) UserPasswd(ctx context.Context, token string, passwordOld stri
 	user["password"] = passwordHash
 	user["salt"] = salt
 	data := map[string]interface{}{
-		"user":         singleUser(s.processUsers([]map[string]interface{}{user}, groups)),
+		"user":         singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups)),
 		"xxx_api_auth": hex.EncodeToString([]byte(sid)),
 	}
 	return data, 0, "密码修改成功", nil

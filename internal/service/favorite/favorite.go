@@ -10,6 +10,7 @@ import (
 	"xj_comp/internal/domain"
 	favoriteRepo "xj_comp/internal/repository/favorite"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -39,7 +40,10 @@ type Service struct {
 	vodProcessor VODProcessor
 	now          func() time.Time
 	resourceBase string
+	resources    *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 func NewService(auth AuthStore, store Store, vodProcessor VODProcessor) *Service {
 	return &Service{auth: auth, store: store, vodProcessor: vodProcessor, now: time.Now}
@@ -51,15 +55,22 @@ func (s *Service) WithResourceBaseURL(base string) *Service {
 }
 
 func (s *Service) Listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool) (domain.HistoryListingData, int, string, error) {
-	return s.listing(ctx, token, kind, page, keyword, isH5Request, false)
+	return s.ListingForRequest(ctx, token, kind, page, keyword, isH5Request, resourceurl.Request{HasCookieAuth: isH5Request})
+}
+
+func (s *Service) ListingForRequest(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool, req resourceurl.Request) (domain.HistoryListingData, int, string, error) {
+	return s.listing(ctx, token, kind, page, keyword, isH5Request, false, req)
 }
 
 func (s *Service) MiniV2Listing(ctx context.Context, token string, page int, keyword string, isH5Request bool) (domain.HistoryListingData, int, string, error) {
-	data, retcode, errmsg, err := s.listing(ctx, token, favoriteRepo.KindMini, page, keyword, isH5Request, true)
+	return s.MiniV2ListingForRequest(ctx, token, page, keyword, isH5Request, resourceurl.Request{HasCookieAuth: isH5Request})
+}
+func (s *Service) MiniV2ListingForRequest(ctx context.Context, token string, page int, keyword string, isH5Request bool, req resourceurl.Request) (domain.HistoryListingData, int, string, error) {
+	data, retcode, errmsg, err := s.listing(ctx, token, favoriteRepo.KindMini, page, keyword, isH5Request, true, req)
 	if err != nil || retcode != 0 {
 		return data, retcode, errmsg, err
 	}
-	rows, err := s.wrapMiniRowsWithUsers(ctx, data.Rows)
+	rows, err := s.wrapMiniRowsWithUsers(ctx, data.Rows, req)
 	if err != nil {
 		return domain.HistoryListingData{}, -1, "获取收藏失败", err
 	}
@@ -67,7 +78,7 @@ func (s *Service) MiniV2Listing(ctx context.Context, token string, page int, key
 	return data, 0, "", nil
 }
 
-func (s *Service) listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool, miniKeyword bool) (domain.HistoryListingData, int, string, error) {
+func (s *Service) listing(ctx context.Context, token string, kind favoriteRepo.Kind, page int, keyword string, isH5Request bool, miniKeyword bool, req resourceurl.Request) (domain.HistoryListingData, int, string, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return domain.HistoryListingData{}, -1, "获取收藏失败", err
@@ -113,14 +124,22 @@ func (s *Service) listing(ctx context.Context, token string, kind favoriteRepo.K
 	}, 0, "", nil
 }
 
-func (s *Service) wrapMiniRowsWithUsers(ctx context.Context, rows []map[string]interface{}) ([]map[string]interface{}, error) {
+func (s *Service) wrapMiniRowsWithUsers(ctx context.Context, rows []map[string]interface{}, req resourceurl.Request) ([]map[string]interface{}, error) {
 	users, err := s.store.UsersByIDs(ctx, rowIDs(rows, "authorid"))
 	if err != nil {
 		return nil, err
 	}
 	userByID := map[string]map[string]interface{}{}
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBase}
+	if s.resources != nil {
+		var resolveErr error
+		resolved, resolveErr = s.resources.Resolve(ctx, req)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+	}
 	for _, user := range users {
-		userByID[str(user["uid"])] = processUser(user, s.resourceBase)
+		userByID[str(user["uid"])] = processUserWithResources(user, resolved)
 	}
 	out := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
@@ -218,17 +237,21 @@ func rowIDs(rows []map[string]interface{}, key string) []int {
 }
 
 func processUser(row map[string]interface{}, base string) map[string]interface{} {
+	return processUserWithResources(row, resourceurl.Resolved{BaseURL: base})
+}
+
+func processUserWithResources(row map[string]interface{}, resources resourceurl.Resolved) map[string]interface{} {
 	avatar := str(row["avatar"])
 	avatarURL := ""
 	if avatar != "" {
 		if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-			avatarURL = avatar
+			avatarURL = resources.GetRes(avatar, "")
 		} else if _, err := strconv.Atoi(avatar); err == nil {
 			avatarURL = avatar
 		} else if strings.HasPrefix(avatar, "avatar/") {
-			avatarURL = strings.TrimRight(base, "/") + "/C1/" + strings.TrimLeft(avatar, "/")
+			avatarURL = resources.GetRes(avatar, "C1")
 		} else {
-			avatarURL = strings.TrimRight(base, "/") + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+			avatarURL = resources.GetRes(avatar, "C1/avatar")
 		}
 	}
 	return map[string]interface{}{

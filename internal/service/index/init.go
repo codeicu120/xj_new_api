@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"xj_comp/internal/service/resourceurl"
 
 	userRepo "xj_comp/internal/repository/user"
 )
@@ -24,16 +25,23 @@ type InitService struct {
 	store           InitStore
 	global          *GlobalService
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 	now             func() time.Time
 }
 
 type InitRequest struct {
-	Token     string
-	Pkg       string
-	Version   string
-	XVersion  string
-	UserAgent string
-	ClientIP  string
+	Token         string
+	Pkg           string
+	Version       string
+	XVersion      string
+	UserAgent     string
+	ClientIP      string
+	HasCookieAuth bool
+}
+
+func (s *InitService) WithResourceResolver(r *resourceurl.Resolver) *InitService {
+	s.resources = r
+	return s
 }
 
 func NewInitService(store InitStore, global *GlobalService, resourceBaseURL string) *InitService {
@@ -46,6 +54,14 @@ func NewInitService(store InitStore, global *GlobalService, resourceBaseURL stri
 }
 
 func (s *InitService) Init(ctx context.Context, req InitRequest) (map[string]interface{}, error) {
+	resources := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	var resolveErr error
+	if s.resources != nil {
+		resources, resolveErr = s.resources.Resolve(ctx, resourceurl.Request{HasCookieAuth: req.HasCookieAuth, ClientIP: req.ClientIP})
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+	}
 	user, groups, err := s.user(ctx, req.Token)
 	if err != nil {
 		return nil, err
@@ -59,10 +75,12 @@ func (s *InitService) Init(ctx context.Context, req InitRequest) (map[string]int
 		return nil, err
 	}
 	globalData, err := s.global.GetGlobalData(ctx, GlobalRequest{
-		Pkg:       req.Pkg,
-		Version:   req.Version,
-		XVersion:  req.XVersion,
-		UserAgent: req.UserAgent,
+		Pkg:           req.Pkg,
+		Version:       req.Version,
+		XVersion:      req.XVersion,
+		UserAgent:     req.UserAgent,
+		HasCookieAuth: req.HasCookieAuth,
+		ClientIP:      req.ClientIP,
 	})
 	if err != nil {
 		return nil, err
@@ -77,7 +95,7 @@ func (s *InitService) Init(ctx context.Context, req InitRequest) (map[string]int
 		return nil, err
 	}
 	playHeaders := s.global.mustCallJSON(ctx, "playHeaders", map[string]interface{}{})
-	userRow, err := s.processUser(ctx, user, groups)
+	userRow, err := s.processUser(ctx, user, groups, resources)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +111,7 @@ func (s *InitService) Init(ctx context.Context, req InitRequest) (map[string]int
 		"playHeaders":       playHeaders,
 		"urlHosts":          str(baseset["newHosts"]),
 		"csurl":             str(setting["csurl"]),
-		"sitelogo":          s.resURL(str(setting["sitelogo"])),
+		"sitelogo":          resources.GetRes(str(setting["sitelogo"]), ""),
 		"isclosed":          atoi(setting["isclosed"]),
 		"closetips":         str(setting["closetips"]),
 		"externalUrlDating": "",
@@ -120,7 +138,7 @@ func (s *InitService) user(ctx context.Context, token string) (map[string]interf
 	return user, groups, nil
 }
 
-func (s *InitService) processUser(ctx context.Context, row map[string]interface{}, groups []map[string]interface{}) (map[string]interface{}, error) {
+func (s *InitService) processUser(ctx context.Context, row map[string]interface{}, groups []map[string]interface{}, resources resourceurl.Resolved) (map[string]interface{}, error) {
 	uid := atoi(row["uid"])
 	if uid > 0 {
 		quota, err := s.store.Quota(ctx, uid)
@@ -164,7 +182,7 @@ func (s *InitService) processUser(ctx context.Context, row map[string]interface{
 		"regtime":         formatUnix(atoi64(row["regtime"])),
 		"gender":          atoi(row["gender"]),
 		"avatar":          str(row["avatar"]),
-		"avatar_url":      s.avatarURL(str(row["avatar"])),
+		"avatar_url":      avatarURL(resources, str(row["avatar"])),
 		"newmsg":          str(row["newmsg"]),
 		"goldcoin":        atoi(row["goldcoin"]),
 		"gold_bean":       atoi(row["gold_bean"]),
@@ -174,14 +192,14 @@ func (s *InitService) processUser(ctx context.Context, row map[string]interface{
 	}, nil
 }
 
-func (s *InitService) avatarURL(avatar string) string {
+func avatarURL(resources resourceurl.Resolved, avatar string) string {
 	if avatar == "" {
-		return s.resourceBaseURL + "/sysavatar/noavatar.png"
+		return resources.GetRes("sysavatar/noavatar.png", "")
 	}
 	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
 		return avatar
 	}
-	return s.resourceBaseURL + "/" + strings.TrimLeft(avatar, "/")
+	return resources.GetRes(strings.TrimLeft(avatar, "/"), "")
 }
 
 func (s *InitService) resURL(path string) string {

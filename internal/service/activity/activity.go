@@ -8,6 +8,7 @@ import (
 	"time"
 
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type Store interface {
@@ -33,7 +34,10 @@ type Service struct {
 	auth            AuthStore
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 func NewService(store Store, auth AuthStore, resourceBaseURL string) *Service {
 	return &Service{store: store, auth: auth, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"), now: time.Now}
@@ -216,7 +220,7 @@ func (s *Service) Recommends(ctx context.Context, token string, aid int, page in
 		return nil, -1, "获取邀请记录失败", err
 	}
 	return map[string]interface{}{
-		"data":  s.processUserRows(rows, groups),
+		"data":  s.processUserRows(ctx, rows, groups),
 		"total": total,
 	}, 0, "", nil
 }
@@ -287,7 +291,14 @@ func (s *Service) processActivityRecords(ctx context.Context, rows []map[string]
 	return out, nil
 }
 
-func (s *Service) processUserRows(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processUserRows(ctx context.Context, rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{Timestamp: s.now().Unix()}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			resolved = value
+		}
+	}
 	out := make([]map[string]interface{}, 0, len(rows))
 	now := s.now().Unix()
 	for _, row := range rows {
@@ -317,7 +328,7 @@ func (s *Service) processUserRows(rows []map[string]interface{}, groups []map[st
 			"regtime":         unixDateTime(row["regtime"]),
 			"gender":          atoi(row["gender"]),
 			"avatar":          row["avatar"],
-			"avatar_url":      s.avatarURL(fmt.Sprint(row["avatar"])),
+			"avatar_url":      activityAvatarURL(resolved, fmt.Sprint(row["avatar"])),
 			"newmsg":          row["newmsg"],
 			"goldcoin":        atoi(row["goldcoin"]),
 			"gold_bean":       atoi(row["gold_bean"]),
@@ -349,17 +360,17 @@ func vipFlag(row map[string]interface{}, now int64) int {
 	return 0
 }
 
-func (s *Service) avatarURL(avatar string) string {
+func activityAvatarURL(resolved resourceurl.Resolved, avatar string) string {
 	if avatar == "" {
-		return s.resourceBaseURL + "/sysavatar/noavatar.png"
+		return resolved.GetRes("sysavatar/noavatar.png", "")
 	}
 	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-		return avatar
+		return resolved.GetRes(avatar, "")
 	}
 	if strings.HasPrefix(avatar, "sysavatar/") {
-		return s.resourceBaseURL + "/" + strings.TrimLeft(avatar, "/")
+		return resolved.GetRes(avatar, "")
 	}
-	return s.resourceBaseURL + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+	return resolved.GetRes(avatar, "C1/avatar")
 }
 
 func unixDateTime(value interface{}) string {

@@ -15,6 +15,7 @@ import (
 
 	"xj_comp/internal/domain"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 )
 
 const sampleParams = "$vodid:0-$orderby:0-$page:1"
@@ -54,7 +55,10 @@ type Service struct {
 	limiter         VoteLimiter
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 type ListingRequest struct {
 	PathParams string
@@ -119,7 +123,7 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.Comme
 
 	pageURL := "/comment/listing-" + buildParams(params, map[string]string{"page": "[?]"})
 	return domain.CommentListingData{
-		Rows:     s.processRows(rows, groups),
+		Rows:     s.processRows(ctx, rows, groups),
 		PageInfo: pageInfo(total, pageSize, page, pageURL),
 	}, nil
 }
@@ -409,21 +413,22 @@ func similarEnough(a string, b string, threshold float64) bool {
 	return score > threshold
 }
 
-func (s *Service) processRows(rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processRows(ctx context.Context, rows []map[string]interface{}, groups []map[string]interface{}) []map[string]interface{} {
+	resolved := s.resolveResources(ctx)
 	out := make([]map[string]interface{}, 0, len(rows))
 	for _, row := range rows {
-		item := s.processRow(row, groups)
+		item := s.processRow(row, groups, resolved)
 		subrows, _ := row["subrows"].([]map[string]interface{})
 		item["subrows"] = []map[string]interface{}{}
 		for _, subrow := range subrows {
-			item["subrows"] = append(item["subrows"].([]map[string]interface{}), s.processRow(subrow, groups))
+			item["subrows"] = append(item["subrows"].([]map[string]interface{}), s.processRow(subrow, groups, resolved))
 		}
 		out = append(out, item)
 	}
 	return out
 }
 
-func (s *Service) processRow(row map[string]interface{}, groups []map[string]interface{}) map[string]interface{} {
+func (s *Service) processRow(row map[string]interface{}, groups []map[string]interface{}, resolved resourceurl.Resolved) map[string]interface{} {
 	now := s.now().Unix()
 	item := map[string]interface{}{
 		"id":           str(row["id"]),
@@ -443,7 +448,7 @@ func (s *Service) processRow(row map[string]interface{}, groups []map[string]int
 		"content":      str(row["content"]),
 		"upnum":        str(row["upnum"]),
 		"downnum":      str(row["downnum"]),
-		"avatar_url":   s.avatarURL(str(row["avatar"])),
+		"avatar_url":   avatarURL(resolved, str(row["avatar"])),
 		"addtime":      commentTime(atoi64(str(row["addtime"])), now),
 		"__closenum__": atoi(str(row["__closenum__"])),
 	}
@@ -451,22 +456,33 @@ func (s *Service) processRow(row map[string]interface{}, groups []map[string]int
 		item["username"] = "???"
 		item["nickname"] = "???"
 		item["content"] = "评论审核中..."
-		item["avatar_url"] = s.avatarURL("")
+		item["avatar_url"] = avatarURL(resolved, "")
 	}
 	return item
 }
 
-func (s *Service) avatarURL(avatar string) string {
+func avatarURL(resolved resourceurl.Resolved, avatar string) string {
 	if avatar == "" {
-		return s.resourceBaseURL + "/sysavatar/noavatar.png"
+		return resolved.GetRes("sysavatar/noavatar.png", "")
 	}
 	if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-		return avatar
+		return resolved.GetRes(avatar, "")
 	}
 	if strings.HasPrefix(avatar, "sysavatar/") {
-		return s.resourceBaseURL + "/" + strings.TrimLeft(avatar, "/")
+		return resolved.GetRes(avatar, "")
 	}
-	return s.resourceBaseURL + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+	return resolved.GetRes(avatar, "C1/avatar")
+}
+
+func (s *Service) resolveResources(ctx context.Context) resourceurl.Resolved {
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{Timestamp: s.now().Unix()}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			return value
+		}
+	}
+	return resolved
 }
 
 func parseParams(raw string) map[string]string {

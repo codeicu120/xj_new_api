@@ -11,7 +11,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"xj_comp/internal/service/resourceurl"
 )
+
+type resourceSettingsStore string
+
+func (s resourceSettingsStore) SettingValue(context.Context) (string, error) { return string(s), nil }
 
 type fakeAuth struct {
 	user map[string]interface{}
@@ -394,6 +400,19 @@ func TestListingBuildsResourceURLsAndPageInfo(t *testing.T) {
 	}
 	if data.PageInfo["page_url"] != "/aiundress/listing?page=[?]" || data.PageInfo["pagesize"] != 10 {
 		t.Fatalf("pageinfo = %#v", data.PageInfo)
+	}
+}
+
+func TestAIResourceBaseURLFallsBackToDatabaseRuntimeResourceURL(t *testing.T) {
+	service := NewService(fakeAuth{}, fakeStore{}, "https://env.example").WithResourceResolver(
+		resourceurl.NewResolver(resourceSettingsStore(`a:2:{s:6:"resurl";s:19:"https://db.example";s:9:"resurl_h5";s:22:"https://h5-db.example";}`), nil, "https://env.example"),
+	)
+	got, err := service.aiResourceBaseURL(context.Background(), resourceurl.Request{HasCookieAuth: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://h5-db.example" {
+		t.Fatalf("fallback resource URL = %q", got)
 	}
 }
 

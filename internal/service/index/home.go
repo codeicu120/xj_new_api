@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"xj_comp/internal/service/resourceurl"
 
 	vodRepo "xj_comp/internal/repository/vod"
 )
@@ -26,7 +27,13 @@ type HomeService struct {
 	store           HomeStore
 	vodProcessor    VODProcessor
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 	now             func() time.Time
+}
+
+func (s *HomeService) WithResourceResolver(r *resourceurl.Resolver) *HomeService {
+	s.resources = r
+	return s
 }
 
 func NewHomeService(store HomeStore, vodProcessor VODProcessor, resourceBaseURL string) *HomeService {
@@ -39,6 +46,18 @@ func NewHomeService(store HomeStore, vodProcessor VODProcessor, resourceBaseURL 
 }
 
 func (s *HomeService) Index(ctx context.Context, isH5Request bool) (map[string]interface{}, error) {
+	return s.IndexForRequest(ctx, isH5Request, resourceurl.Request{HasCookieAuth: isH5Request})
+}
+
+func (s *HomeService) IndexForRequest(ctx context.Context, isH5Request bool, req resourceurl.Request) (map[string]interface{}, error) {
+	resources := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	var resolveErr error
+	if s.resources != nil {
+		resources, resolveErr = s.resources.Resolve(ctx, req)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+	}
 	dayRows, err := s.recommendRows(ctx, 6, isH5Request)
 	if err != nil {
 		return nil, err
@@ -78,10 +97,10 @@ func (s *HomeService) Index(ctx context.Context, isH5Request bool) (map[string]i
 	}
 
 	return map[string]interface{}{
-		"sliderows":   s.slideRows(ctx, "index.slide"),
-		"v2sliderows": s.slideRows(ctx, "index.slide.v2"),
-		"pcsliderows": s.slideRows(ctx, "index.slide.pc"),
-		"mbsliderows": s.slideRows(ctx, "index.slide.mb"),
+		"sliderows":   s.slideRows(ctx, "index.slide", resources),
+		"v2sliderows": s.slideRows(ctx, "index.slide.v2", resources),
+		"pcsliderows": s.slideRows(ctx, "index.slide.pc", resources),
+		"mbsliderows": s.slideRows(ctx, "index.slide.mb", resources),
 		"dayrows":     dayRows,
 		"latestrows":  latestRows,
 		"likerows":    likeRows,
@@ -94,7 +113,7 @@ func (s *HomeService) Index(ctx context.Context, isH5Request bool) (map[string]i
 	}, nil
 }
 
-func (s *HomeService) slideRows(ctx context.Context, uuid string) []map[string]interface{} {
+func (s *HomeService) slideRows(ctx context.Context, uuid string, resources resourceurl.Resolved) []map[string]interface{} {
 	row, err := s.store.CalldataByUUID(ctx, uuid)
 	if err != nil {
 		return []map[string]interface{}{}
@@ -113,7 +132,7 @@ func (s *HomeService) slideRows(ctx context.Context, uuid string) []map[string]i
 				slide[title] = str(itemMap[fmt.Sprintf("url%d", i)])
 			}
 		}
-		slide["pic"] = s.resURL(str(itemMap["pic"]))
+		slide["pic"] = resources.GetRes(str(itemMap["pic"]), "")
 		slide["showweight"] = str(itemMap["showweight"])
 		if str(itemMap["title3"]) == "newpic" && str(itemMap["url3"]) != "" {
 			slide["newpic"] = str(itemMap["url3"])

@@ -1457,6 +1457,7 @@
 - Auth: 公共首页接口；当前 Go 不写旧 PHP 的 `appversion` 访问记录副作用。
 - DB: 读取 `maintain_calldata(index.slide/index.slide.v2/index.slide.pc/index.slide.mb/index.recommend.vods/index.tagvods)`，并读取 `vods` 生成 `dayrows/latestrows/likerows/a_vodrows/b_vodrows/c_vodrows/d_vodrows/tagvodrows/hotrows`。
 - 兼容规则：返回 `sliderows/v2sliderows/pcsliderows/mbsliderows/dayrows/latestrows/likerows/a_vodrows/b_vodrows/c_vodrows/d_vodrows/tagvodrows/hotrows`；资源路径按 `RESOURCE_BASE_URL` 拼接，视频行复用 VOD `ProcessRows`。
+- 资源域名兼容已统一改为读取数据库 `settings.uuid='setting'`：普通请求使用 `resurl`，存在 `x-cookie-auth` 时使用 `resurl_h5`，命中配置地区时使用 `resurl_h5_free`，支持 `{rand}` 小时替换和 `resurl_auth` 签名。环境变量仅供无数据库的隔离测试构造路径使用；视频 `cover_srvid`、AI/R2 和第三方独立资源地址保留各自旧 PHP 分支。
 - 测试：`go test ./internal/service/index ./internal/repository/vod ./internal/server` 通过；PHP-Go live 对比 `/index` 和 `/` 的 `retcode/errmsg/key 集合/主要 count` 一致，忽略旧 PHP 动态游客 token 和首页访问版本写入。
 
 ### `/getCover`

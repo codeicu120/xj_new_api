@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"regexp"
 	"strings"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type GlobalStore interface {
@@ -17,13 +18,21 @@ type GlobalStore interface {
 type GlobalService struct {
 	store           GlobalStore
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 }
 
 type GlobalRequest struct {
-	Pkg       string
-	Version   string
-	XVersion  string
-	UserAgent string
+	Pkg           string
+	Version       string
+	XVersion      string
+	UserAgent     string
+	HasCookieAuth bool
+	ClientIP      string
+}
+
+func (s *GlobalService) WithResourceResolver(r *resourceurl.Resolver) *GlobalService {
+	s.resources = r
+	return s
 }
 
 func NewGlobalService(store GlobalStore, resourceBaseURL string) *GlobalService {
@@ -31,6 +40,14 @@ func NewGlobalService(store GlobalStore, resourceBaseURL string) *GlobalService 
 }
 
 func (s *GlobalService) GetGlobalData(ctx context.Context, req GlobalRequest) (map[string]interface{}, error) {
+	resources := resourceurl.Resolved{BaseURL: s.resourceBaseURL}
+	var err error
+	if s.resources != nil {
+		resources, err = s.resources.Resolve(ctx, resourceurl.Request{HasCookieAuth: req.HasCookieAuth, ClientIP: req.ClientIP})
+		if err != nil {
+			return nil, err
+		}
+	}
 	pkg := strings.TrimSpace(req.Pkg)
 	dotpkg := ""
 	if pkg != "" {
@@ -90,7 +107,7 @@ func (s *GlobalService) GetGlobalData(ctx context.Context, req GlobalRequest) (m
 		"appdownurl":                   s.callCodeOrEmpty(ctx, prefixed(pkg, "global.appdownurl")),
 		"appdownurl2":                  s.callCodeOrEmpty(ctx, prefixed(pkg, "global.appdownurl2")),
 		"appdownurl3":                  s.callCodeOrEmpty(ctx, prefixed(pkg, "global.appdownurl3")),
-		"adrows":                       s.adRows(ctx, "global.ads"),
+		"adrows":                       s.adRows(ctx, "global.ads", resources),
 		"popuptext":                    s.popup(ctx, "global.popup", dotpkg),
 		"popuptext_v2":                 s.popup(ctx, "global.popup.v2", dotpkg),
 		"popuptext_iOS":                s.popup(ctx, "global.popup.iOS", dotpkg),
@@ -110,9 +127,9 @@ func (s *GlobalService) GetGlobalData(ctx context.Context, req GlobalRequest) (m
 		"qrlink":                       qrlink,
 		"newurl":                       chooseLine(str(baseset["newUrls"])),
 		"sharetext":                    sharetext,
-		"adgroups":                     s.adGroups(ctx, prefixed(pkg, "global.adgroup.all"), ""),
-		"iOS_adgroups":                 s.adGroups(ctx, prefixed(pkg, "iOS.global.adgroup.all"), "iOS."),
-		"Android_adgroups":             s.adGroups(ctx, prefixed(pkg, "Android.global.adgroup.all"), "Android."),
+		"adgroups":                     s.adGroups(ctx, prefixed(pkg, "global.adgroup.all"), "", resources),
+		"iOS_adgroups":                 s.adGroups(ctx, prefixed(pkg, "iOS.global.adgroup.all"), "iOS.", resources),
+		"Android_adgroups":             s.adGroups(ctx, prefixed(pkg, "Android.global.adgroup.all"), "Android.", resources),
 		"app_launch_times_adshow":      s.callInt(ctx, "global.app.launch.times.adshow", 0),
 		"promotion_earn_dscr":          s.mustCallJSON(ctx, "promotion.earn.dscr", nil),
 		"app_launch_type_adshow":       s.mustCallJSON(ctx, "global.app.launch.type.adshow", nil),
@@ -127,8 +144,8 @@ func (s *GlobalService) GetGlobalData(ctx context.Context, req GlobalRequest) (m
 		"inviteCodeStatus":             atoi(setting["inviteCodeStatus"]),
 		"skipAds":                      atoi(setting["skipAds"]),
 		"csurl":                        str(setting["csurl"]),
-		"sitelogo":                     s.resURL(str(setting["sitelogo"])),
-		"splashimage":                  s.resURL(str(setting["splashimage"])),
+		"sitelogo":                     resources.GetRes(str(setting["sitelogo"]), ""),
+		"splashimage":                  resources.GetRes(str(setting["splashimage"]), ""),
 		"umengDeduct":                  atoi(setting["umengDeduct"]),
 		"h5old":                        str(setting["h5old"]),
 		"aiundress":                    str(setting["aiundress"]),
@@ -200,7 +217,7 @@ func (s *GlobalService) popup(ctx context.Context, base string, suffix string) i
 	return s.callHTMLOrEmpty(ctx, base)
 }
 
-func (s *GlobalService) adRows(ctx context.Context, uuid string) []map[string]interface{} {
+func (s *GlobalService) adRows(ctx context.Context, uuid string, resources resourceurl.Resolved) []map[string]interface{} {
 	raw := s.mustCallJSON(ctx, uuid, []interface{}{})
 	list, _ := raw.([]interface{})
 	rows := []map[string]interface{}{}
@@ -211,7 +228,7 @@ func (s *GlobalService) adRows(ctx context.Context, uuid string) []map[string]in
 		}
 		out := adRow(row)
 		if pic := str(row["pic"]); pic != "" {
-			out["pic"] = s.resURL(pic)
+			out["pic"] = resources.GetRes(pic, "")
 		}
 		rows = append(rows, out)
 	}
@@ -221,14 +238,14 @@ func (s *GlobalService) adRows(ctx context.Context, uuid string) []map[string]in
 	return []map[string]interface{}{rows[rand.Intn(len(rows))]}
 }
 
-func (s *GlobalService) adGroups(ctx context.Context, uuid string, trimPrefix string) interface{} {
+func (s *GlobalService) adGroups(ctx context.Context, uuid string, trimPrefix string, resources resourceurl.Resolved) interface{} {
 	uuids := splitCSV(s.callCodeOrEmpty(ctx, uuid))
 	if len(uuids) == 0 {
 		return nil
 	}
 	out := map[string]interface{}{}
 	for _, id := range uuids {
-		rows := s.adRows(ctx, id)
+		rows := s.adRows(ctx, id, resources)
 		if len(rows) == 0 {
 			continue
 		}

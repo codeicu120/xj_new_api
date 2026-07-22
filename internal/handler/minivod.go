@@ -10,6 +10,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	minivodService "xj_comp/internal/service/minivod"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type MiniVODHandler struct {
@@ -24,10 +25,12 @@ func (h *MiniVODHandler) Listing(c *gin.Context) {
 	action := minivodAction(c.Request.URL.Path)
 	params := strings.TrimPrefix(c.Param("params"), "-")
 	data, err := h.service.Listing(c.Request.Context(), minivodService.ListingRequest{
-		Action:      action,
-		PathParams:  params,
-		QueryPage:   c.Query("page"),
-		IsH5Request: c.GetHeader("x-cookie-auth") != "",
+		Action:        action,
+		PathParams:    params,
+		QueryPage:     c.Query("page"),
+		IsH5Request:   hasHeader(c, "x-cookie-auth"),
+		HasCookieAuth: hasHeader(c, "x-cookie-auth"),
+		ClientIP:      c.ClientIP(),
 	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -39,7 +42,7 @@ func (h *MiniVODHandler) Listing(c *gin.Context) {
 
 func (h *MiniVODHandler) Show(c *gin.Context) {
 	vodID, _ := strconv.Atoi(c.Param("vodid"))
-	data, err := h.service.Show(c.Request.Context(), vodID, c.GetHeader("x-cookie-auth") != "")
+	data, err := h.service.Show(c.Request.Context(), vodID, hasHeader(c, "x-cookie-auth"), resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	switch {
 	case errors.Is(err, minivodService.ErrVODNotFound):
@@ -55,7 +58,7 @@ func (h *MiniVODHandler) Show(c *gin.Context) {
 
 func (h *MiniVODHandler) ReqList(c *gin.Context) {
 	debug, _ := strconv.Atoi(c.Query("debug"))
-	data, err := h.service.ReqList(c.Request.Context(), authToken(c), c.GetHeader("x-cookie-auth") != "", debug)
+	data, err := h.service.ReqList(c.Request.Context(), authToken(c), hasHeader(c, "x-cookie-auth"), debug, resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取小视频请求列表失败"))
@@ -184,7 +187,7 @@ func (h *MiniVODHandler) Author(c *gin.Context) {
 		return
 	}
 	page, _ := strconv.Atoi(c.Query("page"))
-	data, err := h.service.AuthorListing(c.Request.Context(), authorID, page, c.GetHeader("x-cookie-auth") != "")
+	data, err := h.service.AuthorListing(c.Request.Context(), authorID, page, hasHeader(c, "x-cookie-auth"), resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if errors.Is(err, minivodService.ErrAuthorNotFound) {
 		c.JSON(http.StatusOK, legacyjson.Error("用户不存在或已被删除"))

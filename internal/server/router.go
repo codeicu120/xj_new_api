@@ -57,6 +57,7 @@ import (
 	openService "xj_comp/internal/service/open"
 	paymentService "xj_comp/internal/service/payment"
 	picService "xj_comp/internal/service/pic"
+	resourceURLService "xj_comp/internal/service/resourceurl"
 	respondService "xj_comp/internal/service/respond"
 	sendfileService "xj_comp/internal/service/sendfile"
 	soService "xj_comp/internal/service/so"
@@ -94,72 +95,93 @@ func NewRouter(opts Options) *gin.Engine {
 	}
 
 	router := gin.New()
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		logger.Warn("invalid trusted proxy configuration; proxy headers disabled", "error", err)
+		_ = router.SetTrustedProxies(nil)
+	}
 	router.Use(gin.Recovery())
 	router.Use(corsMiddleware(cfg.CORSOrigins))
 	router.Use(requestLogger(logger))
+	router.Use(func(c *gin.Context) {
+		ctx := resourceURLService.WithRequest(c.Request.Context(), resourceURLService.Request{
+			HasCookieAuth: hasRequestHeader(c.Request, "x-cookie-auth"),
+			ClientIP:      c.ClientIP(),
+		})
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
 
 	db := openMySQL(cfg.MySQLDSN, logger)
+	ipLocator := newIPLocator(cfg.IPDBPath, logger)
+	indexRepository := indexRepo.NewSettingsRepository(db)
+	resourceFallbackURL := ""
+	if db == nil && cfg.Env == "test" {
+		// Keep isolated/no-DB router tests usable. A running DB-backed service uses
+		// settings.uuid='setting' exclusively, matching PHP runtime::resUrl.
+		resourceFallbackURL = cfg.ResourceBaseURL
+	}
+	resourceURLResolver := resourceURLService.NewResolver(indexRepository, ipLocator, resourceFallbackURL)
 	redisHashStore := redisRepo.NewHashStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 	userRepository := userRepo.NewRepository(db).WithDeletionList(redisHashStore)
 	userHandler := handler.NewUserHandler(
-		userService.NewSysAvatarService(cfg.ResourceBaseURL),
+		userService.NewSysAvatarService(cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver),
 		userService.NewLogoutService(userRepository),
 		userService.NewAuthEdgeService(userRepository),
 	)
 	captchaHandler := handler.NewCaptchaHandler(captchaService.NewService(cfg.SMSCaptcha, cfg.CaptchaStyle, nil))
 	testHandler := handler.NewTestHandler(captchaService.NewTestImageService())
-	ipLocHandler := handler.NewIPLocHandler(iplocService.NewService(newIPLocator(cfg.IPDBPath, logger)))
+	ipLocHandler := handler.NewIPLocHandler(iplocService.NewService(ipLocator))
 	gamePlatformRepository := gameRepo.NewPlatformRepository(db)
 	gameHandler := handler.NewGameHandler(
 		gameService.NewPlatformService(gamePlatformRepository),
-		gameService.NewCategoryService(gameRepo.NewCategoryRepository(db), cfg.GameResourceURL),
-		gameService.NewListingService(gameRepo.NewGameRepository(db), cfg.ResourceBaseURL),
+		gameService.NewCategoryService(gameRepo.NewCategoryRepository(db), cfg.GameResourceURL).WithResourceResolver(resourceURLResolver),
+		gameService.NewListingService(gameRepo.NewGameRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver),
 		gameService.NewBroadcastService(gameRepo.NewBroadcastRepository(db)),
 		gameService.NewWaliService(gamePlatformRepository, userRepository, nil),
 		gameService.NewLotteryService(gamePlatformRepository, userRepository, nil),
 	)
-	indexRepository := indexRepo.NewSettingsRepository(db)
 	ucpRepository := ucpRepo.NewRepository(db)
 	vodRepository := vodRepo.NewListingRepository(db)
-	vodListingService := vodService.NewListingService(vodRepository, cfg.ResourceBaseURL, cfg.VIPDiscount).WithAuth(userRepository)
+	vodListingService := vodService.NewListingService(vodRepository, cfg.ResourceBaseURL, cfg.VIPDiscount).WithAuth(userRepository).WithResourceResolver(resourceURLResolver)
 	idxStore := indexStore{user: userRepository, ucp: ucpRepository, index: indexRepository}
-	globalService := indexService.NewGlobalService(indexRepository, cfg.ResourceBaseURL)
+	globalService := indexService.NewGlobalService(indexRepository, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver)
 	indexHandler := handler.NewIndexHandler(
 		indexService.NewCertService(indexRepository, nil),
 		globalService,
-		indexService.NewInitService(idxStore, globalService, cfg.ResourceBaseURL),
-		indexService.NewHomeService(vodRepository, vodListingService, cfg.ResourceBaseURL),
+		indexService.NewInitService(idxStore, globalService, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver),
+		indexService.NewHomeService(vodRepository, vodListingService, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver),
 		indexService.NewCoverService(idxStore, nil, nil),
 	)
 	amazingHandler := handler.NewAmazingHandler(
 		amazingService.NewCategoryService(amazingRepo.NewCategoryRepository(db)),
-		amazingService.NewListingService(amazingRepo.NewSoftwareRepository(db), cfg.ResourceBaseURL),
+		amazingService.NewListingService(amazingRepo.NewSoftwareRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver),
 	)
 	soHandler := handler.NewSOHandler(soService.NewConfigService(soRepo.NewConfigRepository(db)))
 	vodHandler := handler.NewVODHandler(vodListingService)
-	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db), vodListingService, cfg.ResourceBaseURL).WithAuth(userRepository))
-	specialHandler := handler.NewSpecialHandler(vodService.NewSpecialService(vodRepository, userRepository, cfg.ResourceBaseURL, 100))
-	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}, cfg.ResourceBaseURL))
+	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db), vodListingService, cfg.ResourceBaseURL).WithAuth(userRepository).WithResourceResolver(resourceURLResolver))
+	specialHandler := handler.NewSpecialHandler(vodService.NewSpecialService(vodRepository, userRepository, cfg.ResourceBaseURL, 100).WithResourceResolver(resourceURLResolver))
+	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepository, vodRepository))
-	commentHandler := handler.NewCommentHandler(commentService.NewService(commentRepo.NewRepository(db), cfg.ResourceBaseURL, userRepository))
-	communityHandler := handler.NewCommunityHandler(communityService.NewService(userRepository, communityRepo.NewRepository(db), cfg.ResourceBaseURL))
+	commentHandler := handler.NewCommentHandler(commentService.NewService(commentRepo.NewRepository(db), cfg.ResourceBaseURL, userRepository).WithResourceResolver(resourceURLResolver))
+	communityHandler := handler.NewCommunityHandler(communityService.NewService(userRepository, communityRepo.NewRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	onegoHandler := handler.NewOneGoHandler(onegoService.NewService(onegoRepo.NewRepository(db), userRepository))
-	artHandler := handler.NewArtHandler(artService.NewService(artRepo.NewRepository(db), cfg.ResourceBaseURL))
+	artHandler := handler.NewArtHandler(artService.NewService(artRepo.NewRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	attachHandler := handler.NewAttachHandler(attachService.NewService(userRepository))
 	picHandler := handler.NewPicHandler(picService.NewService(cfg.UploadPath))
 	statsRepository := statsRepo.NewRepository(db)
 	statsHandler := handler.NewStatsHandler(statsService.NewService(statsRepository, userRepository))
-	openHandler := handler.NewOpenHandler(openService.NewService(userRepository, statsRepository, cfg.ResourceBaseURL))
-	activityHandler := handler.NewActivityHandler(activityService.NewService(activityRepo.NewRepository(db), userRepository, cfg.ResourceBaseURL))
+	openHandler := handler.NewOpenHandler(openService.NewService(userRepository, statsRepository, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
+	activityHandler := handler.NewActivityHandler(activityService.NewService(activityRepo.NewRepository(db), userRepository, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	inviteHandler := handler.NewInviteHandler(inviteService.NewService(userRepository, inviteRepo.NewRepository(db)))
 	boughtHandler := handler.NewBoughtHandler(boughtService.NewService(userRepository, boughtRepo.NewRepository(db), vodListingService).WithVIPDiscount(cfg.VIPDiscount))
 	historyHandler := handler.NewHistoryHandler(historyService.NewService(userRepository, historyRepo.NewRepository(db), vodListingService))
-	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService).WithResourceBaseURL(cfg.ResourceBaseURL))
-	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL))
-	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL))
+	favoriteHandler := handler.NewFavoriteHandler(favoriteService.NewService(userRepository, favoriteRepo.NewRepository(db), vodListingService).WithResourceBaseURL(cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
+	exploreHandler := handler.NewExploreHandler(exploreService.NewService(userRepository, exploreRepo.NewRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
+	hgameHandler := handler.NewHGameHandler(hgameService.NewService(hgameRepo.NewRepository(db), cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	starLiveHandler := handler.NewStarLiveHandler(starliveService.NewService(starliveRepo.NewRepository(db), userRepository, ucpRepository, ucpRepository))
 	aiundressExternalClient := aiundressService.NewHTTPExternalClient(cfg.AIUndressHost, cfg.AIUndressKey, 5*time.Second)
 	aiundressSvc := aiundressService.NewService(userRepository, aiundressRepo.NewRepository(db), cfg.ResourceBaseURL, cfg.Env).
+		WithResourceResolver(resourceURLResolver).
 		WithExternalClient(aiundressExternalClient).
 		WithUploadPath(cfg.UploadPath)
 	if cfg.AIUndressR2.AccountID != "" && cfg.AIUndressR2.AccessKey != "" && cfg.AIUndressR2.SecretKey != "" && cfg.AIUndressR2.Bucket != "" {
@@ -547,6 +569,11 @@ func NewRouter(opts Options) *gin.Engine {
 	registerAPIDocs(router)
 
 	return router
+}
+
+func hasRequestHeader(req *http.Request, name string) bool {
+	_, ok := req.Header[http.CanonicalHeaderKey(name)]
+	return ok
 }
 
 type emptyIPLocator struct{}

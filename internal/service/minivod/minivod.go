@@ -19,6 +19,7 @@ import (
 	"xj_comp/internal/domain"
 	minivodRepo "xj_comp/internal/repository/minivod"
 	userRepo "xj_comp/internal/repository/user"
+	"xj_comp/internal/service/resourceurl"
 	vodService "xj_comp/internal/service/vod"
 )
 
@@ -96,13 +97,16 @@ type Service struct {
 	now             func() time.Time
 	randomIntn      func(int) int
 	resourceBaseURL string
+	resources       *resourceurl.Resolver
 }
 
 type ListingRequest struct {
-	Action      string
-	PathParams  string
-	QueryPage   string
-	IsH5Request bool
+	Action        string
+	PathParams    string
+	QueryPage     string
+	IsH5Request   bool
+	HasCookieAuth bool
+	ClientIP      string
 }
 
 type ThrowCoinRequest struct {
@@ -119,6 +123,25 @@ func NewService(store Store, vodProcessor VODProcessor, resourceBaseURL string) 
 func (s *Service) WithAuth(auth AuthStore) *Service {
 	s.auth = auth
 	return s
+}
+
+func (s *Service) WithResourceResolver(resolver *resourceurl.Resolver) *Service {
+	s.resources = resolver
+	return s
+}
+
+func (s *Service) resolveResources(ctx context.Context, hasCookieAuth bool, clientIP string) (resourceurl.Resolved, error) {
+	if s.resources != nil {
+		return s.resources.Resolve(ctx, resourceurl.Request{HasCookieAuth: hasCookieAuth, ClientIP: clientIP})
+	}
+	return resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: s.now().Unix()}, nil
+}
+
+func (s *Service) resolveOptionalResources(ctx context.Context, requests []resourceurl.Request) (resourceurl.Resolved, error) {
+	if len(requests) > 0 {
+		return s.resolveResources(ctx, requests[0].HasCookieAuth, requests[0].ClientIP)
+	}
+	return s.resolveResources(ctx, false, "")
 }
 
 func (s *Service) WithM3U8Fetcher(fetcher M3U8Fetcher) *Service {
@@ -175,7 +198,11 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.MiniV
 			return domain.MiniVODListingData{}, err
 		}
 	}
-	richRows, err := s.richRows(ctx, req.Action, params, vodRows)
+	resources, err := s.resolveResources(ctx, req.HasCookieAuth, req.ClientIP)
+	if err != nil {
+		return domain.MiniVODListingData{}, err
+	}
+	richRows, err := s.richRows(ctx, req.Action, params, vodRows, resources)
 	if err != nil {
 		return domain.MiniVODListingData{}, err
 	}
@@ -200,7 +227,7 @@ func (s *Service) Listing(ctx context.Context, req ListingRequest) (domain.MiniV
 	}, nil
 }
 
-func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, debug int) (map[string]interface{}, error) {
+func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, debug int, resourceReq ...resourceurl.Request) (map[string]interface{}, error) {
 	user, err := s.userByToken(ctx, token)
 	if err != nil {
 		return nil, err
@@ -260,9 +287,13 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, d
 	if err != nil {
 		return nil, err
 	}
+	resources, err := s.resolveOptionalResources(ctx, resourceReq)
+	if err != nil {
+		return nil, err
+	}
 	userByID := map[string]map[string]interface{}{}
 	for _, item := range users {
-		userByID[str(item["uid"])] = processUser(item, s.resourceBaseURL)
+		userByID[str(item["uid"])] = processUserResolved(item, resources)
 	}
 	out := []map[string]interface{}{}
 	for _, row := range vodRows {
@@ -284,7 +315,7 @@ func (s *Service) ReqList(ctx context.Context, token string, isH5Request bool, d
 	return map[string]interface{}{"rows": out}, nil
 }
 
-func (s *Service) Show(ctx context.Context, vodID int, isH5Request bool) (domain.MiniVODShowData, error) {
+func (s *Service) Show(ctx context.Context, vodID int, isH5Request bool, resourceReq ...resourceurl.Request) (domain.MiniVODShowData, error) {
 	categories, err := s.store.Categories(ctx)
 	if err != nil {
 		return domain.MiniVODShowData{}, err
@@ -354,16 +385,20 @@ func (s *Service) Show(ctx context.Context, vodID int, isH5Request bool) (domain
 	if len(vodRows) > 0 {
 		vodRow = vodRows[0]
 	}
+	resources, err := s.resolveOptionalResources(ctx, resourceReq)
+	if err != nil {
+		return domain.MiniVODShowData{}, err
+	}
 	return domain.MiniVODShowData{
 		VODRow:      vodRow,
 		Categories:  categoryParents(categories, atoi(row["cateid"])),
 		SimilarRows: similarRowsOut,
 		LikeRows:    likeRowsOut,
-		VODUser:     processUser(user, s.resourceBaseURL),
+		VODUser:     processUserResolved(user, resources),
 	}, nil
 }
 
-func (s *Service) AuthorListing(ctx context.Context, authorID int, page int, isH5Request bool) (domain.MiniAuthorListingData, error) {
+func (s *Service) AuthorListing(ctx context.Context, authorID int, page int, isH5Request bool, resourceReq ...resourceurl.Request) (domain.MiniAuthorListingData, error) {
 	user, err := s.store.UserByID(ctx, authorID)
 	if err != nil {
 		return domain.MiniAuthorListingData{}, err
@@ -386,9 +421,13 @@ func (s *Service) AuthorListing(ctx context.Context, authorID int, page int, isH
 			return domain.MiniAuthorListingData{}, err
 		}
 	}
+	resources, err := s.resolveOptionalResources(ctx, resourceReq)
+	if err != nil {
+		return domain.MiniAuthorListingData{}, err
+	}
 	return domain.MiniAuthorListingData{
 		Now:      s.now().Unix(),
-		UserRow:  processUserFull(user, s.resourceBaseURL, s.now().Unix()),
+		UserRow:  processUserFullResolved(user, resources, s.now().Unix()),
 		VODRows:  rows,
 		PageInfo: vodService.PageInfo(total, pageSize, page, ""),
 		Orders:   optionRows([][2]interface{}{{1, "最多好评"}, {2, "最多播放"}, {3, "最高评分"}}),
@@ -838,7 +877,7 @@ func (s *Service) filter(ctx context.Context, action string, params map[string]s
 	return filter, orderBy, nil
 }
 
-func (s *Service) richRows(ctx context.Context, action string, params map[string]string, vodRows []map[string]interface{}) ([]map[string]interface{}, error) {
+func (s *Service) richRows(ctx context.Context, action string, params map[string]string, vodRows []map[string]interface{}, resources resourceurl.Resolved) ([]map[string]interface{}, error) {
 	if !needsUserRows(action, params) {
 		return []map[string]interface{}{}, nil
 	}
@@ -848,7 +887,7 @@ func (s *Service) richRows(ctx context.Context, action string, params map[string
 	}
 	userByID := map[string]map[string]interface{}{}
 	for _, user := range users {
-		userByID[str(user["uid"])] = processUser(user, s.resourceBaseURL)
+		userByID[str(user["uid"])] = processUserResolved(user, resources)
 	}
 	out := []map[string]interface{}{}
 	for _, row := range vodRows {
@@ -870,6 +909,10 @@ func (s *Service) insertMiniVODAdRows(ctx context.Context, rows []map[string]int
 		return nil, err
 	}
 	adRows := []map[string]interface{}{}
+	resources, err := s.resolveOptionalResources(ctx, []resourceurl.Request{resourceurl.RequestFromContext(ctx)})
+	if err != nil {
+		return nil, err
+	}
 	for _, callRow := range callRows {
 		if !showAd(callRow, user, s.now().Unix()) {
 			continue
@@ -878,7 +921,7 @@ func (s *Service) insertMiniVODAdRows(ctx context.Context, rows []map[string]int
 			str(callRow["title0"]): str(callRow["url0"]),
 			str(callRow["title1"]): str(callRow["url1"]),
 			str(callRow["title2"]): str(callRow["url2"]),
-			"pic":                  resourceURL(s.resourceBaseURL, str(callRow["pic"])),
+			"pic":                  resources.GetRes(str(callRow["pic"]), ""),
 		})
 	}
 	if len(adRows) == 0 {
@@ -1029,17 +1072,21 @@ func descendantCategoryIDs(categories []map[string]interface{}, parent int) []in
 }
 
 func processUser(row map[string]interface{}, base string) map[string]interface{} {
+	return processUserResolved(row, resourceurl.Resolved{BaseURL: strings.TrimRight(base, "/")})
+}
+
+func processUserResolved(row map[string]interface{}, resources resourceurl.Resolved) map[string]interface{} {
 	avatar := str(row["avatar"])
 	avatarURL := ""
 	if avatar != "" {
 		if strings.HasPrefix(avatar, "http://") || strings.HasPrefix(avatar, "https://") {
-			avatarURL = avatar
+			avatarURL = resources.GetRes(avatar, "")
 		} else if _, err := strconv.Atoi(avatar); err == nil {
 			avatarURL = avatar
 		} else if strings.HasPrefix(avatar, "avatar/") {
-			avatarURL = strings.TrimRight(base, "/") + "/C1/" + strings.TrimLeft(avatar, "/")
+			avatarURL = resources.GetRes(avatar, "C1")
 		} else {
-			avatarURL = strings.TrimRight(base, "/") + "/C1/avatar/" + strings.TrimLeft(avatar, "/")
+			avatarURL = resources.GetRes(avatar, "C1/avatar")
 		}
 	}
 	return map[string]interface{}{
@@ -1053,7 +1100,11 @@ func processUser(row map[string]interface{}, base string) map[string]interface{}
 }
 
 func processUserFull(row map[string]interface{}, base string, now int64) map[string]interface{} {
-	out := processUser(row, base)
+	return processUserFullResolved(row, resourceurl.Resolved{BaseURL: strings.TrimRight(base, "/")}, now)
+}
+
+func processUserFullResolved(row map[string]interface{}, resources resourceurl.Resolved, now int64) map[string]interface{} {
+	out := processUserResolved(row, resources)
 	sysgidExp := atoi64(row["sysgid_exptime"])
 	duetime := ""
 	dueday := ""

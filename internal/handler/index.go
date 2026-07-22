@@ -8,6 +8,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	indexService "xj_comp/internal/service/index"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type IndexHandler struct {
@@ -27,7 +28,7 @@ func NewIndexHandler(certService *indexService.CertService, globalService *index
 }
 
 func (h *IndexHandler) Index(c *gin.Context) {
-	data, err := h.homeService.Index(c.Request.Context(), isH5Request(c))
+	data, err := h.homeService.IndexForRequest(c.Request.Context(), isH5Request(c), resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取首页失败"))
@@ -52,10 +53,12 @@ func (h *IndexHandler) GetCertUUID(c *gin.Context) {
 
 func (h *IndexHandler) GetGlobalData(c *gin.Context) {
 	data, err := h.globalService.GetGlobalData(c.Request.Context(), indexService.GlobalRequest{
-		Pkg:       firstNonEmpty(c.Query("pkg"), c.GetHeader("x-channel")),
-		Version:   c.Query("ver"),
-		XVersion:  c.GetHeader("x-version"),
-		UserAgent: c.GetHeader("user-agent"),
+		Pkg:           firstNonEmpty(c.Query("pkg"), c.GetHeader("x-channel")),
+		Version:       c.Query("ver"),
+		XVersion:      c.GetHeader("x-version"),
+		UserAgent:     c.GetHeader("user-agent"),
+		HasCookieAuth: isH5Request(c),
+		ClientIP:      c.ClientIP(),
 	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -67,12 +70,13 @@ func (h *IndexHandler) GetGlobalData(c *gin.Context) {
 
 func (h *IndexHandler) Init(c *gin.Context) {
 	data, err := h.initService.Init(c.Request.Context(), indexService.InitRequest{
-		Token:     authToken(c),
-		Pkg:       firstNonEmpty(c.Query("pkg"), c.GetHeader("x-channel")),
-		Version:   c.Query("ver"),
-		XVersion:  c.GetHeader("x-version"),
-		UserAgent: c.GetHeader("user-agent"),
-		ClientIP:  c.ClientIP(),
+		Token:         authToken(c),
+		Pkg:           firstNonEmpty(c.Query("pkg"), c.GetHeader("x-channel")),
+		Version:       c.Query("ver"),
+		XVersion:      c.GetHeader("x-version"),
+		UserAgent:     c.GetHeader("user-agent"),
+		ClientIP:      c.ClientIP(),
+		HasCookieAuth: isH5Request(c),
 	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -107,5 +111,5 @@ func firstNonEmpty(values ...string) string {
 }
 
 func isH5Request(c *gin.Context) bool {
-	return c.GetHeader("x-cookie-auth") != ""
+	return hasHeader(c, "x-cookie-auth")
 }

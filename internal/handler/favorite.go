@@ -9,6 +9,7 @@ import (
 	"xj_comp/internal/legacyjson"
 	favoriteRepo "xj_comp/internal/repository/favorite"
 	favoriteService "xj_comp/internal/service/favorite"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type FavoriteHandler struct {
@@ -29,7 +30,7 @@ func (h *FavoriteHandler) MiniListing(c *gin.Context) {
 
 func (h *FavoriteHandler) MiniV2Listing(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
-	data, retcode, errmsg, err := h.service.MiniV2Listing(c.Request.Context(), authToken(c), page, inputValue(c, "wd"), c.GetHeader("x-cookie-auth") != "")
+	data, retcode, errmsg, err := h.service.MiniV2ListingForRequest(c.Request.Context(), authToken(c), page, inputValue(c, "wd"), isH5Request(c), resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
@@ -60,7 +61,7 @@ func (h *FavoriteHandler) MiniAdd(c *gin.Context) {
 
 func (h *FavoriteHandler) listing(c *gin.Context, kind favoriteRepo.Kind) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
-	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), kind, page, inputValue(c, "wd"), c.GetHeader("x-cookie-auth") != "")
+	data, retcode, errmsg, err := h.service.ListingForRequest(c.Request.Context(), authToken(c), kind, page, inputValue(c, "wd"), isH5Request(c), resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

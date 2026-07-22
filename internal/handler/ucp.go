@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"xj_comp/internal/legacyjson"
+	"xj_comp/internal/service/resourceurl"
 	ucpService "xj_comp/internal/service/ucp"
 )
 
@@ -22,7 +23,7 @@ func NewUCPHandler(service *ucpService.Service) *UCPHandler {
 
 func (h *UCPHandler) MyAff(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
-	data, retcode, errmsg, err := h.service.MyAff(c.Request.Context(), authToken(c), page)
+	data, retcode, errmsg, err := h.service.MyAff(c.Request.Context(), authToken(c), page, resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))
@@ -496,7 +497,7 @@ func (h *UCPHandler) FeedbackNewListing(c *gin.Context) {
 
 func (h *UCPHandler) FeedbackDetail(c *gin.Context) {
 	id, _ := strconv.Atoi(inputValue(c, "id"))
-	data, retcode, errmsg, err := h.service.FeedbackDetail(c.Request.Context(), authToken(c), id)
+	data, retcode, errmsg, err := h.service.FeedbackDetail(c.Request.Context(), authToken(c), id, resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

@@ -8,6 +8,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	exploreService "xj_comp/internal/service/explore"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type ExploreHandler struct {
@@ -19,7 +20,7 @@ func NewExploreHandler(service *exploreService.Service) *ExploreHandler {
 }
 
 func (h *ExploreHandler) Index(c *gin.Context) {
-	data, err := h.service.Index(c.Request.Context(), authToken(c))
+	data, err := h.service.IndexForRequest(c.Request.Context(), authToken(c), resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error("获取发现页失败"))

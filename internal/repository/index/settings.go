@@ -14,6 +14,10 @@ func NewSettingsRepository(db *sql.DB) *SettingsRepository {
 	return &SettingsRepository{db: db}
 }
 
+func (r *SettingsRepository) Available() bool {
+	return r != nil && r.db != nil
+}
+
 func (r *SettingsRepository) SettingValue(ctx context.Context) (string, error) {
 	if r.db == nil {
 		return "", nil

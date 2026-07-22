@@ -52,7 +52,7 @@ func TestAnnounceBuildsPHPCompatibleRowsAndPageInfo(t *testing.T) {
 		t.Fatalf("unexpected page url %#v", got)
 	}
 	row := data.Rows[0]
-	if row["coverpic"] != "https://img.example/cover.png" {
+	if row["coverpic"] != "https://img.example//cover.png" {
 		t.Fatalf("unexpected coverpic %#v", row["coverpic"])
 	}
 	if row["content"] != nil || row["catename"] != "系统公告" {

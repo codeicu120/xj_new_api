@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"xj_comp/internal/domain"
+	"xj_comp/internal/service/resourceurl"
 )
 
 var (
@@ -29,7 +30,10 @@ type Service struct {
 	store           Store
 	resourceBaseURL string
 	now             func() time.Time
+	resources       *resourceurl.Resolver
 }
+
+func (s *Service) WithResourceResolver(r *resourceurl.Resolver) *Service { s.resources = r; return s }
 
 func NewService(store Store, resourceBaseURL string) *Service {
 	return &Service{store: store, resourceBaseURL: strings.TrimRight(resourceBaseURL, "/"), now: time.Now}
@@ -51,7 +55,7 @@ func (s *Service) Announce(ctx context.Context, page int) (domain.ArtListingData
 		return domain.ArtListingData{}, err
 	}
 	return domain.ArtListingData{
-		Rows:     s.processRows(rows, categories),
+		Rows:     s.processRows(ctx, rows, categories),
 		PageInfo: pageInfo(total, pageSize, page, "/art/?page=[?]"),
 	}, nil
 }
@@ -68,7 +72,7 @@ func (s *Service) Show(ctx context.Context, artID int) (domain.ArtShowData, erro
 	if err != nil {
 		return domain.ArtShowData{}, err
 	}
-	processed := s.processRows([]map[string]interface{}{row}, categories)
+	processed := s.processRows(ctx, []map[string]interface{}{row}, categories)
 	if len(processed) == 0 {
 		return domain.ArtShowData{}, ErrArtNotFound
 	}
@@ -88,10 +92,17 @@ func (s *Service) category(ctx context.Context, uuid string) ([]map[string]inter
 	return categories, nil, ErrCategoryNotFound
 }
 
-func (s *Service) processRows(rows []map[string]interface{}, categories []map[string]interface{}) []map[string]interface{} {
+func (s *Service) processRows(ctx context.Context, rows []map[string]interface{}, categories []map[string]interface{}) []map[string]interface{} {
 	out := make([]map[string]interface{}, 0, len(rows))
 	cats := indexBy(categories, "cateid")
 	now := s.now().Unix()
+	resolved := resourceurl.Resolved{BaseURL: s.resourceBaseURL, Timestamp: now}
+	if s.resources != nil {
+		resolved = resourceurl.Resolved{Timestamp: now}
+		if value, err := s.resources.ResolveContext(ctx); err == nil {
+			resolved = value
+		}
+	}
 	for _, row := range rows {
 		cateID := fmt.Sprint(row["cateid"])
 		content := row["content"]
@@ -102,7 +113,7 @@ func (s *Service) processRows(rows []map[string]interface{}, categories []map[st
 			"artid":    fmt.Sprint(row["artid"]),
 			"title":    fmt.Sprint(row["title"]),
 			"subtitle": fmt.Sprint(row["subtitle"]),
-			"coverpic": s.resourceURL(fmt.Sprint(row["coverpic"])),
+			"coverpic": resolved.GetRes(fmt.Sprint(row["coverpic"]), ""),
 			"addtime":  artAddTime(now, atoi64(row["ctimestamp"])),
 			"intro":    fmt.Sprint(row["intro"]),
 			"content":  content,

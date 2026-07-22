@@ -46,7 +46,7 @@ func (h *HistoryHandler) MiniPlayRemove(c *gin.Context) {
 func (h *HistoryHandler) listing(c *gin.Context, kind historyRepo.Kind, errmsg string) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	timeline, _ := strconv.Atoi(inputValue(c, "timeline"))
-	data, err := h.service.Listing(c.Request.Context(), authToken(c), kind, page, timeline, c.GetHeader("x-cookie-auth") != "")
+	data, err := h.service.Listing(c.Request.Context(), authToken(c), kind, page, timeline, hasHeader(c, "x-cookie-auth"))
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

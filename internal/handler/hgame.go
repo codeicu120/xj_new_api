@@ -8,6 +8,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	hgameService "xj_comp/internal/service/hgame"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type HGameHandler struct {
@@ -20,7 +21,7 @@ func NewHGameHandler(service *hgameService.Service) *HGameHandler {
 
 func (h *HGameHandler) Index(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
-	data, retcode, errmsg, err := h.service.Index(c.Request.Context(), page)
+	data, retcode, errmsg, err := h.service.IndexForRequest(c.Request.Context(), page, resourceurl.Request{HasCookieAuth: isH5Request(c), ClientIP: c.ClientIP()})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, legacyjson.Error(errmsg))

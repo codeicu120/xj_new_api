@@ -157,7 +157,7 @@ func (s *Service) vodOrderTopUser(ctx context.Context, row map[string]interface{
 			return nil, err
 		}
 		if len(user) != 0 {
-			processed := singleUser(s.processUsers([]map[string]interface{}{user}, groups))
+			processed := singleUser(s.processUsers(ctx, []map[string]interface{}{user}, groups))
 			result["username"] = processed["username"]
 			result["nickname"] = processed["username"]
 			result["avatar"] = processed["avatar_url"]
@@ -169,7 +169,7 @@ func (s *Service) vodOrderTopUser(ctx context.Context, row map[string]interface{
 		return nil, err
 	}
 	if len(bot) != 0 {
-		processed := s.processVODOrderBot(bot)
+		processed := s.processVODOrderBot(ctx, bot)
 		result["username"] = processed["username"]
 		result["nickname"] = processed["nickname"]
 		result["avatar"] = processed["avatar_url"]
@@ -177,11 +177,11 @@ func (s *Service) vodOrderTopUser(ctx context.Context, row map[string]interface{
 	return result, nil
 }
 
-func (s *Service) processVODOrderBot(row map[string]interface{}) map[string]interface{} {
+func (s *Service) processVODOrderBot(ctx context.Context, row map[string]interface{}) map[string]interface{} {
 	avatar := str(row["avatar"])
 	avatarURL := avatar
 	if avatar == "" || !isNumericString(avatar) {
-		avatarURL = s.avatarURL(avatar)
+		avatarURL = s.avatarURL(ctx, avatar)
 	}
 	return map[string]interface{}{
 		"uid":        row["uid"],

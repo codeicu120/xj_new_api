@@ -27,9 +27,11 @@ func (h *SpecialHandler) Index(c *gin.Context) {
 
 func (h *SpecialHandler) Listing(c *gin.Context) {
 	data, err := h.service.Listing(c.Request.Context(), vodService.SpecialListingRequest{
-		PathParams:  strings.TrimPrefix(c.Param("params"), "-"),
-		QueryPage:   inputValue(c, "page"),
-		IsH5Request: c.GetHeader("x-cookie-auth") != "",
+		PathParams:    strings.TrimPrefix(c.Param("params"), "-"),
+		QueryPage:     inputValue(c, "page"),
+		IsH5Request:   hasHeader(c, "x-cookie-auth"),
+		HasCookieAuth: hasHeader(c, "x-cookie-auth"),
+		ClientIP:      c.ClientIP(),
 	})
 	c.Header("X-Served-By", "newbie")
 	if err != nil {
@@ -42,9 +44,11 @@ func (h *SpecialHandler) Listing(c *gin.Context) {
 func (h *SpecialHandler) Detail(c *gin.Context) {
 	spid, params := parseSpecialDetailPath(c.Param("spid"))
 	data, err := h.service.Detail(c.Request.Context(), vodService.SpecialDetailRequest{
-		SPID:        spid,
-		PathParams:  params,
-		IsH5Request: c.GetHeader("x-cookie-auth") != "",
+		SPID:          spid,
+		PathParams:    params,
+		IsH5Request:   hasHeader(c, "x-cookie-auth"),
+		HasCookieAuth: hasHeader(c, "x-cookie-auth"),
+		ClientIP:      c.ClientIP(),
 	})
 	c.Header("X-Served-By", "newbie")
 	if errors.Is(err, vodService.ErrSpecialNotFound) {
@@ -56,6 +60,11 @@ func (h *SpecialHandler) Detail(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, legacyjson.OK(data))
+}
+
+func hasHeader(c *gin.Context, name string) bool {
+	_, ok := c.Request.Header[http.CanonicalHeaderKey(name)]
+	return ok
 }
 
 func (h *SpecialHandler) Up(c *gin.Context) {

@@ -39,6 +39,7 @@ type Config struct {
 	RedisPassword    string
 	RedisDB          int
 	CORSOrigins      []string
+	TrustedProxies   []string
 	GameResourceURL  string
 	VIPDiscount      int
 	UploadPath       string
@@ -87,6 +88,7 @@ func FromEnv() Config {
 		RedisPassword:   envString("REDIS_PASSWORD", ""),
 		RedisDB:         envInt("REDIS_DB", 0),
 		CORSOrigins:     envCSV("CORS_ORIGINS", defaultCORSOrigins),
+		TrustedProxies:  envCSV("TRUSTED_PROXIES", ""),
 		GameResourceURL: envString("GAME_RESOURCE_BASE_URL", defaultGameResourceURL),
 		VIPDiscount:     envInt("VIP_DISCOUNT", 50),
 		UploadPath:      envString("UPLOAD_PATH", defaultUploadPath),

@@ -8,6 +8,7 @@ import (
 
 	"xj_comp/internal/legacyjson"
 	aiundressService "xj_comp/internal/service/aiundress"
+	"xj_comp/internal/service/resourceurl"
 )
 
 type AIUndressHandler struct {
@@ -21,7 +22,7 @@ func NewAIUndressHandler(service *aiundressService.Service) *AIUndressHandler {
 func (h *AIUndressHandler) Listing(c *gin.Context) {
 	page, _ := strconv.Atoi(inputValue(c, "page"))
 	module, _ := strconv.Atoi(inputValue(c, "module"))
-	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), page, module)
+	data, retcode, errmsg, err := h.service.Listing(c.Request.Context(), authToken(c), page, module, resourceurl.Request{HasCookieAuth: hasHeader(c, "x-cookie-auth"), ClientIP: c.ClientIP()})
 	respondLegacy(c, data, retcode, errmsg, err)
 }
 
