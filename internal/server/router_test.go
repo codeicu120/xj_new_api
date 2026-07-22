@@ -54,6 +54,57 @@ func TestReadyz(t *testing.T) {
 	}
 }
 
+func TestRouterFailsClosedWhenConfiguredLogDatabaseIsInvalid(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected invalid configured log database to stop router startup")
+		}
+	}()
+
+	NewRouter(Options{Config: config.Config{
+		Env:         "test",
+		MySQLLogDSN: "%",
+	}})
+}
+
+func TestRouterFailsClosedWhenConfiguredReplicaDatabaseIsInvalid(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected invalid configured replica database to stop router startup")
+		}
+	}()
+
+	NewRouter(Options{Config: config.Config{
+		Env:          "test",
+		MySQLReadDSN: "%",
+	}})
+}
+
+func TestProductionRouterRequiresReadAndLogDatabases(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected production router without read/log databases to stop startup")
+		}
+	}()
+
+	NewRouter(Options{Config: config.Config{Env: "prod"}})
+}
+
+func TestProductionRouterFailsClosedWhenPrimaryDatabaseIsInvalid(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected invalid production primary database to stop startup")
+		}
+	}()
+
+	NewRouter(Options{Config: config.Config{
+		Env:          "prod",
+		MySQLDSN:     "%",
+		MySQLReadDSN: "%",
+		MySQLLogDSN:  "%",
+	}})
+}
+
 func TestCORSPreflight(t *testing.T) {
 	router := newTestRouter()
 

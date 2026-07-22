@@ -26,6 +26,21 @@ spec:
               value: prod
             - name: HTTP_PORT
               value: "8080"
+            - name: MYSQL_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: xj-comp-mysql
+                  key: dsn
+            - name: MYSQL_READ_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: xj-comp-mysql
+                  key: replica-dsn
+            - name: MYSQL_LOG_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: xj-comp-mysql
+                  key: log-dsn
           livenessProbe:
             httpGet:
               path: /healthz

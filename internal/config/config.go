@@ -35,6 +35,8 @@ type Config struct {
 	CaptchaStyle     int
 	IPDBPath         string
 	MySQLDSN         string
+	MySQLReadDSN     string
+	MySQLLogDSN      string
 	RedisAddr        string
 	RedisPassword    string
 	RedisDB          int
@@ -84,6 +86,8 @@ func FromEnv() Config {
 		CaptchaStyle:    envInt("CAPTCHA_STYLE", 0),
 		IPDBPath:        envString("IPDB_PATH", defaultIPDBPath),
 		MySQLDSN:        envString("MYSQL_DSN", defaultMySQLDSN),
+		MySQLReadDSN:    envString("MYSQL_READ_DSN", ""),
+		MySQLLogDSN:     envString("MYSQL_LOG_DSN", ""),
 		RedisAddr:       envString("REDIS_ADDR", defaultRedisAddr),
 		RedisPassword:   envString("REDIS_PASSWORD", ""),
 		RedisDB:         envInt("REDIS_DB", 0),

@@ -27,7 +27,9 @@ type Filter struct {
 }
 
 type Repository struct {
-	db *sql.DB
+	db        *sql.DB
+	replicaDB *sql.DB
+	logDB     *sql.DB
 }
 
 const (
@@ -37,23 +39,33 @@ const (
 )
 
 func NewRepository(db *sql.DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{db: db, replicaDB: db, logDB: db}
+}
+
+func (r *Repository) WithReplicaDB(db *sql.DB) *Repository {
+	r.replicaDB = db
+	return r
+}
+
+func (r *Repository) WithLogDB(db *sql.DB) *Repository {
+	r.logDB = db
+	return r
 }
 
 func (r *Repository) Categories(ctx context.Context) ([]map[string]interface{}, error) {
-	return r.queryRows(ctx, "SELECT cateid,parentid,uuid,catename FROM vod_categories ORDER BY sort ASC, cateid ASC")
+	return r.queryReplicaRows(ctx, "SELECT cateid,parentid,uuid,catename FROM vod_categories ORDER BY sort ASC, cateid ASC")
 }
 
 func (r *Repository) Areas(ctx context.Context) ([]map[string]interface{}, error) {
-	return r.queryRows(ctx, "SELECT * FROM vod_areas ORDER BY sortnum ASC, areaid ASC")
+	return r.queryReplicaRows(ctx, "SELECT * FROM vod_areas ORDER BY sortnum ASC, areaid ASC")
 }
 
 func (r *Repository) Years(ctx context.Context) ([]map[string]interface{}, error) {
-	return r.queryRows(ctx, "SELECT * FROM vod_years ORDER BY sortnum ASC, yearid ASC")
+	return r.queryReplicaRows(ctx, "SELECT * FROM vod_years ORDER BY sortnum ASC, yearid ASC")
 }
 
 func (r *Repository) Servers(ctx context.Context) ([]map[string]interface{}, error) {
-	return r.queryRows(ctx, "SELECT * FROM vod_servers ORDER BY sortnum ASC, srvid ASC")
+	return r.queryReplicaRows(ctx, "SELECT * FROM vod_servers ORDER BY sortnum ASC, srvid ASC")
 }
 
 func (r *Repository) TagsByNames(ctx context.Context, names []string) ([]map[string]interface{}, error) {
@@ -78,7 +90,7 @@ func (r *Repository) TagsByNames(ctx context.Context, names []string) ([]map[str
 	if len(args) == 0 {
 		return []map[string]interface{}{}, nil
 	}
-	return r.queryRows(ctx, "SELECT * FROM vod_tags WHERE tagname IN("+strings.Join(holders, ",")+")", args...)
+	return r.queryReplicaRows(ctx, "SELECT * FROM vod_tags WHERE tagname IN("+strings.Join(holders, ",")+")", args...)
 }
 
 func (r *Repository) Count(ctx context.Context, filter Filter, now int64) (int, error) {
@@ -245,7 +257,7 @@ func (r *Repository) UsersByIDs(ctx context.Context, ids []int) ([]map[string]in
 	if idList == "NULL" {
 		return []map[string]interface{}{}, nil
 	}
-	return r.queryRows(ctx, "SELECT * FROM users WHERE uid IN("+idList+")")
+	return r.queryReplicaRows(ctx, "SELECT * FROM users WHERE uid IN("+idList+")")
 }
 
 func (r *Repository) VODsByIDs(ctx context.Context, ids []int, orderByField bool) ([]map[string]interface{}, error) {
@@ -260,7 +272,7 @@ func (r *Repository) VODsByIDs(ctx context.Context, ids []int, orderByField bool
 	if orderByField {
 		orderBy = "FIELD(vodid, " + idList + ")"
 	}
-	return r.queryRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy)
+	return r.queryReplicaRows(ctx, "SELECT * FROM vods WHERE vodid IN("+idList+") AND showtype=1 ORDER BY "+orderBy)
 }
 
 func (r *Repository) PendingViewLogs(ctx context.Context, uid int, sid string, limit int) ([]map[string]interface{}, error) {
@@ -268,16 +280,16 @@ func (r *Repository) PendingViewLogs(ctx context.Context, uid int, sid string, l
 		return []map[string]interface{}{}, nil
 	}
 	if uid > 0 {
-		return r.queryRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", uid, limit)
+		return r.queryLogRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", uid, limit)
 	}
 	if sid == "" {
 		return []map[string]interface{}{}, nil
 	}
-	return r.queryRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
+	return r.queryLogRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=0 ORDER BY logid DESC LIMIT ?", sid, limit)
 }
 
 func (r *Repository) PullViewLogs(ctx context.Context, uid int, sid string) (int, error) {
-	if r.db == nil {
+	if r.db == nil || r.logDB == nil {
 		return 0, nil
 	}
 	if uid > 0 {
@@ -290,7 +302,7 @@ func (r *Repository) PullViewLogs(ctx context.Context, uid int, sid string) (int
 }
 
 func (r *Repository) MarkViewLogsShown(ctx context.Context, uid int, sid string, logIDs []int, now int64) error {
-	if r.db == nil || len(logIDs) == 0 {
+	if r.logDB == nil || len(logIDs) == 0 {
 		return nil
 	}
 	cleanIDs := make([]int, 0, len(logIDs))
@@ -319,7 +331,7 @@ func (r *Repository) MarkViewLogsShown(ctx context.Context, uid int, sid string,
 		args = append(args, id)
 	}
 	query := "UPDATE " + table + " SET reqtime=?, showtype=1 WHERE " + actorColumn + "=? AND logid IN(" + strings.Join(placeholders, ",") + ")"
-	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := r.logDB.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("mark minivod viewlogs shown: %w", err)
 	}
 	return nil
@@ -410,33 +422,33 @@ func (r *Repository) RecountUpDown(ctx context.Context, vodID int) error {
 }
 
 func (r *Repository) FavoriteCount(ctx context.Context, uid int, vodID int) (int, error) {
-	if r.db == nil || uid <= 0 || vodID <= 0 {
+	if r.replicaDB == nil || uid <= 0 || vodID <= 0 {
 		return 0, nil
 	}
 	var total int
-	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_favorites WHERE uid=? AND vodid=?", uid, vodID).Scan(&total); err != nil {
+	if err := r.replicaDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM minivod_favorites WHERE uid=? AND vodid=?", uid, vodID).Scan(&total); err != nil {
 		return 0, fmt.Errorf("count minivod favorite: %w", err)
 	}
 	return total, nil
 }
 
 func (r *Repository) MiniViewLog(ctx context.Context, uid int, sid string, vodID int) (map[string]interface{}, error) {
-	if r.db == nil || vodID <= 0 {
+	if r.logDB == nil || vodID <= 0 {
 		return map[string]interface{}{}, nil
 	}
 	if uid > 0 {
-		rows, err := r.queryRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
+		rows, err := r.queryLogRows(ctx, "SELECT * FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND vodid=? LIMIT 1", uid, vodID)
 		return firstRow(rows, err)
 	}
 	if sid != "" {
-		rows, err := r.queryRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND vodid=? LIMIT 1", sid, vodID)
+		rows, err := r.queryLogRows(ctx, "SELECT * FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND vodid=? LIMIT 1", sid, vodID)
 		return firstRow(rows, err)
 	}
 	return map[string]interface{}{}, nil
 }
 
 func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid string, since int64, action int) (int, error) {
-	if r.db == nil {
+	if r.logDB == nil {
 		return 0, nil
 	}
 	field := "playtime"
@@ -445,7 +457,7 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	}
 	var total int
 	if uid > 0 {
-		err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=1 AND "+field+">=?", uid, since).Scan(&total)
+		err := r.logDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniUserViewLogTable(uid)+" WHERE uid=? AND showtype=1 AND "+field+">=?", uid, since).Scan(&total)
 		if err != nil {
 			return 0, fmt.Errorf("count minivod viewlogs: %w", err)
 		}
@@ -454,7 +466,7 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 	if sid == "" {
 		return 0, nil
 	}
-	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=1 AND "+field+">=?", sid, since).Scan(&total)
+	err := r.logDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+miniGuestViewLogTable(sid)+" WHERE sid=? AND showtype=1 AND "+field+">=?", sid, since).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("count minivod guest viewlogs: %w", err)
 	}
@@ -462,7 +474,7 @@ func (r *Repository) CountMiniViewLogsSince(ctx context.Context, uid int, sid st
 }
 
 func (r *Repository) RecordMiniMedia(ctx context.Context, uid int, sid string, vodID int, play bool, deduct int, now int64) error {
-	if r.db == nil || vodID <= 0 {
+	if r.db == nil || r.logDB == nil || vodID <= 0 {
 		return nil
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -477,16 +489,24 @@ func (r *Repository) RecordMiniMedia(ctx context.Context, uid int, sid string, v
 	if err := incrementMiniVODMediaCounter(ctx, tx, vodID, prefix, now); err != nil {
 		return fmt.Errorf("increment minivod media counter: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit minivod media counter: %w", err)
+	}
+	logTx, err := r.logDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin minivod view log: %w", err)
+	}
+	defer logTx.Rollback()
 	if uid > 0 {
-		if err := recordMiniViewLog(ctx, tx, miniUserViewLogTable(uid), "uid", uid, vodID, play, deduct, now); err != nil {
+		if err := recordMiniViewLog(ctx, logTx, miniUserViewLogTable(uid), "uid", uid, vodID, play, deduct, now); err != nil {
 			return fmt.Errorf("record minivod user media: %w", err)
 		}
 	} else if strings.TrimSpace(sid) != "" {
-		if err := recordMiniViewLog(ctx, tx, miniGuestViewLogTable(sid), "sid", sid, vodID, play, deduct, now); err != nil {
+		if err := recordMiniViewLog(ctx, logTx, miniGuestViewLogTable(sid), "sid", sid, vodID, play, deduct, now); err != nil {
 			return fmt.Errorf("record minivod guest media: %w", err)
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := logTx.Commit(); err != nil {
 		return fmt.Errorf("commit minivod media log: %w", err)
 	}
 	return nil
@@ -732,14 +752,14 @@ func (r *Repository) pullGuestViewLogs(ctx context.Context, sid string) (int, er
 }
 
 func (r *Repository) ensureSublog(ctx context.Context, table string, actorColumn string, actor interface{}) (map[string]interface{}, error) {
-	rows, err := r.queryRows(ctx, "SELECT * FROM "+table+" WHERE "+actorColumn+"=? LIMIT 1", actor)
+	rows, err := r.queryLogRows(ctx, "SELECT * FROM "+table+" WHERE "+actorColumn+"=? LIMIT 1", actor)
 	if err != nil {
 		return nil, fmt.Errorf("query minivod sublog: %w", err)
 	}
 	if len(rows) > 0 {
 		return rows[0], nil
 	}
-	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+") VALUES(?)", actor)
+	result, err := r.logDB.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+") VALUES(?)", actor)
 	if err != nil {
 		return nil, fmt.Errorf("create minivod sublog: %w", err)
 	}
@@ -748,7 +768,7 @@ func (r *Repository) ensureSublog(ctx context.Context, table string, actorColumn
 }
 
 func (r *Repository) pullViewLogsForActor(ctx context.Context, viewTable string, actorColumn string, actor interface{}, sublog map[string]interface{}) (int, error) {
-	oldRows, err := r.queryRows(ctx, "SELECT logid,vodid,playtime,downtime FROM "+viewTable+" WHERE "+actorColumn+"=? ORDER BY logid DESC LIMIT 2000", actor)
+	oldRows, err := r.queryLogRows(ctx, "SELECT logid,vodid,playtime,downtime FROM "+viewTable+" WHERE "+actorColumn+"=? ORDER BY logid DESC LIMIT 2000", actor)
 	if err != nil {
 		return 0, fmt.Errorf("query existing minivod viewlogs: %w", err)
 	}
@@ -768,7 +788,7 @@ func (r *Repository) pullViewLogsForActor(ctx context.Context, viewTable string,
 	}
 	if len(oldRows) >= 2000 && minLogID > 0 {
 		daytime := dayStartUnix(time.Now)
-		_, err := r.db.ExecContext(ctx, "DELETE FROM "+viewTable+" WHERE "+actorColumn+"=? AND logid<? AND playtime<? AND downtime<?", actor, minLogID, daytime, daytime)
+		_, err := r.logDB.ExecContext(ctx, "DELETE FROM "+viewTable+" WHERE "+actorColumn+"=? AND logid<? AND playtime<? AND downtime<?", actor, minLogID, daytime, daytime)
 		if err != nil {
 			return 0, fmt.Errorf("prune minivod viewlogs: %w", err)
 		}
@@ -827,7 +847,7 @@ func (r *Repository) vodIDsByTags(ctx context.Context, tagIDs []int) ([]int, err
 	if len(tagIDs) == 0 {
 		return []int{}, nil
 	}
-	tagRows, err := r.queryRows(ctx, "SELECT vodid FROM vod_tagmaps WHERE tagid IN("+intListSQL(tagIDs)+") ORDER BY vodid DESC LIMIT 500")
+	tagRows, err := r.queryPrimaryRows(ctx, "SELECT vodid FROM vod_tagmaps WHERE tagid IN("+intListSQL(tagIDs)+") ORDER BY vodid DESC LIMIT 500")
 	if err != nil {
 		return nil, fmt.Errorf("query minivod tag maps: %w", err)
 	}
@@ -835,7 +855,7 @@ func (r *Repository) vodIDsByTags(ctx context.Context, tagIDs []int) ([]int, err
 	if len(candidateIDs) == 0 {
 		return []int{}, nil
 	}
-	vodRows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE vodid IN("+intListSQL(candidateIDs)+") AND showtype=1 AND isvip=0")
+	vodRows, err := r.queryPrimaryRows(ctx, "SELECT vodid FROM vods WHERE vodid IN("+intListSQL(candidateIDs)+") AND showtype=1 AND isvip=0")
 	if err != nil {
 		return nil, fmt.Errorf("query minivod tag vods: %w", err)
 	}
@@ -846,7 +866,7 @@ func (r *Repository) vodIDsByAuthors(ctx context.Context, authorIDs []int) ([]in
 	if len(authorIDs) == 0 {
 		return []int{}, nil
 	}
-	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE authorid IN("+intListSQL(authorIDs)+") AND showtype=1 AND isvip=0 ORDER BY vodid DESC LIMIT 500")
+	rows, err := r.queryPrimaryRows(ctx, "SELECT vodid FROM vods WHERE authorid IN("+intListSQL(authorIDs)+") AND showtype=1 AND isvip=0 ORDER BY vodid DESC LIMIT 500")
 	if err != nil {
 		return nil, fmt.Errorf("query minivod author vods: %w", err)
 	}
@@ -854,7 +874,7 @@ func (r *Repository) vodIDsByAuthors(ctx context.Context, authorIDs []int) ([]in
 }
 
 func (r *Repository) latestMiniVODIDsAfter(ctx context.Context, maxVODID int) ([]int, error) {
-	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE vodid>? AND showtype=1 AND isvip=0 ORDER BY vodid ASC LIMIT 500", maxVODID)
+	rows, err := r.queryPrimaryRows(ctx, "SELECT vodid FROM vods WHERE vodid>? AND showtype=1 AND isvip=0 ORDER BY vodid ASC LIMIT 500", maxVODID)
 	if err != nil {
 		return nil, fmt.Errorf("query latest minivods: %w", err)
 	}
@@ -866,7 +886,7 @@ func (r *Repository) miniVODIDsExcept(ctx context.Context, oldIDs []int) ([]int,
 	if len(oldIDs) > 0 {
 		where += " AND vodid NOT IN(" + intListSQL(oldIDs) + ")"
 	}
-	rows, err := r.queryRows(ctx, "SELECT vodid FROM vods WHERE "+where+" LIMIT 500")
+	rows, err := r.queryPrimaryRows(ctx, "SELECT vodid FROM vods WHERE "+where+" LIMIT 500")
 	if err != nil {
 		return nil, fmt.Errorf("query fallback minivods: %w", err)
 	}
@@ -889,7 +909,7 @@ func (r *Repository) insertViewLogs(ctx context.Context, table string, actorColu
 	if len(placeholders) == 0 {
 		return 0, nil
 	}
-	result, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+",vodid) VALUES "+strings.Join(placeholders, ","), args...)
+	result, err := r.logDB.ExecContext(ctx, "INSERT IGNORE INTO "+table+"("+actorColumn+",vodid) VALUES "+strings.Join(placeholders, ","), args...)
 	if err != nil {
 		return 0, fmt.Errorf("insert minivod viewlogs: %w", err)
 	}
@@ -974,10 +994,26 @@ func buildWhere(filter Filter, now int64) (string, []interface{}) {
 }
 
 func (r *Repository) queryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
-	if r.db == nil {
+	return queryRowsDB(ctx, r.db, query, args...)
+}
+
+func (r *Repository) queryPrimaryRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
+	return queryRowsDB(ctx, r.db, query, args...)
+}
+
+func (r *Repository) queryReplicaRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
+	return queryRowsDB(ctx, r.replicaDB, query, args...)
+}
+
+func (r *Repository) queryLogRows(ctx context.Context, query string, args ...interface{}) ([]map[string]interface{}, error) {
+	return queryRowsDB(ctx, r.logDB, query, args...)
+}
+
+func queryRowsDB(ctx context.Context, db *sql.DB, query string, args ...interface{}) ([]map[string]interface{}, error) {
+	if db == nil {
 		return []map[string]interface{}{}, nil
 	}
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

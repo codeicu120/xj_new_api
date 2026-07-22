@@ -381,6 +381,7 @@
 - DB: 读取 `vods(showtype=1)`、`vod_servers`、`minivod_favorites`、`vod_updowns`、`minivod_viewlogs/minivod_guestviewlogs`；判断已播放/已下载和当日额度；免费/限免、已观看/下载和权限额度内非扣费成功路径写 `minivod_viewlogs/minivod_guestviewlogs`，并递增 `vods.playcount_*`/`vods.downcount_*`。
 - 兼容规则：已接管记录不存在、VIP/limit/limitv3 权限不足、播放/下载地址不存在、免费、限免、已观看继续提供、已下载继续提供、权限额度内提供地址和超限提示分支；播放地址支持 CDN 签名和服务器 host 补全；小视频 PHP `incPlay/incDown` 的 `updatetime` 参数实际未使用，Go 对齐为已有 `playtime/downtime>0` 时不覆盖日志时间、但仍递增 `vods` 计数。
 - 风险边界：本批不执行超限金币扣减、扣费标记、播放任务金币、每 10 部奖励、三级分销奖励和 `sublog/guestsublog` 喜好分析；这些资产/奖励/画像副作用仍保留在未重构清单，后续需要事务化迁移。
+- 一致性：主库计数与日志库 viewlog 使用两个本地事务，不提供跨库原子性；日志库提交失败时主库计数可能已成功，与 PHP 跨 `$db`/`$db2` 的既有风险一致，部署需对该错误告警。
 - Subagent：`Laplace` 只读核对 PHP `incPlay/incDown`，确认非扣费成功路径均应写 viewlog 并递增 `vods` 计数；扣金币、奖励和喜好分析可继续暂缓。
 - 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/server` 通过；service fake 覆盖免费播放、VIP 权限拒绝、免费下载和权限额度内播放记录；PHP-Go live 对比 `/minivod/reqplay/0`、`/minivod/reqdown/0` 的 retcode/errmsg 一致，旧 PHP 动态 `data.xxx_api_auth` 不回传。
 
@@ -400,12 +401,13 @@
 - Go: `internal/handler.MiniVODHandler.ReqList`
 - Service: `internal/service/minivod.Service`
 - Repository: `internal/repository/minivod.Repository`
+- Config: `MYSQL_DSN`、`MYSQL_LOG_DSN`、`MYSQL_READ_DSN` 分别映射 PHP `$db` 主库、`$db2` 日志库、`$db3` 只读库。开发/测试环境未设置后两者时回退 `MYSQL_DSN`；生产必须显式配置三套连接，三者均在启动时校验，缺失或不可用时服务拒绝启动。
 - Auth: 不强制登录；有有效 token 时按 uid 读取 `minivod_viewlogs_{uid%100}`，否则按 sid 读取 `minivod_guestviewlogs_{sid首字符}`，无 sid 时返回空 rows。
-- DB: 先读取 `showtype=0` 的待展示小视频 viewlog 100 条；不足 100 时按 PHP `pullViewLogs` 规则补推荐池，再随机打乱并截取 10 条，读取 `vods(showtype=1)`、`users`、`minivod_favorites` 并复用 mini VOD 行处理；返回前按当前 uid/sid 批量更新本次 logid 的 `reqtime` 和 `showtype=1`。
+- DB: `minivod_sublogs/minivod_guestsublogs` 与 `minivod_viewlogs_*/minivod_guestviewlogs_*` 按 PHP `$db2` 语义使用日志库；推荐池补充过程中的 `vods/vod_tagmaps` 候选查询按 PHP 保持主库，最终 `vods/users/minivod_favorites` 展示查询按 `*_slave` 语义使用只读库。先读取 `showtype=0` 的待展示 viewlog 100 条；不足 100 时补推荐池，再随机打乱并截取 10 条；返回前按当前 uid/sid 批量更新本次 logid 的 `reqtime` 和 `showtype=1`。
 - 兼容规则：返回 `data.rows`，每条小视频行包含 `vodrow` 和 `user`；登录用户补 `isfavorite`，游客为 0；默认请求对齐 PHP `debug=0`，会标记已展示；`debug=1` 跳过标记。读取 `minivod.ads` 后按 `showAd` 规则过滤并随机插入广告行，且不插在第一条。
 - 风险边界：本批不接金币/资产；`pullViewLogs` 只补 viewlog 推荐池，真实库字段/索引漂移需要联调时再压测。
 - Subagent：`Hypatia` 只读核对 PHP `reqlist` 标记时机和 debug 边界；`Cicero` 补齐 `pullViewLogs` 和随机广告插入副作用。
-- 测试：`go test ./internal/service/minivod ./internal/repository/minivod ./internal/handler` 通过；service fake 覆盖现有 viewlog 组装 rows、补推荐池、广告插入、已展示标记和 `debug=1` 跳过标记。旧 PHP 本地 `/minivod/reqlist` 因拉取/生成推荐链路 `curl --max-time 10` 超时，未做 live 对比。
+- 测试：`go test ./internal/config ./internal/service/minivod ./internal/repository/minivod ./internal/handler ./internal/server` 通过；service fake 覆盖现有 viewlog 组装 rows、补推荐池、广告插入、已展示标记和 `debug=1` 跳过标记，repository 覆盖主库/只读库/日志库连接隔离。2026-07-22 线上确认 PHP 匿名请求返回 10 条；Go 携带游客 token 的 500 定位为主库缺少日志分表，代码已支持三库注入，待部署注入真实 DSN 后完成 live 回归。
 
 ### `/minivod/reqlong/:vodid`
 

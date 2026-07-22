@@ -88,8 +88,12 @@ func NewRouter(opts Options) *gin.Engine {
 		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	}
 
-	if cfg.Env == "prod" || cfg.Env == "production" {
+	isProduction := cfg.Env == "prod" || cfg.Env == "production"
+	if isProduction {
 		gin.SetMode(gin.ReleaseMode)
+		if cfg.MySQLReadDSN == "" || cfg.MySQLLogDSN == "" {
+			panic("production requires MYSQL_READ_DSN and MYSQL_LOG_DSN")
+		}
 	} else {
 		gin.SetMode(gin.TestMode)
 	}
@@ -111,7 +115,29 @@ func NewRouter(opts Options) *gin.Engine {
 		c.Next()
 	})
 
-	db := openMySQL(cfg.MySQLDSN, logger)
+	var db *sql.DB
+	if isProduction {
+		db = openMySQLWithPing(cfg.MySQLDSN, logger, "mysql primary database")
+		if db == nil {
+			panic("mysql primary database is unavailable")
+		}
+	} else {
+		db = openMySQL(cfg.MySQLDSN, logger)
+	}
+	replicaDB := db
+	if cfg.MySQLReadDSN != "" {
+		replicaDB = openMySQLWithPing(cfg.MySQLReadDSN, logger, "mysql read database")
+		if replicaDB == nil {
+			panic("mysql read database is configured but unavailable")
+		}
+	}
+	logDB := db
+	if cfg.MySQLLogDSN != "" {
+		logDB = openMySQLWithPing(cfg.MySQLLogDSN, logger, "mysql log database")
+		if logDB == nil {
+			panic("mysql log database is configured but unavailable")
+		}
+	}
 	ipLocator := newIPLocator(cfg.IPDBPath, logger)
 	indexRepository := indexRepo.NewSettingsRepository(db)
 	resourceFallbackURL := ""
@@ -158,7 +184,7 @@ func NewRouter(opts Options) *gin.Engine {
 	)
 	soHandler := handler.NewSOHandler(soService.NewConfigService(soRepo.NewConfigRepository(db)))
 	vodHandler := handler.NewVODHandler(vodListingService)
-	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db), vodListingService, cfg.ResourceBaseURL).WithAuth(userRepository).WithResourceResolver(resourceURLResolver))
+	minivodHandler := handler.NewMiniVODHandler(minivodService.NewService(minivodRepo.NewRepository(db).WithReplicaDB(replicaDB).WithLogDB(logDB), vodListingService, cfg.ResourceBaseURL).WithAuth(userRepository).WithResourceResolver(resourceURLResolver))
 	specialHandler := handler.NewSpecialHandler(vodService.NewSpecialService(vodRepository, userRepository, cfg.ResourceBaseURL, 100).WithResourceResolver(resourceURLResolver))
 	ucpHandler := handler.NewUCPHandler(ucpService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}, cfg.ResourceBaseURL).WithResourceResolver(resourceURLResolver))
 	sendfileHandler := handler.NewSendfileHandler(sendfileService.NewService(userRepository, vodRepository))
@@ -598,6 +624,19 @@ func openMySQL(dsn string, logger *slog.Logger) *sql.DB {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		logger.Warn("mysql unavailable", "error", err)
+		return nil
+	}
+	return db
+}
+
+func openMySQLWithPing(dsn string, logger *slog.Logger, name string) *sql.DB {
+	db := openMySQL(dsn, logger)
+	if db == nil {
+		return nil
+	}
+	if err := db.Ping(); err != nil {
+		logger.Error(name+" unavailable", "error", err)
+		_ = db.Close()
 		return nil
 	}
 	return db

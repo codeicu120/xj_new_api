@@ -396,7 +396,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | `MiniVODHandler.ReqPlay/ReqDown` | 已接管可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址，非扣费成功路径写 `minivod_viewlogs/minivod_guestviewlogs` 与 `vods` 计数；超限扣金币、扣费标记和任务奖励分支暂不写资产 |
 | `/minivod/reqcoin` | `c.api.minivod->reqcoin` | `MiniVODHandler.ReqCoin` | 已重构；领取小视频播放任务金币，事务锁定任务日志，登录用户写 `users_quota/user_coinlogs(cointype=25)`，游客更新 `user_guests.goldcoin`；保留旧 PHP 未校验 log 归属行为 |
 | `/minivod/throwcoin/:vodid` | `c.api.minivod->throwcoin` | `MiniVODHandler.ThrowCoin` | 已重构；未登录、视频不存在、作者不存在、GET 初始化、POST 参数校验和投币成功事务均已迁移，成功扣用户金币、加作者金币并写 `user_coinlogs/minivod_coinlogs` |
-| `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已重构；待展示 viewlog 不足 100 时拉取推荐池，返回随机 10 条并包装 `vodrow/user/isfavorite`，返回前按 `debug` 标记 `reqtime/showtype=1`，并按 PHP 规则随机插入 `minivod.ads` 广告行 |
+| `/minivod/reqlist` | `c.api.minivod->reqlist` | `MiniVODHandler.ReqList` | 已重构；待展示 viewlog 不足 100 时拉取推荐池，返回随机 10 条并包装 `vodrow/user/isfavorite`，返回前按 `debug` 标记 `reqtime/showtype=1`，并按 PHP 规则随机插入 `minivod.ads` 广告行；按 PHP 三库语义，主库为 `MYSQL_DSN`、`*_slave` 查询通过 `MYSQL_READ_DSN`、推荐日志分表通过 `MYSQL_LOG_DSN`，生产必须注入三套连接 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | `MiniVODHandler.ReqLong` | 已重构；普通长视频转小视频播放地址，支持 CDN 签名/播放服务器 host 补全；错误分支和本地样本成功 URL live 对比通过 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | `MiniVODHandler.ParseLongM3U8` | 已重构；复用长转短前置校验，成功时返回 `vnd.apple.mpegurl`，按 `vod_map_ls.start/end` 裁剪子 m3u8 并重写 KEY/TS 绝对 URL；媒体源拉取失败或无子 m3u8 时按 PHP 返回空 m3u8 body |
 | `/miniplaylog/listing` | `c.api.minivod->history` | `HistoryHandler.MiniPlayListing` | 已重构；不强制登录，登录/游客按小视频分表读取，mini 行处理和相对时间格式 |

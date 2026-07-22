@@ -80,7 +80,7 @@
 | `/minivod/show/:vodid` | `c.api.minivod->show` | 本轮完成 | 小视频详情只读接口；返回详情、作者、分类层级、相关视频和猜你喜欢，错误分支 live 对比通过。 |
 | `/minivod/up/:vodid`、`/minivod/down/:vodid` | `c.api.minivod->up/down` | 本轮完成 | 小视频赞踩；登录用户写 `vod_updowns`，游客用进程内 limiter，无效视频分支 live 对比通过。 |
 | `/minivod/reqplay/:vodid`、`/minivod/reqdown/:vodid` | `c.api.minivod->reqplay/reqdown` | 本轮完成 | 小视频播放/下载地址请求的可控路径；记录/权限/地址错误、免费/限免、已观看/下载和权限额度内提供地址已接管，非扣费成功路径写 viewlog 与 `vods` 计数；超限扣金币、扣费标记和任务奖励分支后续事务化迁移。 |
-| `/minivod/reqlist` | `c.api.minivod->reqlist` | 本轮完成 | 小视频请求列表；待展示 viewlog 不足 100 时补推荐池，随机返回 10 条并包装 `rows[].vodrow/user`，按 `debug` 标记 `reqtime/showtype=1`，并随机插入符合条件的广告行。 |
+| `/minivod/reqlist` | `c.api.minivod->reqlist` | 本轮完成 | 小视频请求列表；待展示 viewlog 不足 100 时补推荐池，随机返回 10 条并包装 `rows[].vodrow/user`，按 `debug` 标记 `reqtime/showtype=1`，并随机插入符合条件的广告行；`MYSQL_DSN`/`MYSQL_LOG_DSN`/`MYSQL_READ_DSN` 分别对应 PHP `$db`/`$db2`/`$db3`。 |
 | `/minivod/reqlong/:vodid` | `c.api.minivod->getLong2Mini` | 本轮完成 | 长视频转小视频播放地址；成功直接返回 `text/html` URL，错误分支 live 对比通过。 |
 | `/minivod/parselong/:vodid/index.m3u8` | `c.api.minivod->parseM3u8` | 本轮完成 | 接管长片 m3u8 成功输出；按 `vod_map_ls.start/end` 裁剪子 m3u8，重写 KEY/TS 绝对 URL，媒体源异常按 PHP 返回空 m3u8 body。 |
 | `/miniplaylog/listing`、`/miniplaylog/remove` | `c.api.minivod->history/historyDelete` | 本轮完成 | 小视频播放记录列表和删除；列表按小视频分表读取，删除空参数 live 对比通过。 |
