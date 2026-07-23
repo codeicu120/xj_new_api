@@ -441,7 +441,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/starLive/queryCoinBalance` | `c.api.starlive->queryCoinBalance` | `StarLiveHandler.QueryCoinBalance` | 已重构；直播平台余额查询 raw JSON 响应，游客长 memberId 返回 0，用户金币余额按 `goldcoin*10` 返回 |
 | `/starLive/gameBet`、`/starLive/gameWin`、`/starLive/translate`、`/starLive/tryAgain` | `c.api.starlive->$action` | `StarLiveHandler.GameBet/GameWin/Translate/TryAgain` | 部分已重构；raw JSON 游客长 `memberId`、空/非法 memberId 和未知 `busiType` 安全失败分支已迁移，下注/中奖/钻石兑换资产事务和重复订单查询暂未接管 |
 | `/getGlobalData` | `c.api.index->getGlobalData` | `IndexHandler.GetGlobalData` | 已重构；全局配置/版本/广告/弹窗/开关聚合，核心 key shape 和版本覆盖对比通过 |
-| `/init` | `c.api.index->init` | `IndexHandler.Init` | 已重构；客户端初始化聚合，复用 globalData，登录/游客 user、appver、通知、邀请和站点配置 live 对比通过 |
+| `/init` | `c.api.index->init` | `IndexHandler.Init` | 已重构；客户端初始化聚合，复用 globalData，登录/游客 user、appver、通知、邀请和站点配置 live 对比通过；渠道 `pkg` 广告配置缺失时按 PHP 回退默认 `adgroups/iOS_adgroups/Android_adgroups` |
 
 ### 需要登录但不需要验证码
 

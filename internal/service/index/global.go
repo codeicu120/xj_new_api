@@ -127,9 +127,9 @@ func (s *GlobalService) GetGlobalData(ctx context.Context, req GlobalRequest) (m
 		"qrlink":                       qrlink,
 		"newurl":                       chooseLine(str(baseset["newUrls"])),
 		"sharetext":                    sharetext,
-		"adgroups":                     s.adGroups(ctx, prefixed(pkg, "global.adgroup.all"), "", resources),
-		"iOS_adgroups":                 s.adGroups(ctx, prefixed(pkg, "iOS.global.adgroup.all"), "iOS.", resources),
-		"Android_adgroups":             s.adGroups(ctx, prefixed(pkg, "Android.global.adgroup.all"), "Android.", resources),
+		"adgroups":                     s.adGroups(ctx, prefixed(pkg, "global.adgroup.all"), "global.adgroup.all", pkg+"_", "", resources),
+		"iOS_adgroups":                 s.adGroups(ctx, prefixed(pkg, "iOS.global.adgroup.all"), "iOS.global.adgroup.all", pkg+"_", "iOS.", resources),
+		"Android_adgroups":             s.adGroups(ctx, prefixed(pkg, "Android.global.adgroup.all"), "Android.global.adgroup.all", pkg+"_", "Android.", resources),
 		"app_launch_times_adshow":      s.callInt(ctx, "global.app.launch.times.adshow", 0),
 		"promotion_earn_dscr":          s.mustCallJSON(ctx, "promotion.earn.dscr", nil),
 		"app_launch_type_adshow":       s.mustCallJSON(ctx, "global.app.launch.type.adshow", nil),
@@ -238,8 +238,11 @@ func (s *GlobalService) adRows(ctx context.Context, uuid string, resources resou
 	return []map[string]interface{}{rows[rand.Intn(len(rows))]}
 }
 
-func (s *GlobalService) adGroups(ctx context.Context, uuid string, trimPrefix string, resources resourceurl.Resolved) interface{} {
-	uuids := splitCSV(s.callCodeOrEmpty(ctx, uuid))
+func (s *GlobalService) adGroups(ctx context.Context, uuid string, fallbackUUID string, channelPrefix string, platformPrefix string, resources resourceurl.Resolved) interface{} {
+	uuids, found := s.adGroupUUIDs(ctx, uuid)
+	if !found && fallbackUUID != uuid {
+		uuids, _ = s.adGroupUUIDs(ctx, fallbackUUID)
+	}
 	if len(uuids) == 0 {
 		return nil
 	}
@@ -249,20 +252,25 @@ func (s *GlobalService) adGroups(ctx context.Context, uuid string, trimPrefix st
 		if len(rows) == 0 {
 			continue
 		}
-		key := id
-		key = strings.TrimPrefix(key, trimPrefix)
-		if dot := strings.Index(key, "."); dot >= 0 && trimPrefix != "" {
-			key = strings.TrimPrefix(id, trimPrefix)
-		}
-		if trimPrefix == "" {
-			key = strings.TrimPrefix(key, strings.Split(uuid, ".")[0]+"_")
-		}
+		key := strings.TrimPrefix(id, channelPrefix)
+		key = strings.TrimPrefix(key, platformPrefix)
 		out[key] = rows
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func (s *GlobalService) adGroupUUIDs(ctx context.Context, uuid string) ([]string, bool) {
+	row, err := s.store.CalldataByUUID(ctx, uuid)
+	if err != nil || len(row) == 0 {
+		return nil, false
+	}
+	if str(row["type"]) != "code" {
+		return nil, true
+	}
+	return splitCSV(strings.TrimSpace(str(row["content"]))), true
 }
 
 func adRow(row map[string]interface{}) map[string]interface{} {

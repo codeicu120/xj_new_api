@@ -1449,6 +1449,7 @@
 - DB: 读取 session/user、user_groups、users_quota、users_goldbean、`settings(setting/baseset/promotion.bonus)` 和 `maintain_calldata(global.appver/playHeaders/全局配置)`。
 - 兼容规则：返回 `globalData/invite_bonus/user/appver/notification_all/inviteCodeUrl/inviteCodeAppid/playHeaders/urlHosts/csurl/sitelogo/isclosed/closetips/externalUrlDating`；顶层 `appver` 不受 `ver` query 覆盖，`globalData.appver` 保持 `/getGlobalData` 的覆盖规则。
 - 测试：`go test ./internal/service/index ./internal/server` 通过；PHP-Go live 对比 `/init?ver=1.2.3` 游客和测试 token 登录分支，核心 key、user、appver/globalData.appver、通知空值和站点配置一致，忽略旧 PHP 动态 `xxx_api_auth`。
+- 广告组兼容：请求携带 `pkg` 时，若对应的 `{pkg}.global.adgroup.all`、`{pkg}.iOS.global.adgroup.all` 或 `{pkg}.Android.global.adgroup.all` 记录不存在，按 PHP 回退无渠道前缀的默认配置；保留 PHP 的 `global_adgroup_*` 对象 key，仅移除实际存在的渠道下划线前缀和 `iOS./Android.` 平台前缀。
 
 ### `/`、`/index`
 

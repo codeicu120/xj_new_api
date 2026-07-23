@@ -57,3 +57,49 @@ func TestGlobalDataBuildsCoreFields(t *testing.T) {
 		t.Fatalf("resource/timing=%#v", data)
 	}
 }
+
+func TestGlobalDataAdGroupsFallBackToDefaultsForUnknownPackage(t *testing.T) {
+	store := fakeGlobalStore{
+		calldata: map[string]map[string]interface{}{
+			"global.adgroup.all":         {"type": "code", "content": "global_adgroup_ad1"},
+			"iOS.global.adgroup.all":     {"type": "code", "content": "iOS.global_adgroup_ad1"},
+			"Android.global.adgroup.all": {"type": "code", "content": "Android.global_adgroup_ad1"},
+			"global_adgroup_ad1":         {"type": "rows", "content": `[{"title0":"url","url0":"u","pic":"a.jpg"}]`},
+			"iOS.global_adgroup_ad1":     {"type": "rows", "content": `[{"title0":"url","url0":"i","pic":"i.jpg"}]`},
+			"Android.global_adgroup_ad1": {"type": "rows", "content": `[{"title0":"url","url0":"a","pic":"a.jpg"}]`},
+		},
+		settings: map[string]map[string]interface{}{},
+	}
+	data, err := NewGlobalService(store, "https://res.test").GetGlobalData(
+		context.Background(),
+		GlobalRequest{Pkg: "missing-channel"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"adgroups", "iOS_adgroups", "Android_adgroups"} {
+		groups, ok := data[field].(map[string]interface{})
+		if !ok || groups["global_adgroup_ad1"] == nil {
+			t.Fatalf("%s=%#v", field, data[field])
+		}
+	}
+}
+
+func TestGlobalDataAdGroupsUseChannelSpecificConfigWithoutFallback(t *testing.T) {
+	store := fakeGlobalStore{
+		calldata: map[string]map[string]interface{}{
+			"ch.global.adgroup.all": {"type": "code", "content": "ch_global_adgroup_ad2"},
+			"global.adgroup.all":    {"type": "code", "content": "global_adgroup_ad1"},
+			"ch_global_adgroup_ad2": {"type": "rows", "content": `[{"title0":"url","url0":"channel","pic":"c.jpg"}]`},
+			"global_adgroup_ad1":    {"type": "rows", "content": `[{"title0":"url","url0":"default","pic":"d.jpg"}]`},
+		},
+	}
+	data, err := NewGlobalService(store, "").GetGlobalData(context.Background(), GlobalRequest{Pkg: "ch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := data["adgroups"].(map[string]interface{})
+	if groups["global_adgroup_ad2"] == nil || groups["global_adgroup_ad1"] != nil {
+		t.Fatalf("adgroups=%#v", groups)
+	}
+}
