@@ -227,7 +227,7 @@ func NewRouter(opts Options) *gin.Engine {
 		verificationService.NewImageCaptchaVerifier(captchaSvc.Verify),
 		nil,
 		nil,
-	))
+	).WithEnvironment(cfg.Env))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
 	respondHandler := handler.NewRespondHandler(respondService.NewService(
 		ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository},

@@ -118,3 +118,17 @@ func TestEmailValidationAndSuccess(t *testing.T) {
 		t.Fatalf("msg = %q", msg)
 	}
 }
+
+func TestVerificationCodeIsFixedOnlyInDev(t *testing.T) {
+	service := NewService(&fakeStore{}, nil, nil, nil, nil)
+	service.randCode = func() string { return "654321" }
+
+	if got := service.WithEnvironment(" dev ").verificationCode(); got != "123456" {
+		t.Fatalf("dev code=%q", got)
+	}
+	for _, env := range []string{"test", "staging", "prod", "production", ""} {
+		if got := service.WithEnvironment(env).verificationCode(); got != "654321" {
+			t.Fatalf("%s code=%q", env, got)
+		}
+	}
+}

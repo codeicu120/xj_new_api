@@ -1978,3 +1978,4 @@
 - 长、短视频统一根据用户当前有效的 `gid/sysgid/gids` 和 `user_groups.perms` 构建权限；`sysgid_exptime` 已过期时回落普通组，避免过期 VIP 继续授权，也避免有效 VIP 在短视频接口被错误判定为次数耗尽。
 - 测试：`go test ./internal/service/verification ./internal/service/captcha ./internal/service/vod ./internal/service/minivod ./internal/server`。
 - `/v2/register` 成功写入分支仍未迁移；用户、账户、额度、session、验证码消费和 IP 限流必须在可验证的事务/补偿边界内完成，不能用无持久化的成功响应代替。
+- 开发环境验证码：当 `APP_ENV=dev` 时，短信和邮箱验证码统一生成 `123456`，发送内容与 10 分钟校验 key 使用同一个固定值；`test/staging/prod/production` 及其他环境仍使用随机六位码。

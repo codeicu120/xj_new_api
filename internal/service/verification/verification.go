@@ -48,6 +48,7 @@ type Service struct {
 	captcha  CaptchaVerifier
 	sms      SMSSender
 	mail     MailSender
+	env      string
 	now      func() time.Time
 	randCode func() string
 }
@@ -76,6 +77,11 @@ func NewService(store Store, limiter Limiter, captcha CaptchaVerifier, sms SMSSe
 			return fmt.Sprintf("%06d", rand.Intn(1_000_000))
 		},
 	}
+}
+
+func (s *Service) WithEnvironment(env string) *Service {
+	s.env = strings.ToLower(strings.TrimSpace(env))
+	return s
 }
 
 type SendSMSRequest struct {
@@ -228,7 +234,7 @@ func (s *Service) sendSMS(ctx context.Context, keyPrefix string, mobi string, se
 	} else if limit > 0 && count >= limit {
 		return "索取验证码次数过于频繁，请明天再试", nil
 	}
-	code := s.randCode()
+	code := s.verificationCode()
 	platform := atoi(setting["smsplatform"])
 	if !strings.HasPrefix(mobi, "86.") {
 		platform = atoi(setting["smsplatforminternational"])
@@ -266,7 +272,7 @@ func (s *Service) sendMail(ctx context.Context, email string, sendCount int, lim
 	if err := json.Unmarshal([]byte(str(setting["mailconf"])), &conf); err != nil || len(conf) == 0 {
 		return "邮箱功能暂未开启，请稍后重试", nil
 	}
-	code := s.randCode()
+	code := s.verificationCode()
 	if err := s.mail.SendMail(ctx, conf, email, "您的邮箱信息", "验证码为："+code+"，10分钟内有效，感谢您的使用！"); err != nil {
 		return "发送失败，请重试", nil
 	}
@@ -275,6 +281,13 @@ func (s *Service) sendMail(ctx context.Context, email string, sendCount int, lim
 		return "", err
 	}
 	return "验证码已发送至您的邮箱，请10分钟内验证并确认", s.limiter.Incr(ctx, "email."+email+"."+code, 10*time.Minute, email+"."+code)
+}
+
+func (s *Service) verificationCode() string {
+	if s.env == "dev" {
+		return "123456"
+	}
+	return s.randCode()
 }
 
 func (s *Service) setting(ctx context.Context) (map[string]interface{}, error) {
