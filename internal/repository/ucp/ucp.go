@@ -362,8 +362,94 @@ func packageTable(kind string) string {
 	}[kind]
 }
 
-func (r *Repository) PaymentChannels(context.Context, bool) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{}, nil
+func (r *Repository) PaymentChannels(ctx context.Context, gameOnly bool) ([]map[string]interface{}, error) {
+	if r.db == nil || gameOnly {
+		return []map[string]interface{}{}, nil
+	}
+	var value sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT value FROM settings WHERE uuid=?", "payment.chansetting").Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return []map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("query payment channel setting: %w", err)
+	}
+	// PHP getPayments only exposes paycodes selected in payment.chansetting.
+	// Keep gateway credentials out of the API process: list responses only need
+	// the public channel metadata, while order submission remains provider-owned.
+	if !serializedStringListContains(value.String, "paycodes", "newpayrq.alipay") {
+		return []map[string]interface{}{}, nil
+	}
+	return []map[string]interface{}{{
+		"channame": "瑞奇支付",
+		"chanlogo": "",
+		"dscr":     "",
+		"disabled": 0,
+		"payways": []map[string]interface{}{{
+			"payname":        "支付宝",
+			"paylogo":        "assets/images/payments/icon_zfb.png",
+			"dscr":           "",
+			"paycode":        "newpayrq.alipay",
+			"trxamount_min":  1000,
+			"trxamount_max":  50000,
+			"allow_paytypes": map[int][]string{},
+		}},
+	}}, nil
+}
+
+func serializedStringListContains(value string, listKey string, target string) bool {
+	for cursor := 0; cursor < len(value); cursor++ {
+		key, next, ok := parseSerializedStringAt(value, cursor)
+		if !ok || key != listKey {
+			continue
+		}
+		cursor = next
+		if cursor+2 >= len(value) || value[cursor] != 'a' || value[cursor+1] != ':' {
+			return false
+		}
+		open := strings.IndexByte(value[cursor:], '{')
+		if open < 0 {
+			return false
+		}
+		cursor += open + 1
+		for cursor < len(value) && value[cursor] != '}' {
+			semicolon := strings.IndexByte(value[cursor:], ';')
+			if semicolon < 0 {
+				return false
+			}
+			cursor += semicolon + 1 // skip the integer list index
+			item, itemNext, ok := parseSerializedStringAt(value, cursor)
+			if !ok {
+				return false
+			}
+			if item == target {
+				return true
+			}
+			cursor = itemNext
+		}
+		return false
+	}
+	return false
+}
+
+func parseSerializedStringAt(value string, start int) (string, int, bool) {
+	if start < 0 || start+2 > len(value) || value[start:start+2] != "s:" {
+		return "", start, false
+	}
+	lengthEnd := strings.IndexByte(value[start+2:], ':')
+	if lengthEnd < 0 {
+		return "", start, false
+	}
+	lengthEnd += start + 2
+	size, err := strconv.Atoi(value[start+2 : lengthEnd])
+	if err != nil || lengthEnd+2+size+2 > len(value) || value[lengthEnd+1] != '"' {
+		return "", start, false
+	}
+	dataStart := lengthEnd + 2
+	dataEnd := dataStart + size
+	if value[dataEnd] != '"' || value[dataEnd+1] != ';' {
+		return "", start, false
+	}
+	return value[dataStart:dataEnd], dataEnd + 2, true
 }
 
 func (r *Repository) CountVODOrders(ctx context.Context, uid int, status *int) (int, error) {

@@ -73,6 +73,10 @@ type AuthStore interface {
 	UserBySession(ctx context.Context, sid string) (map[string]interface{}, error)
 }
 
+type AuthGroupStore interface {
+	Groups(ctx context.Context) ([]map[string]interface{}, error)
+}
+
 type VoteLimiter interface {
 	Seen(ctx context.Context, key string) (bool, error)
 	Mark(ctx context.Context, key string) error
@@ -821,6 +825,15 @@ func (s *Service) userByToken(ctx context.Context, token string) (map[string]int
 	}
 	if user == nil {
 		return map[string]interface{}{"uid": "0", "sid": sid}, nil
+	}
+	if atoi(user["uid"]) > 0 && user["perms"] == nil {
+		if groupStore, ok := s.auth.(AuthGroupStore); ok {
+			groups, err := groupStore.Groups(ctx)
+			if err != nil {
+				return nil, err
+			}
+			user["perms"] = vodService.InitializeUserPerms(user, groups, s.now())
+		}
 	}
 	return user, nil
 }

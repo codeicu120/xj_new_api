@@ -154,7 +154,8 @@ func NewRouter(opts Options) *gin.Engine {
 		userService.NewLogoutService(userRepository),
 		userService.NewAuthEdgeService(userRepository),
 	)
-	captchaHandler := handler.NewCaptchaHandler(captchaService.NewService(cfg.SMSCaptcha, cfg.CaptchaStyle, nil))
+	captchaSvc := captchaService.NewService(cfg.SMSCaptcha, cfg.CaptchaStyle, nil)
+	captchaHandler := handler.NewCaptchaHandler(captchaSvc)
 	testHandler := handler.NewTestHandler(captchaService.NewTestImageService())
 	ipLocHandler := handler.NewIPLocHandler(iplocService.NewService(ipLocator))
 	gamePlatformRepository := gameRepo.NewPlatformRepository(db)
@@ -220,7 +221,13 @@ func NewRouter(opts Options) *gin.Engine {
 		}))
 	}
 	aiundressHandler := handler.NewAIUndressHandler(aiundressSvc)
-	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(idxStore, nil, nil, nil, nil))
+	verificationHandler := handler.NewVerificationHandler(verificationService.NewService(
+		idxStore,
+		nil,
+		verificationService.NewImageCaptchaVerifier(captchaSvc.Verify),
+		nil,
+		nil,
+	))
 	paymentHandler := handler.NewPaymentHandler(paymentService.NewService(ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository}))
 	respondHandler := handler.NewRespondHandler(respondService.NewService(
 		ucpStore{user: userRepository, ucp: ucpRepository, index: indexRepository},

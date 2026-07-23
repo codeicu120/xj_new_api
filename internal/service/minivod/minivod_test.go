@@ -501,6 +501,36 @@ func (a fakeAuth) UserBySession(context.Context, string) (map[string]interface{}
 	return a.user, nil
 }
 
+type fakeGroupAuth struct {
+	fakeAuth
+	groups []map[string]interface{}
+}
+
+func (a fakeGroupAuth) Groups(context.Context) ([]map[string]interface{}, error) {
+	return a.groups, nil
+}
+
+func TestUserByTokenInitializesActiveVIPPermissions(t *testing.T) {
+	service := NewService(&fakeStore{}, fakeProcessor{}, "").WithAuth(fakeGroupAuth{
+		fakeAuth: fakeAuth{user: map[string]interface{}{
+			"uid": "7", "gid": "4", "sysgid": "6", "sysgid_exptime": "2000000000",
+		}},
+		groups: []map[string]interface{}{
+			{"gid": "4", "scope": "0", "weight": "4", "perms": `{"allow.minivod.vip":"0","max.minivod.play.daynum":"5"}`},
+			{"gid": "6", "scope": "0", "weight": "6", "perms": `{"allow.minivod.vip":"1","max.minivod.play.daynum":"1000"}`},
+		},
+	})
+	service.now = func() time.Time { return time.Unix(1770000000, 0) }
+
+	user, err := service.userByToken(context.Background(), "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if getMiniPermInt(user["perms"], "allow.minivod.vip") != 1 {
+		t.Fatalf("perms=%#v", user["perms"])
+	}
+}
+
 func TestVoteUserSwitchesState(t *testing.T) {
 	store := &fakeStore{updown: map[string]interface{}{"updown": "1"}}
 	service := NewService(store, fakeProcessor{}, "https://res.test").WithAuth(fakeAuth{user: map[string]interface{}{"uid": "7"}})

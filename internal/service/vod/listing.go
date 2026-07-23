@@ -1031,7 +1031,9 @@ func getVODPermInt(perms interface{}, key string) int {
 
 func initVODGids(user map[string]interface{}, now func() time.Time) []int {
 	mainGID := atoi(str(user["gid"]))
-	if atoi(str(user["sysgid"])) > 0 {
+	sysGID := atoi(str(user["sysgid"]))
+	sysExpiry := atoi64(str(user["sysgid_exptime"]))
+	if sysGID > 0 && (sysExpiry == 0 || sysExpiry > now().Unix()) {
 		mainGID = atoi(str(user["sysgid"]))
 	}
 	gids := []int{mainGID}
@@ -1051,6 +1053,12 @@ func initVODGids(user map[string]interface{}, now func() time.Time) []int {
 		}
 	}
 	return uniqueVODInts(gids)
+}
+
+// InitializeUserPerms reconstructs the PHP middleware permission map from the
+// user's active groups. It is shared by long- and short-video authorization.
+func InitializeUserPerms(user map[string]interface{}, groups []map[string]interface{}, now time.Time) map[string]interface{} {
+	return initVODPerm(initVODGids(user, func() time.Time { return now }), groups)
 }
 
 func initVODPerm(gids []int, groups []map[string]interface{}) map[string]interface{} {

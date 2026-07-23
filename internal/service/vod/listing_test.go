@@ -732,6 +732,20 @@ func TestReqPlayInitializesVIPPermsFromGroups(t *testing.T) {
 	}
 }
 
+func TestInitializeUserPermsIgnoresExpiredSystemGroup(t *testing.T) {
+	perms := InitializeUserPerms(
+		map[string]interface{}{"gid": "4", "sysgid": "6", "sysgid_exptime": "1769999999"},
+		[]map[string]interface{}{
+			{"gid": "4", "scope": "0", "weight": "4", "perms": `{"allow.vod.vip":"0"}`},
+			{"gid": "6", "scope": "0", "weight": "6", "perms": `{"allow.vod.vip":"1"}`},
+		},
+		time.Unix(1770000000, 0),
+	)
+	if getVODPermInt(perms, "allow.vod.vip") != 0 {
+		t.Fatalf("expired system group retained VIP permission: %#v", perms)
+	}
+}
+
 func TestReqPlayIsVIPTwoFreeVODDoesNotRequirePurchase(t *testing.T) {
 	store := &fakeListingStore{
 		vodByID: map[string]interface{}{

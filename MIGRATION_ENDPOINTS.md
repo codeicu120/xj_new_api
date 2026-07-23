@@ -499,7 +499,7 @@ Go 项目：`/Users/canavs/xjProj/xj_comp`
 | `/ucp/taskbox/taskboxopen` | `c.api.ucp.taskbox->taskboxopen` | `UCPHandler.TaskboxOpen` | 已重构；未登录、任务不存在/停用、宝箱赠送金币为 0、每日/每周宝箱时间窗、已领取、推广人数不足和领奖成功分支已迁移；成功分支事务写 `promotion_taskboxlogs/users_quota/user_coinlogs`，返回 `data.taskdone` |
 | `/ucp/taskbox/qrcode` | `c.api.ucp.taskbox->qrcode` | `UCPHandler.TaskboxQRCode` | 已重构；登录后读取 `taskbox.qrcode.link` 和每日推广 URL，替换邀请码后生成 `image/png` 二维码，不写 keylimit/coinlog |
 | `/ucp/upgrade` | `c.api.ucp.index->upgrade` | `UCPHandler.Upgrade` | 已重构；未登录、已经是尊贵会员、无效时长、终身 VIP 暂停升级、金币不足和升级成功分支已迁移，成功事务扣金币、写 `user_coinlogs(cointype=103)` 并更新 `users.sysgid/sysgid_exptime` |
-| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.WithdrawCreate` | 已重构；前置校验、普通提现金币转余额、提现单创建、免费提现额度扣减、普通/游戏余额冻结、冻结日志和 Telegram 通知均已接管 |
+| `/ucp/withdraw/create` | `c.api.ucp.withdraw->create` | `UCPHandler.WithdrawCreate` | 已重构；支持 JSON/form/query 输入，`withdraw_amount` 按 PHP `checkRMB` 以十进制定点从元转分；前置校验、普通提现金币转余额、提现单创建、免费提现额度扣减、普通/游戏余额冻结、冻结日志和 Telegram 通知均已接管 |
 | `/ucp/coinlog/exchange` | `c.api.ucp.coinlog->exchange` | `UCPHandler.CoinLogExchange` | 已重构；兑换关闭、未登录、兑换类型、兑换数量、100 万上限、金币换人民币最小金币、计算为 0、金币转余额和余额转金币成功事务均已迁移 |
 | `/ucp/vippkg`、`/ucp/vippkg/index` | `c.api.ucp.vippkg->index` | `UCPHandler.VIPPkgIndex` | 已重构，对比通过；登录只读 VIP 套餐列表和 safepayurl，支付通道通过接口隔离，默认不伪造旧 PHP 配置 |
 | `/ucp/vippkg/coinorder` | `c.api.ucp.vippkg->coinorder` | `UCPHandler.VIPPkgCoinOrder` | 已重构；未登录、套餐不存在/停用、金币不足和金币购买 VIP 成功分支已迁移，成功事务扣金币、写 `user_coinlogs(cointype=103)` 并更新 `users.sysgid/sysgid_exptime` |

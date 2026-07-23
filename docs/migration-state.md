@@ -1962,3 +1962,18 @@
 - 兼容规则：未登录优先返回 `retcode=-1 errmsg=请先登录`；无文件返回 `请选择上传图片`；成功返回 `data.file.uri/filesize/filename/suffix/ispic`，`filesize` 为 PHP 兼容 KB 四舍五入。R2 密钥不硬编码，需通过 `AIUNDRESS_R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` 配置注入；本地未配置时保留 no-op uploader 便于开发模拟。
 - 文档修正：`MIGRATION_ENDPOINTS.md` 与 `docs/public-endpoints.md` 将 AI 剩余范围缩小到 `/aiundress/undress` 的 Redis 锁、第三方 AI 生成和金豆扣减。
 - 测试：`go test ./internal/service/aiundress ./internal/repository/aiundress ./internal/handler ./internal/server` 通过。
+
+### 反馈 1.1：提现金额与瑞奇支付渠道
+
+- `/ucp/withdraw/create` 支持客户端 `application/json` 请求；`withdraw_amount` 使用最多两位小数的十进制定点解析并从元转换为分，拒绝指数、负数、超精度及溢出输入，避免 `5.6` 被整数解析为 0。
+- 支付渠道仓储读取 `settings.uuid=payment.chansetting`，结构化解析其中 `paycodes` 列表；仅当后台明确选中 `newpayrq.alipay` 时返回瑞奇支付/支付宝公开展示元数据，不向 API 响应或代码新增网关密钥。
+- `/aiundress/undress` 成功分支本轮未以假成功替代：仍需同时接管跨实例并发锁、第三方 multipart 文件提交、金豆事务扣减及 `status=0` 条件更新后才能安全开放。
+- 测试：`go test ./internal/handler ./internal/repository/ucp ./internal/service/payment ./internal/service/ucp`。
+
+### 反馈 1.1：验证码、登录会话与视频权限
+
+- `/v2/captcha/req` 生成的 PHP 兼容加密 `captcha_key` 已接入 `/email/send` 的图形验证码校验，不再使用默认拒绝校验器；key/code 输入按 PHP 行为去除首尾空白。
+- `/sms/sendu` 在查询 session 前使用与其余鉴权接口相同的 token 清洗规则，兼容客户端提交的十六进制 PHP session token。
+- 长、短视频统一根据用户当前有效的 `gid/sysgid/gids` 和 `user_groups.perms` 构建权限；`sysgid_exptime` 已过期时回落普通组，避免过期 VIP 继续授权，也避免有效 VIP 在短视频接口被错误判定为次数耗尽。
+- 测试：`go test ./internal/service/verification ./internal/service/captcha ./internal/service/vod ./internal/service/minivod ./internal/server`。
+- `/v2/register` 成功写入分支仍未迁移；用户、账户、额度、session、验证码消费和 IP 限流必须在可验证的事务/补偿边界内完成，不能用无持久化的成功响应代替。

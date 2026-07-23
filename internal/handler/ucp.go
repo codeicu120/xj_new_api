@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -184,11 +185,79 @@ func (h *UCPHandler) CoinLogExchange(c *gin.Context) {
 }
 
 func (h *UCPHandler) WithdrawCreate(c *gin.Context) {
-	cardID, _ := strconv.Atoi(inputValue(c, "cardid"))
-	wdType, _ := strconv.Atoi(inputValue(c, "wdtype"))
-	amount, _ := strconv.Atoi(inputValue(c, "withdraw_amount"))
+	cardIDValue, wdTypeValue, amountValue := withdrawCreateValues(c)
+	cardID, _ := strconv.Atoi(cardIDValue)
+	wdType, _ := strconv.Atoi(wdTypeValue)
+	amount := parseRMBInput(amountValue)
 	retcode, errmsg, err := h.service.WithdrawCreateEdge(c.Request.Context(), authToken(c), cardID, wdType, amount)
 	h.respondEdge(c, retcode, errmsg, err)
+}
+
+func withdrawCreateValues(c *gin.Context) (string, string, string) {
+	cardIDValue := inputValue(c, "cardid")
+	wdTypeValue := inputValue(c, "wdtype")
+	amountValue := inputValue(c, "withdraw_amount")
+	if cardIDValue == "" && wdTypeValue == "" && amountValue == "" && strings.Contains(c.GetHeader("Content-Type"), "application/json") {
+		var body struct {
+			CardID         json.RawMessage `json:"cardid"`
+			WDType         json.RawMessage `json:"wdtype"`
+			WithdrawAmount json.RawMessage `json:"withdraw_amount"`
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
+		if err := json.NewDecoder(c.Request.Body).Decode(&body); err == nil {
+			cardIDValue = rawJSONScalar(body.CardID)
+			wdTypeValue = rawJSONScalar(body.WDType)
+			amountValue = rawJSONScalar(body.WithdrawAmount)
+		}
+	}
+	return cardIDValue, wdTypeValue, amountValue
+}
+
+func parseRMBInput(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.HasPrefix(value, "-") || strings.ContainsAny(value, "eE+") {
+		return 0
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 || parts[0] == "" || len(parts) == 2 && len(parts[1]) > 2 {
+		return 0
+	}
+	whole, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0
+	}
+	fraction := int64(0)
+	if len(parts) == 2 {
+		if parts[1] == "" {
+			parts[1] = "0"
+		}
+		if len(parts[1]) == 1 {
+			parts[1] += "0"
+		}
+		fraction, err = strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return 0
+		}
+	}
+	if whole > int64(^uint(0)>>1)/100 {
+		return 0
+	}
+	cents := whole*100 + fraction
+	if cents > int64(^uint(0)>>1) {
+		return 0
+	}
+	return int(cents)
+}
+
+func rawJSONScalar(value json.RawMessage) string {
+	raw := strings.TrimSpace(string(value))
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
+		var decoded string
+		if json.Unmarshal(value, &decoded) == nil {
+			return decoded
+		}
+	}
+	return raw
 }
 
 func (h *UCPHandler) VODOrderCreate(c *gin.Context) {

@@ -2,19 +2,22 @@ package verification
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
 type fakeStore struct {
 	setting string
 	user    map[string]interface{}
+	lastSID string
 }
 
 func (s fakeStore) SettingByUUID(context.Context, string) (map[string]interface{}, error) {
 	return map[string]interface{}{"value": s.setting}, nil
 }
 
-func (s fakeStore) UserBySession(context.Context, string) (map[string]interface{}, error) {
+func (s *fakeStore) UserBySession(_ context.Context, sid string) (map[string]interface{}, error) {
+	s.lastSID = sid
 	return s.user, nil
 }
 
@@ -38,7 +41,7 @@ func (okMail) SendMail(context.Context, map[string]interface{}, string, string, 
 }
 
 func TestSendVValidation(t *testing.T) {
-	service := NewService(fakeStore{setting: `a:2:{s:10:"smscaptcha";i:1;s:13:"smsphonelimit";i:5;}`}, nil, nil, nil, nil)
+	service := NewService(&fakeStore{setting: `a:2:{s:10:"smscaptcha";i:1;s:13:"smsphonelimit";i:5;}`}, nil, nil, nil, nil)
 	msg, err := service.SendV(context.Background(), SendSMSRequest{Mobi: "bad"})
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +60,7 @@ func TestSendVValidation(t *testing.T) {
 
 func TestSendUSuccessWithFakeSender(t *testing.T) {
 	service := NewService(
-		fakeStore{
+		&fakeStore{
 			setting: `a:5:{s:10:"smscaptcha";i:0;s:13:"smsphonelimit";i:5;s:11:"smsplatform";i:0;s:24:"smsplatforminternational";i:0;s:9:"smsconfig";s:2:"{}";}`,
 			user:    map[string]interface{}{"uid": "5", "mobi": "86.14012340002"},
 		},
@@ -75,9 +78,26 @@ func TestSendUSuccessWithFakeSender(t *testing.T) {
 	}
 }
 
+func TestSendUCleansPHPHexSessionToken(t *testing.T) {
+	sid := "12345678901234567890123456789012"
+	store := fakeStore{
+		setting: `a:5:{s:10:"smscaptcha";i:0;s:13:"smsphonelimit";i:5;s:11:"smsplatform";i:0;s:24:"smsplatforminternational";i:0;s:9:"smsconfig";s:2:"{}";}`,
+		user:    map[string]interface{}{"uid": "7", "mobi": "86.13800138000"},
+	}
+	service := NewService(&store, nil, nil, okSMS{}, nil)
+
+	_, err := service.SendU(context.Background(), SendSMSRequest{Token: fmt.Sprintf("%x", sid)})
+	if err != nil {
+		t.Fatalf("SendU returned error: %v", err)
+	}
+	if store.lastSID != sid {
+		t.Fatalf("UserBySession sid = %q, want %q", store.lastSID, sid)
+	}
+}
+
 func TestEmailValidationAndSuccess(t *testing.T) {
 	service := NewService(
-		fakeStore{setting: `a:3:{s:10:"smscaptcha";i:0;s:13:"smsphonelimit";i:5;s:8:"mailconf";s:7:"{"a":1}";}`},
+		&fakeStore{setting: `a:3:{s:10:"smscaptcha";i:0;s:13:"smsphonelimit";i:5;s:8:"mailconf";s:7:"{"a":1}";}`},
 		nil,
 		allowCaptcha{},
 		nil,

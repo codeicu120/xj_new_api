@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	userRepo "xj_comp/internal/repository/user"
 )
 
 var ErrLoginRequired = errors.New("login required")
@@ -130,7 +132,7 @@ func (s *Service) SendV(ctx context.Context, req SendSMSRequest) (string, error)
 }
 
 func (s *Service) SendU(ctx context.Context, req SendSMSRequest) (string, error) {
-	user, err := s.store.UserBySession(ctx, req.Token)
+	user, err := s.store.UserBySession(ctx, userRepo.CleanToken(req.Token))
 	if err != nil {
 		return "", err
 	}

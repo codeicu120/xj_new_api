@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,8 +24,8 @@ func (h *VerificationHandler) SMSSendV(c *gin.Context) {
 	msg, err := h.service.SendV(c.Request.Context(), verificationService.SendSMSRequest{
 		MobiPrefix:  input(c, "mobiprefix"),
 		Mobi:        input(c, "mobi"),
-		CaptchaKey:  input(c, "captcha_key"),
-		CaptchaCode: input(c, "captcha_code"),
+		CaptchaKey:  strings.TrimSpace(input(c, "captcha_key")),
+		CaptchaCode: strings.TrimSpace(input(c, "captcha_code")),
 		GTicket:     input(c, "g_ticket"),
 		TXTicket:    input(c, "tx_ticket"),
 		TXRandstr:   input(c, "tx_randstr"),
@@ -52,8 +53,8 @@ func (h *VerificationHandler) SMSSendU(c *gin.Context) {
 func (h *VerificationHandler) EmailSend(c *gin.Context) {
 	msg, err := h.service.SendEmail(c.Request.Context(), verificationService.SendEmailRequest{
 		Email:       input(c, "email"),
-		CaptchaKey:  input(c, "captcha_key"),
-		CaptchaCode: input(c, "captcha_code"),
+		CaptchaKey:  strings.TrimSpace(input(c, "captcha_key")),
+		CaptchaCode: strings.TrimSpace(input(c, "captcha_code")),
 		GTicket:     input(c, "g_ticket"),
 		TXTicket:    input(c, "tx_ticket"),
 		TXRandstr:   input(c, "tx_randstr"),
